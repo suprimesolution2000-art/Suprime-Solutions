@@ -9,7 +9,7 @@ module.exports = {
   JWT_EXPIRES_IN: '7d',
   JWT_REFRESH_EXPIRES_IN: '30d',
   COMPANY: {
-    name: 'SS Suprime Solutions',
+    name: 'Suprime Solutions',
     gstin: '22FWDPD2626D1Z7',
     ePan: 'FWDPD2626D',
     phone: '9981365878',

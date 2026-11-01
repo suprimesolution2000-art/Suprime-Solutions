@@ -1,6 +1,6 @@
 class AppConstants {
-  static const String appName = 'SS Supreme Solutions';
-  static const String companyName = 'SS Suprime Solutions';
+  static const String appName = 'Suprime Solutions';
+  static const String companyName = 'Suprime Solutions';
   static const String gstin = '22FWDPD2626D1Z7';
   static const String ePan = 'FWDPD2626D';
   static const String mobile = '9981365878';

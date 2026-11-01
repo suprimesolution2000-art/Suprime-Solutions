@@ -19,13 +19,44 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            Text('SS Supreme Solutions'),
-            Text(
-              'Industrial Gaskets & Hydraulics',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal, color: Colors.white70),
+            Container(
+              width: 38,
+              height: 38,
+              margin: const EdgeInsets.only(right: 10),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/images/app_logo.png',
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Suprime Solutions',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  Text(
+                    'Industrial Gaskets & Hydraulics',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.normal, color: Colors.white70),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

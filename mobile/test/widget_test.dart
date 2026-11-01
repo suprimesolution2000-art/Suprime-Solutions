@@ -16,14 +16,14 @@ void main() {
     );
   });
 
-  testWidgets('App Launches and displays SS Supreme Solutions title', (WidgetTester tester) async {
+  testWidgets('App Launches and displays Suprime Solutions title', (WidgetTester tester) async {
     await tester.pumpWidget(
       const ProviderScope(
         child: SSSupremeSolutionsApp(),
       ),
     );
 
-    expect(find.text('SS Supreme Solutions'), findsOneWidget);
+    expect(find.text('Suprime Solutions'), findsOneWidget);
     expect(find.text('CREATE NEW BILL'), findsOneWidget);
   });
 }
