@@ -6,6 +6,7 @@ const { allocateInvoiceNumber, getFinancialYear } = require('../services/invoice
 const { generateInvoicePdf } = require('../services/pdfService');
 const env = require('../config/env');
 const { v4: uuidv4 } = require('uuid');
+const { findByIdOrUuid } = require('../utils/idHelper');
 
 // Universal search and filtering
 exports.getInvoices = async (req, res, next) => {
@@ -102,9 +103,7 @@ exports.getInvoices = async (req, res, next) => {
 
 exports.getInvoiceById = async (req, res, next) => {
   try {
-    const invoice = await Invoice.findOne({
-      $or: [{ _id: req.params.id }, { uuid: req.params.id }]
-    });
+    const invoice = await Invoice.findOne(findByIdOrUuid(req.params.id));
 
     if (!invoice) {
       return res.status(404).json({ success: false, message: 'Invoice not found.' });
@@ -278,9 +277,7 @@ exports.createInvoice = async (req, res, next) => {
 // Stream Generated PDF
 exports.getInvoicePdf = async (req, res, next) => {
   try {
-    const invoice = await Invoice.findOne({
-      $or: [{ _id: req.params.id }, { uuid: req.params.id }]
-    });
+    const invoice = await Invoice.findOne(findByIdOrUuid(req.params.id));
 
     if (!invoice) {
       return res.status(404).json({ success: false, message: 'Invoice not found.' });
@@ -302,9 +299,7 @@ exports.getInvoicePdf = async (req, res, next) => {
 exports.cancelInvoice = async (req, res, next) => {
   try {
     const { reason } = req.body;
-    const invoice = await Invoice.findOne({
-      $or: [{ _id: req.params.id }, { uuid: req.params.id }]
-    });
+    const invoice = await Invoice.findOne(findByIdOrUuid(req.params.id));
 
     if (!invoice) {
       return res.status(404).json({ success: false, message: 'Invoice not found.' });

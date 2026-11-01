@@ -13,22 +13,22 @@ const seedData = async () => {
 
   try {
     // 1. Seed Owner / Admin User
-    const existingOwner = await User.findOne({ email: 'owner@sssupreme.com' });
+    const existingOwner = await User.findOne({ username: 'father' });
     if (!existingOwner) {
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash('supreme@2026', salt);
 
       await User.create({
         name: 'Father (SS Supreme Solutions)',
-        email: 'owner@sssupreme.com',
-        password: hashedPassword,
+        username: 'father',
+        passwordHash: hashedPassword,
         role: 'owner',
         phone: env.COMPANY.phone,
         active: true
       });
-      console.log('✔ Created Owner Account: owner@sssupreme.com (Password: supreme@2026)');
+      console.log('✔ Created Owner Account: Username = "father" (Password: supreme@2026)');
     } else {
-      console.log('ℹ Owner account already exists.');
+      console.log('ℹ Owner account "father" already exists in MongoDB Atlas.');
     }
 
     // 2. Seed Standard Industrial Gasket & Hydraulic Hardware Items

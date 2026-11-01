@@ -3,6 +3,7 @@ const Invoice = require('../models/Invoice');
 const Customer = require('../models/Customer');
 const AuditLog = require('../models/AuditLog');
 const { v4: uuidv4 } = require('uuid');
+const { findByIdOrUuid } = require('../utils/idHelper');
 
 exports.getPayments = async (req, res, next) => {
   try {
@@ -50,9 +51,7 @@ exports.recordPayment = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Payment amount must be greater than zero.' });
     }
 
-    const invoice = await Invoice.findOne({
-      $or: [{ _id: invoiceId }, { uuid: invoiceId }]
-    });
+    const invoice = await Invoice.findOne(findByIdOrUuid(invoiceId));
 
     if (!invoice) {
       return res.status(404).json({ success: false, message: 'Invoice not found.' });

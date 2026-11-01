@@ -1,5 +1,6 @@
 const Product = require('../models/Product');
 const { v4: uuidv4 } = require('uuid');
+const { findByIdOrUuid } = require('../utils/idHelper');
 
 exports.getProducts = async (req, res, next) => {
   try {
@@ -48,7 +49,7 @@ exports.createProduct = async (req, res, next) => {
 exports.updateProduct = async (req, res, next) => {
   try {
     const product = await Product.findOneAndUpdate(
-      { $or: [{ _id: req.params.id }, { uuid: req.params.id }] },
+      findByIdOrUuid(req.params.id),
       { $set: req.body },
       { new: true }
     );

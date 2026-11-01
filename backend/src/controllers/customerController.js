@@ -2,6 +2,7 @@ const Customer = require('../models/Customer');
 const Invoice = require('../models/Invoice');
 const Payment = require('../models/Payment');
 const { v4: uuidv4 } = require('uuid');
+const { findByIdOrUuid } = require('../utils/idHelper');
 
 // Universal customer search & list
 exports.getCustomers = async (req, res, next) => {
@@ -42,9 +43,7 @@ exports.getCustomers = async (req, res, next) => {
 
 exports.getCustomerById = async (req, res, next) => {
   try {
-    const customer = await Customer.findOne({
-      $or: [{ _id: req.params.id }, { uuid: req.params.id }]
-    });
+    const customer = await Customer.findOne(findByIdOrUuid(req.params.id));
 
     if (!customer) {
       return res.status(404).json({ success: false, message: 'Customer not found.' });
@@ -59,10 +58,7 @@ exports.getCustomerById = async (req, res, next) => {
 // Customer Ledger (invoices, payments, balance)
 exports.getCustomerLedger = async (req, res, next) => {
   try {
-    const customerId = req.params.id;
-    const customer = await Customer.findOne({
-      $or: [{ _id: customerId }, { uuid: customerId }]
-    });
+    const customer = await Customer.findOne(findByIdOrUuid(req.params.id));
 
     if (!customer) {
       return res.status(404).json({ success: false, message: 'Customer not found.' });
@@ -138,7 +134,7 @@ exports.createCustomer = async (req, res, next) => {
 exports.updateCustomer = async (req, res, next) => {
   try {
     const customer = await Customer.findOneAndUpdate(
-      { $or: [{ _id: req.params.id }, { uuid: req.params.id }] },
+      findByIdOrUuid(req.params.id),
       { $set: req.body },
       { new: true }
     );
