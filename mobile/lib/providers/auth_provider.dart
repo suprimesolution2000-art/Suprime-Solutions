@@ -101,8 +101,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (dioErr.response?.data != null && dioErr.response?.data is Map) {
         msg = dioErr.response?.data['message'] ?? msg;
       } else if (dioErr.type == DioExceptionType.connectionTimeout ||
-          dioErr.type == DioExceptionType.receiveTimeout) {
-        msg = 'Connection timed out. Render backend may be waking up, please retry.';
+          dioErr.type == DioExceptionType.receiveTimeout ||
+          dioErr.type == DioExceptionType.sendTimeout) {
+        msg = 'Connection timed out. Cloud server is waking up, please tap again in a moment.';
+      } else if (dioErr.type == DioExceptionType.connectionError) {
+        msg = 'No internet connection or server unreachable. Please check your data/Wi-Fi.';
+      } else if (dioErr.response?.statusCode != null) {
+        msg = 'Server response error (${dioErr.response?.statusCode}). Please try again.';
       }
       state = state.copyWith(
         isLoading: false,
@@ -167,6 +172,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       String msg = 'Could not connect to server.';
       if (dioErr.response?.data != null && dioErr.response?.data is Map) {
         msg = dioErr.response?.data['message'] ?? msg;
+      } else if (dioErr.type == DioExceptionType.connectionTimeout ||
+          dioErr.type == DioExceptionType.receiveTimeout ||
+          dioErr.type == DioExceptionType.sendTimeout) {
+        msg = 'Connection timed out. Cloud server is waking up, please tap again in a moment.';
+      } else if (dioErr.type == DioExceptionType.connectionError) {
+        msg = 'No internet connection or server unreachable. Please check your data/Wi-Fi.';
+      } else if (dioErr.response?.statusCode != null) {
+        msg = 'Server response error (${dioErr.response?.statusCode}). Please try again.';
       }
       state = state.copyWith(
         isLoading: false,
