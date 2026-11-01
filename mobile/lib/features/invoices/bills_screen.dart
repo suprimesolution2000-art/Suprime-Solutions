@@ -20,6 +20,10 @@ class BillsScreen extends ConsumerStatefulWidget {
 
 class _BillsScreenState extends ConsumerState<BillsScreen> {
   final _searchController = TextEditingController();
+  final Set<String> _selectedUuids = {};
+  bool _isSharing = false;
+
+  bool get _isSelectionMode => _selectedUuids.isNotEmpty;
 
   @override
   void dispose() {
@@ -27,28 +31,108 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
     super.dispose();
   }
 
+  Future<void> _shareSelectedInvoices(List<InvoiceModel> allInvoices) async {
+    final selectedInvoices = allInvoices.where((inv) => _selectedUuids.contains(inv.uuid)).toList();
+    if (selectedInvoices.isEmpty) return;
+
+    setState(() => _isSharing = true);
+    try {
+      await PdfInvoiceService.shareMultipleInvoices(selectedInvoices);
+      if (mounted) {
+        setState(() {
+          _selectedUuids.clear();
+          _isSharing = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSharing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to share bills: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final invoiceState = ref.watch(invoiceListProvider);
     final notifier = ref.read(invoiceListProvider.notifier);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('All Invoices & Bills'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.date_range),
-            tooltip: 'Filter by Date',
-            onPressed: () => _showDateRangePicker(context, notifier),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-            onPressed: () => notifier.fetchInvoices(),
-          ),
-        ],
-      ),
-      body: Column(
+    return PopScope(
+      canPop: !_isSelectionMode,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (_isSelectionMode) {
+          setState(() => _selectedUuids.clear());
+        }
+      },
+      child: Scaffold(
+        appBar: _isSelectionMode
+            ? AppBar(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                leading: IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Cancel Selection',
+                  onPressed: () => setState(() => _selectedUuids.clear()),
+                ),
+                title: Text('${_selectedUuids.length} Selected'),
+                actions: [
+                  IconButton(
+                    icon: Icon(
+                      _selectedUuids.length == invoiceState.invoices.length
+                          ? Icons.deselect
+                          : Icons.select_all,
+                    ),
+                    tooltip: _selectedUuids.length == invoiceState.invoices.length
+                        ? 'Deselect All'
+                        : 'Select All',
+                    onPressed: () {
+                      setState(() {
+                        if (_selectedUuids.length == invoiceState.invoices.length) {
+                          _selectedUuids.clear();
+                        } else {
+                          _selectedUuids.addAll(invoiceState.invoices.map((e) => e.uuid));
+                        }
+                      });
+                    },
+                  ),
+                  if (_isSharing)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        ),
+                      ),
+                    )
+                  else
+                    IconButton(
+                      icon: const Icon(Icons.share),
+                      tooltip: 'Share Selected Bills',
+                      onPressed: () => _shareSelectedInvoices(invoiceState.invoices),
+                    ),
+                ],
+              )
+            : AppBar(
+                title: const Text('All Invoices & Bills'),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.date_range),
+                    tooltip: 'Filter by Date',
+                    onPressed: () => _showDateRangePicker(context, notifier),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    tooltip: 'Refresh',
+                    onPressed: () => notifier.fetchInvoices(),
+                  ),
+                ],
+              ),
+        body: Column(
         children: [
           // 1. One Prominent Universal Search Bar
           Padding(
@@ -128,7 +212,8 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildFilterChip(String label, String value, String currentVal, InvoiceListNotifier notifier) {
@@ -220,6 +305,8 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
 
   Widget _buildInvoiceCard(BuildContext context, InvoiceModel inv) {
     final isOwner = ref.watch(authProvider).isOwner;
+    final isSelected = _selectedUuids.contains(inv.uuid);
+
     Color badgeBg;
     Color badgeText;
     String badgeLabel;
@@ -244,26 +331,65 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 1.5,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: isSelected ? 3.0 : 1.5,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: isSelected
+            ? const BorderSide(color: AppColors.primary, width: 2)
+            : BorderSide.none,
+      ),
+      color: isSelected ? AppColors.primaryContainer.withValues(alpha: 0.15) : null,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => InvoiceDetailScreen(invoice: inv),
-            ),
-          ).then((_) {
-            ref.read(invoiceListProvider.notifier).fetchInvoices();
+        onLongPress: () {
+          setState(() {
+            if (isSelected) {
+              _selectedUuids.remove(inv.uuid);
+            } else {
+              _selectedUuids.add(inv.uuid);
+            }
           });
+        },
+        onTap: () {
+          if (_isSelectionMode) {
+            setState(() {
+              if (isSelected) {
+                _selectedUuids.remove(inv.uuid);
+              } else {
+                _selectedUuids.add(inv.uuid);
+              }
+            });
+          } else {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => InvoiceDetailScreen(invoice: inv),
+              ),
+            ).then((_) {
+              ref.read(invoiceListProvider.notifier).fetchInvoices();
+            });
+          }
         },
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Row 1: Invoice No, Payment Badge, & Actions Menu
+              if (_isSelectionMode) ...[
+                Padding(
+                  padding: const EdgeInsets.only(right: 12, top: 4),
+                  child: Icon(
+                    isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+                    color: isSelected ? AppColors.primary : AppColors.textMuted,
+                    size: 24,
+                  ),
+                ),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Row 1: Invoice No, Payment Badge, & Actions Menu
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -374,9 +500,12 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
+      ],
+    ),
+  ),
+),
+);
+}
 
   void _showDateRangePicker(BuildContext context, InvoiceListNotifier notifier) {
     showModalBottomSheet(

@@ -504,4 +504,31 @@ class PdfInvoiceService {
       text: 'Tax Invoice for ${invoice.customer.name}: ${invoice.invoiceNumber}',
     );
   }
+
+  /// Share multiple invoice PDFs simultaneously via WhatsApp, Email, Drive, etc.
+  static Future<void> shareMultipleInvoices(List<InvoiceModel> invoices) async {
+    if (invoices.isEmpty) return;
+
+    if (invoices.length == 1) {
+      await shareInvoicePdf(invoices.first);
+      return;
+    }
+
+    final tempDir = await getTemporaryDirectory();
+    final List<XFile> xFiles = [];
+
+    for (final inv in invoices) {
+      final pdfBytes = await generateInvoicePdfBytes(inv);
+      final fileName = getPdfFileName(inv);
+      final file = File('${tempDir.path}/$fileName');
+      await file.writeAsBytes(pdfBytes);
+      xFiles.add(XFile(file.path));
+    }
+
+    final names = invoices.map((e) => e.invoiceNumber).join(', ');
+    await Share.shareXFiles(
+      xFiles,
+      text: 'Tax Invoices from Suprime Solutions (${invoices.length} bills: $names)',
+    );
+  }
 }
