@@ -38,14 +38,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  void _fillOwnerCredentials() {
-    setState(() {
-      _isRegister = false;
-      _loginUsernameController.text = 'father';
-      _loginPasswordController.text = 'supreme@2026';
-    });
-  }
-
   void _showRecoveryDialog() {
     final identifierController = TextEditingController();
     final newPassController = TextEditingController();
@@ -362,21 +354,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // Forgot Password and Owner Login Action Links
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        TextButton.icon(
-                          onPressed: _showRecoveryDialog,
-                          icon: const Icon(Icons.help_outline, size: 16),
-                          label: const Text('Forgot Password?'),
-                        ),
-                        TextButton.icon(
-                          onPressed: _fillOwnerCredentials,
-                          icon: const Icon(Icons.key, size: 16),
-                          label: const Text('Default Owner'),
-                        ),
-                      ],
+                    // Forgot Password Action Link
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: _showRecoveryDialog,
+                        icon: const Icon(Icons.help_outline, size: 16),
+                        label: const Text('Forgot Password?'),
+                      ),
                     ),
                     const SizedBox(height: 8),
 
