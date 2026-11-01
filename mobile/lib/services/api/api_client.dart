@@ -5,8 +5,8 @@ class ApiClient {
   static final ApiClient instance = ApiClient._init();
   late final Dio dio;
 
-  // Default development backend URL (works on Android Emulator, physical device via LAN, or custom)
-  String _baseUrl = 'http://10.0.2.2:5000/api';
+  // Production Render live backend URL
+  String _baseUrl = 'https://ss-supreme-solutions-backend.onrender.com/api';
 
   ApiClient._init() {
     dio = Dio(
