@@ -5,6 +5,9 @@ import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../providers/invoice_provider.dart';
 import '../../data/models/invoice_model.dart';
+import '../../data/repositories/invoice_repository.dart';
+import '../../services/pdf/pdf_invoice_service.dart';
+import '../../services/api/api_client.dart';
 import 'invoice_detail_screen.dart';
 
 class BillsScreen extends ConsumerStatefulWidget {
@@ -142,6 +145,80 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
     );
   }
 
+  Future<void> _confirmDeleteInvoice(BuildContext context, InvoiceModel inv) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            SizedBox(width: 10),
+            Text('Delete Bill?'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to permanently delete bill ${inv.invoiceNumber}?',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Customer: ${inv.customer.name}\nAmount: ${CurrencyFormatter.format(inv.grandTotal)}',
+              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'This will remove the bill and update customer outstanding balance. This action cannot be undone.',
+              style: TextStyle(fontSize: 12, color: Colors.red),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes, Delete Bill'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await InvoiceRepository().deleteInvoice(inv.uuid);
+        try {
+          await ApiClient.instance.deleteInvoice(inv.uuid);
+        } catch (_) {}
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Bill ${inv.invoiceNumber} deleted successfully.'),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
+          ref.read(invoiceListProvider.notifier).fetchInvoices();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete bill: $e'),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   Widget _buildInvoiceCard(BuildContext context, InvoiceModel inv) {
     Color badgeBg;
     Color badgeText;
@@ -186,24 +263,74 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Row 1: Invoice No & Payment Badge
+              // Row 1: Invoice No, Payment Badge, & Actions Menu
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    inv.invoiceNumber,
-                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.primary),
+                  Row(
+                    children: [
+                      Text(
+                        inv.invoiceNumber,
+                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.primary),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: badgeBg,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          badgeLabel,
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: badgeText),
+                        ),
+                      ),
+                    ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: badgeBg,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      badgeLabel,
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: badgeText),
-                    ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, size: 20, color: AppColors.textSecondary),
+                    padding: EdgeInsets.zero,
+                    onSelected: (val) {
+                      if (val == 'share') {
+                        PdfInvoiceService.shareInvoicePdf(inv);
+                      } else if (val == 'print') {
+                        PdfInvoiceService.printInvoice(inv);
+                      } else if (val == 'delete') {
+                        _confirmDeleteInvoice(context, inv);
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      const PopupMenuItem(
+                        value: 'share',
+                        child: Row(
+                          children: [
+                            Icon(Icons.share, size: 18),
+                            SizedBox(width: 8),
+                            Text('Share PDF'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'print',
+                        child: Row(
+                          children: [
+                            Icon(Icons.print, size: 18),
+                            SizedBox(width: 8),
+                            Text('Print PDF'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Delete Bill', style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

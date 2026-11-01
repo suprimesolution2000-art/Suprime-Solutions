@@ -5,15 +5,17 @@ class ApiClient {
   static final ApiClient instance = ApiClient._init();
   late final Dio dio;
 
-  // Production Render live backend URL
-  String _baseUrl = 'https://ss-supreme-solutions-backend.onrender.com/api';
+  // Production Render live cloud backend URL
+  static const String defaultBaseUrl = 'https://ss-supreme-solutions-backend.onrender.com/api';
+  String _baseUrl = defaultBaseUrl;
 
   ApiClient._init() {
     dio = Dio(
       BaseOptions(
         baseUrl: _baseUrl,
-        connectTimeout: const Duration(seconds: 8),
-        receiveTimeout: const Duration(seconds: 8),
+        connectTimeout: const Duration(seconds: 35),
+        receiveTimeout: const Duration(seconds: 35),
+        sendTimeout: const Duration(seconds: 35),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -58,23 +60,8 @@ class ApiClient {
   }
 
   Future<void> init() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedUrl = prefs.getString('custom_server_url');
-      if (savedUrl != null && savedUrl.isNotEmpty) {
-        _baseUrl = savedUrl;
-        dio.options.baseUrl = _baseUrl;
-      }
-    } catch (_) {}
-  }
-
-  Future<void> updateBaseUrl(String url) async {
-    _baseUrl = url.endsWith('/api') ? url : '$url/api';
+    _baseUrl = defaultBaseUrl;
     dio.options.baseUrl = _baseUrl;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('custom_server_url', _baseUrl);
-    } catch (_) {}
   }
 
   String get baseUrl => _baseUrl;
@@ -101,11 +88,41 @@ class ApiClient {
     return false;
   }
 
-  // Auth
+  // Auth: Login
   Future<Response> login(String username, String password) async {
     return await dio.post('/auth/login', data: {
       'username': username,
       'password': password,
+    });
+  }
+
+  // Auth: Register
+  Future<Response> register({
+    required String name,
+    required String username,
+    required String password,
+    String? phone,
+    String role = 'owner',
+  }) async {
+    return await dio.post('/auth/register', data: {
+      'name': name,
+      'username': username,
+      'password': password,
+      if (phone != null && phone.isNotEmpty) 'phone': phone,
+      'role': role,
+    });
+  }
+
+  // Auth: Recover ID or Reset Password
+  Future<Response> recoverAccount({
+    String? phone,
+    String? username,
+    String? newPassword,
+  }) async {
+    return await dio.post('/auth/recover', data: {
+      if (phone != null && phone.isNotEmpty) 'phone': phone,
+      if (username != null && username.isNotEmpty) 'username': username,
+      if (newPassword != null && newPassword.isNotEmpty) 'newPassword': newPassword,
     });
   }
 
@@ -137,5 +154,10 @@ class ApiClient {
     return await dio.get('/sync/pull', queryParameters: {
       if (sinceIsoDate != null) 'since': sinceIsoDate,
     });
+  }
+
+  // Invoice Delete
+  Future<Response> deleteInvoice(String id) async {
+    return await dio.delete('/invoices/$id');
   }
 }

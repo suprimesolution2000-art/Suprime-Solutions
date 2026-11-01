@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../data/models/customer_model.dart';
 import '../data/models/invoice_item_model.dart';
 import '../data/models/invoice_model.dart';
 import '../data/repositories/invoice_repository.dart';
 import '../data/repositories/customer_repository.dart';
+import '../data/repositories/product_repository.dart';
 import '../core/utils/number_to_words.dart';
 import '../core/constants/app_constants.dart';
 import '../services/sync/sync_service.dart';
@@ -321,6 +323,9 @@ class BillingNotifier extends StateNotifier<BillingState> {
       await _customerRepo.saveCustomer(customerToSave);
 
       // 3. Assemble InvoiceModel
+      final prefs = await SharedPreferences.getInstance();
+      final loggedInName = prefs.getString('user_name') ?? 'Admin';
+
       final invoice = InvoiceModel(
         uuid: invoiceUuid,
         invoiceNumber: invoiceNumber,
@@ -346,13 +351,28 @@ class BillingNotifier extends StateNotifier<BillingState> {
         paymentStatus: 'unpaid',
         totalPaid: 0.0,
         balanceDue: state.grandTotal,
+        createdBy: loggedInName,
         syncStatus: 'waiting_for_internet',
       );
 
       // 4. Save to local SQLite
       await _invoiceRepo.saveInvoice(invoice);
 
-      // 5. Trigger background sync attempt
+      // 5. Automatically save all products and HSN codes to catalogue for future bills
+      final prodRepo = ProductRepository();
+      for (final itm in state.items) {
+        if (itm.description.trim().isNotEmpty) {
+          await prodRepo.saveOrUpdateProduct(
+            description: itm.description,
+            hsnCode: itm.hsnCode,
+            unit: itm.unit,
+            defaultRate: itm.rate,
+            gstRate: itm.gstRate,
+          );
+        }
+      }
+
+      // 6. Trigger background sync attempt
       SyncService.instance.synchronize();
 
       state = state.copyWith(

@@ -9,15 +9,11 @@ import '../../data/models/invoice_model.dart';
 import '../../core/utils/date_formatter.dart';
 
 class PdfInvoiceService {
-  static const double masterWidth = 817.0;
-  static const double masterHeight = 1000.0;
-  static const double sourcePixelWidth = 2296.0;
-  static const double sourcePixelHeight = 2809.0;
+  // Calibrated exact dimensions matching the vector invoice template
+  static const double masterWidth = 492.0;
+  static const double masterHeight = 602.0;
 
-  static double _ptX(double pxX) => (pxX / sourcePixelWidth) * masterWidth;
-  static double _ptY(double pxY) => (pxY / sourcePixelHeight) * masterHeight;
-
-  /// Generate high-precision PDF document bytes matching the original paper invoice
+  /// Generate high-precision PDF document bytes matching the authentic paper invoice
   static Future<Uint8List> generateInvoicePdfBytes(InvoiceModel invoice) async {
     final pdf = pw.Document();
 
@@ -27,6 +23,25 @@ class PdfInvoiceService {
 
     final fontNormal = await PdfGoogleFonts.robotoRegular();
     final fontBold = await PdfGoogleFonts.robotoBold();
+
+    // Prepare address lines
+    String addr1 = invoice.customer.address.trim();
+    String addr2 = '';
+    if (addr1.length > 42) {
+      final commaIdx = addr1.lastIndexOf(',', 45);
+      if (commaIdx != -1) {
+        addr2 = addr1.substring(commaIdx + 1).trim();
+        addr1 = addr1.substring(0, commaIdx + 1).trim();
+      } else {
+        final spaceIdx = addr1.lastIndexOf(' ', 45);
+        if (spaceIdx != -1) {
+          addr2 = addr1.substring(spaceIdx + 1).trim();
+          addr1 = addr1.substring(0, spaceIdx).trim();
+        }
+      }
+    }
+
+    final double effectiveGstRate = invoice.items.isNotEmpty ? invoice.items[0].gstRate : 18.0;
 
     pdf.addPage(
       pw.Page(
@@ -43,123 +58,144 @@ class PdfInvoiceService {
                 child: pw.Image(templateImage, fit: pw.BoxFit.fill),
               ),
 
-              // 2. Invoice Number (Enlarged & High Visibility)
+              // 2. Invoice Number (Enlarged & Bold Pen Ink)
               pw.Positioned(
-                left: _ptX(1820),
-                top: _ptY(255),
+                left: 395,
+                top: 36,
                 child: pw.Text(
                   invoice.invoiceNumber,
-                  style: pw.TextStyle(font: fontBold, fontSize: 18, color: PdfColors.black),
+                  style: pw.TextStyle(font: fontBold, fontSize: 13.5, color: PdfColors.black),
                 ),
               ),
 
-              // 3. Invoice Date (Enlarged & Bold)
+              // 3. Invoice Date (Enlarged & Bold Pen Ink)
               pw.Positioned(
-                left: _ptX(1915),
-                top: _ptY(348),
+                left: 405,
+                top: 67,
                 child: pw.Text(
                   DateFormatter.format(invoice.invoiceDate),
-                  style: pw.TextStyle(font: fontBold, fontSize: 14, color: PdfColors.black),
+                  style: pw.TextStyle(font: fontBold, fontSize: 11.5, color: PdfColors.black),
                 ),
               ),
 
-              // 4. Customer Name (Line 1 under M/s - Large & Bold)
+              // 4. Customer Name (Line under M/s - Large & Bold)
               pw.Positioned(
-                left: _ptX(280),
-                top: _ptY(535),
-                child: pw.Text(
-                  invoice.customer.name.toUpperCase(),
-                  style: pw.TextStyle(font: fontBold, fontSize: 16, color: PdfColors.black),
-                ),
-              ),
-
-              // 5. Customer Address (Line 2 - Clear & Large)
-              pw.Positioned(
-                left: _ptX(200),
-                top: _ptY(635),
+                left: 65,
+                top: 107,
                 child: pw.SizedBox(
-                  width: _ptX(1300),
+                  width: 260,
                   child: pw.Text(
-                    invoice.customer.address,
-                    style: pw.TextStyle(font: fontNormal, fontSize: 13.5, color: PdfColors.black),
+                    invoice.customer.name.toUpperCase(),
+                    maxLines: 1,
+                    overflow: pw.TextOverflow.clip,
+                    style: pw.TextStyle(font: fontBold, fontSize: 12.0, color: PdfColors.black),
                   ),
                 ),
               ),
 
-              // 6. State & State Code (Large & Bold)
+              // 5. Customer Address (Lines 1 & 2 - Bold Pen Ink)
               pw.Positioned(
-                left: _ptX(340),
-                top: _ptY(780),
+                left: 42,
+                top: 126,
+                child: pw.SizedBox(
+                  width: 284,
+                  child: pw.Text(
+                    addr1,
+                    maxLines: 1,
+                    overflow: pw.TextOverflow.clip,
+                    style: pw.TextStyle(font: fontBold, fontSize: 10.0, color: PdfColors.black),
+                  ),
+                ),
+              ),
+              if (addr2.isNotEmpty)
+                pw.Positioned(
+                  left: 42,
+                  top: 141,
+                  child: pw.SizedBox(
+                    width: 284,
+                    child: pw.Text(
+                      addr2,
+                      maxLines: 1,
+                      overflow: pw.TextOverflow.clip,
+                      style: pw.TextStyle(font: fontBold, fontSize: 10.0, color: PdfColors.black),
+                    ),
+                  ),
+                ),
+
+              // 6. State & State Code (Large & Bold Pen Ink)
+              pw.Positioned(
+                left: 75,
+                top: 157,
                 child: pw.Text(
                   invoice.customer.state,
-                  style: pw.TextStyle(font: fontBold, fontSize: 14, color: PdfColors.black),
+                  style: pw.TextStyle(font: fontBold, fontSize: 10.5, color: PdfColors.black),
                 ),
               ),
               pw.Positioned(
-                left: _ptX(1200),
-                top: _ptY(780),
+                left: 260,
+                top: 157,
                 child: pw.Text(
                   invoice.customer.stateCode,
-                  style: pw.TextStyle(font: fontBold, fontSize: 14, color: PdfColors.black),
+                  style: pw.TextStyle(font: fontBold, fontSize: 10.5, color: PdfColors.black),
                 ),
               ),
 
-              // 7. GSTIN No. (Large & Bold)
+              // 7. GSTIN No. (Large & Bold Pen Ink)
               pw.Positioned(
-                left: _ptX(520),
-                top: _ptY(868),
+                left: 95,
+                top: 174,
                 child: pw.Text(
                   invoice.customer.gstin,
-                  style: pw.TextStyle(font: fontBold, fontSize: 15.5, color: PdfColors.black),
+                  style: pw.TextStyle(font: fontBold, fontSize: 11.5, color: PdfColors.black),
                 ),
               ),
 
-              // 8. P.O. No. & Date (Large & Bold)
+              // 8. P.O. No. & Date
               if (invoice.poNumber.isNotEmpty)
                 pw.Positioned(
-                  left: _ptX(1750),
-                  top: _ptY(555),
+                  left: 372,
+                  top: 131,
                   child: pw.Text(
                     invoice.poNumber,
-                    style: pw.TextStyle(font: fontBold, fontSize: 13.5, color: PdfColors.black),
+                    style: pw.TextStyle(font: fontBold, fontSize: 10.5, color: PdfColors.black),
                   ),
                 ),
               if (invoice.poDate != null)
                 pw.Positioned(
-                  left: _ptX(1720),
-                  top: _ptY(660),
+                  left: 372,
+                  top: 142,
                   child: pw.Text(
                     DateFormatter.format(invoice.poDate),
-                    style: pw.TextStyle(font: fontBold, fontSize: 13.5, color: PdfColors.black),
+                    style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black),
                   ),
                 ),
 
-              // 9. Challan No. & Date (Large & Bold)
+              // 9. Challan No. & Date
               if (invoice.challanNumber.isNotEmpty)
                 pw.Positioned(
-                  left: _ptX(1870),
-                  top: _ptY(760),
+                  left: 372,
+                  top: 173,
                   child: pw.Text(
                     invoice.challanNumber,
-                    style: pw.TextStyle(font: fontBold, fontSize: 13.5, color: PdfColors.black),
+                    style: pw.TextStyle(font: fontBold, fontSize: 10.5, color: PdfColors.black),
                   ),
                 ),
               if (invoice.challanDate != null)
                 pw.Positioned(
-                  left: _ptX(1720),
-                  top: _ptY(870),
+                  left: 372,
+                  top: 184,
                   child: pw.Text(
                     DateFormatter.format(invoice.challanDate),
-                    style: pw.TextStyle(font: fontBold, fontSize: 13.5, color: PdfColors.black),
+                    style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black),
                   ),
                 ),
 
-              // 10. Table Line Items (Up to 11 rows - All Enlarged & Bold)
+              // 10. Table Line Items (Up to 11 rows - All Enlarged & Bold Pen Ink)
               ...List.generate(
                 invoice.items.length > 11 ? 11 : invoice.items.length,
                 (idx) {
                   final itm = invoice.items[idx];
-                  final y = _ptY(1120.0 + (idx * 75.0));
+                  final y = 229.0 + (idx * 19.0);
 
                   final amount = itm.taxableValue > 0 ? itm.taxableValue : itm.totalAmount;
                   final rupees = amount.floor();
@@ -167,85 +203,91 @@ class PdfInvoiceService {
 
                   return pw.Stack(
                     children: [
-                      // S.No (Center at 235)
+                      // S.No
                       pw.Positioned(
-                        left: _ptX(210),
+                        left: 27.5,
                         top: y,
                         child: pw.SizedBox(
-                          width: _ptX(50),
+                          width: 39.0,
                           child: pw.Center(
-                            child: pw.Text('${itm.sno}', style: pw.TextStyle(font: fontBold, fontSize: 14)),
+                            child: pw.Text('${itm.sno}', style: pw.TextStyle(font: fontBold, fontSize: 11.0, color: PdfColors.black)),
                           ),
                         ),
                       ),
-                      // Description (Left at 335 - Bold & Prominent)
+                      // Description
                       pw.Positioned(
-                        left: _ptX(335),
+                        left: 70.0,
                         top: y,
                         child: pw.SizedBox(
-                          width: _ptX(630),
-                          child: pw.Text(
-                            itm.description,
-                            maxLines: 1,
-                            overflow: pw.TextOverflow.clip,
-                            style: pw.TextStyle(font: fontBold, fontSize: 13),
+                          width: 139.0,
+                          child: pw.Align(
+                            alignment: pw.Alignment.centerLeft,
+                            child: pw.Text(
+                              itm.description,
+                              maxLines: 1,
+                              overflow: pw.TextOverflow.clip,
+                              style: pw.TextStyle(font: fontBold, fontSize: 10.5, color: PdfColors.black),
+                            ),
                           ),
                         ),
                       ),
-                      // HSN Code (Center at 1080)
+                      // HSN Code
                       pw.Positioned(
-                        left: _ptX(1020),
+                        left: 211.0,
                         top: y,
                         child: pw.SizedBox(
-                          width: _ptX(120),
+                          width: 43.0,
                           child: pw.Center(
-                            child: pw.Text(itm.hsnCode, style: pw.TextStyle(font: fontBold, fontSize: 13)),
+                            child: pw.Text(itm.hsnCode, style: pw.TextStyle(font: fontBold, fontSize: 10.0, color: PdfColors.black)),
                           ),
                         ),
                       ),
-                      // Qty (Center at 1260)
+                      // Qty
                       pw.Positioned(
-                        left: _ptX(1190),
+                        left: 254.0,
                         top: y,
                         child: pw.SizedBox(
-                          width: _ptX(140),
+                          width: 34.5,
                           child: pw.Center(
-                            child: pw.Text('${itm.quantity.toStringAsFixed(itm.quantity.truncateToDouble() == itm.quantity ? 0 : 2)} ${itm.unit}', style: pw.TextStyle(font: fontBold, fontSize: 13.5)),
+                            child: pw.Text(
+                              '${itm.quantity.toStringAsFixed(itm.quantity.truncateToDouble() == itm.quantity ? 0 : 2)} ${itm.unit}',
+                              style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black),
+                            ),
                           ),
                         ),
                       ),
-                      // Rate (Right at 1630)
+                      // Rate
                       pw.Positioned(
-                        left: _ptX(1350),
+                        left: 288.5,
                         top: y,
                         child: pw.SizedBox(
-                          width: _ptX(280),
+                          width: 64.0,
                           child: pw.Align(
                             alignment: pw.Alignment.centerRight,
-                            child: pw.Text(itm.rate.toStringAsFixed(2), style: pw.TextStyle(font: fontBold, fontSize: 13.5)),
+                            child: pw.Text(itm.rate.toStringAsFixed(2), style: pw.TextStyle(font: fontBold, fontSize: 10.5, color: PdfColors.black)),
                           ),
                         ),
                       ),
-                      // Amount Rs (Right at 2060)
+                      // Amount Rs
                       pw.Positioned(
-                        left: _ptX(1660),
+                        left: 356.5,
                         top: y,
                         child: pw.SizedBox(
-                          width: _ptX(400),
+                          width: 88.0,
                           child: pw.Align(
                             alignment: pw.Alignment.centerRight,
-                            child: pw.Text('$rupees', style: pw.TextStyle(font: fontBold, fontSize: 14)),
+                            child: pw.Text('$rupees', style: pw.TextStyle(font: fontBold, fontSize: 11.0, color: PdfColors.black)),
                           ),
                         ),
                       ),
-                      // Amount P (Center at 2135)
+                      // Amount Paise
                       pw.Positioned(
-                        left: _ptX(2085),
+                        left: 450.0,
                         top: y,
                         child: pw.SizedBox(
-                          width: _ptX(100),
+                          width: 28.0,
                           child: pw.Center(
-                            child: pw.Text(paise.toString().padLeft(2, '0'), style: pw.TextStyle(font: fontBold, fontSize: 13.5)),
+                            child: pw.Text(paise.toString().padLeft(2, '0'), style: pw.TextStyle(font: fontBold, fontSize: 10.0, color: PdfColors.black)),
                           ),
                         ),
                       ),
@@ -254,85 +296,105 @@ class PdfInvoiceService {
                 },
               ),
 
-              // 11. Net Amount (Y = 2110)
-              ..._buildRupeesPaiseRow(invoice.netAmount, 2110.0, fontBold, isBold: true, fontSize: 14.5),
+              // 11. Net Amount (Y = 445.0)
+              ..._buildRupeesPaiseRow(invoice.netAmount, 445.0, fontBold, fontSize: 11.0),
 
-              // 12. Taxes (SGST & CGST or IGST - Large & Bold)
+              // 12. Taxes (SGST & CGST or IGST - Large & Bold Pen Ink)
               if (!invoice.isInterState) ...[
                 // SGST Rate
                 pw.Positioned(
-                  left: _ptX(1420),
-                  top: _ptY(2175),
+                  left: 288.5,
+                  top: 458.5,
                   child: pw.SizedBox(
-                    width: _ptX(80),
+                    width: 62.0,
                     child: pw.Center(
-                      child: pw.Text(((invoice.items.isNotEmpty ? invoice.items[0].gstRate : 18.0) / 2).toStringAsFixed(1), style: pw.TextStyle(font: fontBold, fontSize: 13.5)),
+                      child: pw.Text('${(effectiveGstRate / 2).toStringAsFixed(1)}%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
                     ),
                   ),
                 ),
-                ..._buildRupeesPaiseRow(invoice.sgstTotal, 2175.0, fontBold, isBold: true, fontSize: 14),
+                ..._buildRupeesPaiseRow(invoice.sgstTotal, 458.5, fontBold, fontSize: 10.5),
 
                 // CGST Rate
                 pw.Positioned(
-                  left: _ptX(1420),
-                  top: _ptY(2235),
+                  left: 288.5,
+                  top: 470.5,
                   child: pw.SizedBox(
-                    width: _ptX(80),
+                    width: 62.0,
                     child: pw.Center(
-                      child: pw.Text(((invoice.items.isNotEmpty ? invoice.items[0].gstRate : 18.0) / 2).toStringAsFixed(1), style: pw.TextStyle(font: fontBold, fontSize: 13.5)),
+                      child: pw.Text('${(effectiveGstRate / 2).toStringAsFixed(1)}%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
                     ),
                   ),
                 ),
-                ..._buildRupeesPaiseRow(invoice.cgstTotal, 2235.0, fontBold, isBold: true, fontSize: 14),
+                ..._buildRupeesPaiseRow(invoice.cgstTotal, 470.5, fontBold, fontSize: 10.5),
 
-                // IGST 0
+                // IGST (0.0)
                 pw.Positioned(
-                  left: _ptX(1420),
-                  top: _ptY(2295),
+                  left: 288.5,
+                  top: 482.5,
                   child: pw.SizedBox(
-                    width: _ptX(80),
+                    width: 62.0,
                     child: pw.Center(
-                      child: pw.Text('0.0', style: pw.TextStyle(font: fontBold, fontSize: 13.5)),
+                      child: pw.Text('0.0%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
                     ),
                   ),
                 ),
-                ..._buildRupeesPaiseRow(0.0, 2295.0, fontBold, isBold: true, fontSize: 14),
+                ..._buildRupeesPaiseRow(0.0, 482.5, fontBold, fontSize: 10.5),
               ] else ...[
-                // Intra-state 0
-                pw.Positioned(left: _ptX(1420), top: _ptY(2175), child: pw.Text('0.0', style: pw.TextStyle(font: fontBold, fontSize: 13.5))),
-                ..._buildRupeesPaiseRow(0.0, 2175.0, fontBold, isBold: true, fontSize: 14),
-                pw.Positioned(left: _ptX(1420), top: _ptY(2235), child: pw.Text('0.0', style: pw.TextStyle(font: fontBold, fontSize: 13.5))),
-                ..._buildRupeesPaiseRow(0.0, 2235.0, fontBold, isBold: true, fontSize: 14),
-
-                // IGST
+                // Inter-state: SGST 0, CGST 0, IGST Rate
                 pw.Positioned(
-                  left: _ptX(1420),
-                  top: _ptY(2295),
+                  left: 288.5,
+                  top: 458.5,
                   child: pw.SizedBox(
-                    width: _ptX(80),
+                    width: 62.0,
                     child: pw.Center(
-                      child: pw.Text((invoice.items.isNotEmpty ? invoice.items[0].gstRate : 18.0).toStringAsFixed(1), style: pw.TextStyle(font: fontBold, fontSize: 13.5)),
+                      child: pw.Text('0.0%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
                     ),
                   ),
                 ),
-                ..._buildRupeesPaiseRow(invoice.igstTotal, 2295.0, fontBold, isBold: true, fontSize: 14),
+                ..._buildRupeesPaiseRow(0.0, 458.5, fontBold, fontSize: 10.5),
+
+                pw.Positioned(
+                  left: 288.5,
+                  top: 470.5,
+                  child: pw.SizedBox(
+                    width: 62.0,
+                    child: pw.Center(
+                      child: pw.Text('0.0%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
+                    ),
+                  ),
+                ),
+                ..._buildRupeesPaiseRow(0.0, 470.5, fontBold, fontSize: 10.5),
+
+                // IGST Rate
+                pw.Positioned(
+                  left: 288.5,
+                  top: 482.5,
+                  child: pw.SizedBox(
+                    width: 62.0,
+                    child: pw.Center(
+                      child: pw.Text('${effectiveGstRate.toStringAsFixed(1)}%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
+                    ),
+                  ),
+                ),
+                ..._buildRupeesPaiseRow(invoice.igstTotal, 482.5, fontBold, fontSize: 10.5),
               ],
 
-              // 13. Round Off (Y = 2355)
-              ..._buildRupeesPaiseRow(invoice.roundOff, 2355.0, fontBold, isBold: true, fontSize: 13.5),
+              // 13. Round Off (Y = 495.0)
+              ..._buildRupeesPaiseRow(invoice.roundOff, 495.0, fontBold, fontSize: 10.0),
 
-              // 14. Grand Total (Y = 2420 - Huge & Extra Bold)
-              ..._buildRupeesPaiseRow(invoice.grandTotal, 2420.0, fontBold, isBold: true, fontSize: 18),
+              // 14. Grand Total (Y = 508.5 - Large & Prominent Pen Ink)
+              ..._buildRupeesPaiseRow(invoice.grandTotal, 508.5, fontBold, fontSize: 14.5),
 
-              // 15. Invoice Value in Words (Y = 2498, X = 765 - Large & Bold)
+              // 15. Total Amount in Words (Y = 527.0 - Bold Pen Ink)
               pw.Positioned(
-                left: _ptX(765),
-                top: _ptY(2498),
+                left: 155,
+                top: 527,
                 child: pw.SizedBox(
-                  width: _ptX(1400),
+                  width: 320,
                   child: pw.Text(
                     invoice.amountInWords,
-                    style: pw.TextStyle(font: fontBold, fontSize: 13.5, color: PdfColors.black),
+                    maxLines: 2,
+                    style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black),
                   ),
                 ),
               ),
@@ -345,16 +407,16 @@ class PdfInvoiceService {
     return pdf.save();
   }
 
-  static List<pw.Widget> _buildRupeesPaiseRow(double val, double yPx, pw.Font font, {bool isBold = false, double fontSize = 14.0}) {
+  static List<pw.Widget> _buildRupeesPaiseRow(double val, double y, pw.Font font, {double fontSize = 11.0}) {
     final r = val.floor();
     final p = ((val - r) * 100).round().abs();
 
     return [
       pw.Positioned(
-        left: _ptX(1660),
-        top: _ptY(yPx),
+        left: 356.5,
+        top: y,
         child: pw.SizedBox(
-          width: _ptX(400),
+          width: 88.0,
           child: pw.Align(
             alignment: pw.Alignment.centerRight,
             child: pw.Text(
@@ -365,14 +427,14 @@ class PdfInvoiceService {
         ),
       ),
       pw.Positioned(
-        left: _ptX(2085),
-        top: _ptY(yPx),
+        left: 450.0,
+        top: y,
         child: pw.SizedBox(
-          width: _ptX(100),
+          width: 28.0,
           child: pw.Center(
             child: pw.Text(
               p.toString().padLeft(2, '0'),
-              style: pw.TextStyle(font: font, fontSize: fontSize, color: PdfColors.black),
+              style: pw.TextStyle(font: font, fontSize: fontSize > 12 ? 12.0 : fontSize, color: PdfColors.black),
             ),
           ),
         ),
@@ -380,12 +442,32 @@ class PdfInvoiceService {
     ];
   }
 
+  /// Formats customer name with date for file export (e.g. Jindal_Steel_01-11-2026.pdf)
+  static String getPdfBaseName(InvoiceModel invoice) {
+    final rawCustomer = invoice.customer.name.trim();
+    final d = invoice.invoiceDate;
+    final dateStr = '${d.day.toString().padLeft(2, '0')}-${d.month.toString().padLeft(2, '0')}-${d.year}';
+
+    if (rawCustomer.isEmpty) {
+      return 'Invoice_${invoice.invoiceNumber.replaceAll(RegExp(r'[\\/:*?"<>|\s]'), '_')}_$dateStr';
+    }
+
+    final safeCustomer = rawCustomer
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+        .replaceAll(RegExp(r'\s+'), '_');
+    return '${safeCustomer}_$dateStr';
+  }
+
+  static String getPdfFileName(InvoiceModel invoice) {
+    return '${getPdfBaseName(invoice)}.pdf';
+  }
+
   /// 1-Tap Print invoice on Android
   static Future<void> printInvoice(InvoiceModel invoice) async {
     final pdfBytes = await generateInvoicePdfBytes(invoice);
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdfBytes,
-      name: 'Invoice_${invoice.invoiceNumber.replaceAll('/', '_')}',
+      name: getPdfBaseName(invoice),
     );
   }
 
@@ -393,13 +475,13 @@ class PdfInvoiceService {
   static Future<void> shareInvoicePdf(InvoiceModel invoice) async {
     final pdfBytes = await generateInvoicePdfBytes(invoice);
     final tempDir = await getTemporaryDirectory();
-    final fileName = 'Invoice_${invoice.invoiceNumber.replaceAll('/', '_')}.pdf';
+    final fileName = getPdfFileName(invoice);
     final file = File('${tempDir.path}/$fileName');
     await file.writeAsBytes(pdfBytes);
 
     await Share.shareXFiles(
       [XFile(file.path)],
-      text: 'Tax Invoice from SS Supreme Solutions: ${invoice.invoiceNumber}',
+      text: 'Tax Invoice for ${invoice.customer.name}: ${invoice.invoiceNumber}',
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_constants.dart';
@@ -58,6 +59,8 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
 
     try {
       final paymentUuid = const Uuid().v4();
+      final prefs = await SharedPreferences.getInstance();
+      final loggedInName = prefs.getString('user_name') ?? 'Admin';
       final payment = PaymentModel(
         uuid: paymentUuid,
         invoiceId: widget.invoice.uuid,
@@ -69,7 +72,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
         referenceNumber: _refController.text.trim(),
         paymentDate: DateTime.now(),
         notes: _notesController.text.trim(),
-        receivedBy: 'Father',
+        receivedBy: loggedInName,
       );
 
       // 1. Save payment

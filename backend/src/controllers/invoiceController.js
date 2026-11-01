@@ -339,3 +339,44 @@ exports.cancelInvoice = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Delete invoice permanently
+// @route   DELETE /api/invoices/:id
+// @access  Private (Owner)
+exports.deleteInvoice = async (req, res, next) => {
+  try {
+    const invoice = await Invoice.findOne(findByIdOrUuid(req.params.id));
+
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: 'Invoice not found.' });
+    }
+
+    // Adjust customer ledger balance if unpaid / partially paid
+    if (invoice.customer && invoice.customer.uuid) {
+      await Customer.updateOne(
+        { uuid: invoice.customer.uuid },
+        {
+          $inc: {
+            totalBilled: -invoice.grandTotal,
+            outstandingBalance: -invoice.balanceDue
+          }
+        }
+      );
+    }
+
+    await Invoice.deleteOne({ _id: invoice._id });
+
+    await AuditLog.create({
+      action: 'DELETE_INVOICE',
+      entity: 'Invoice',
+      entityId: invoice.uuid,
+      performedBy: req.user?.name || 'Owner',
+      role: req.user?.role || 'owner',
+      details: { invoiceNumber: invoice.invoiceNumber }
+    });
+
+    res.json({ success: true, message: 'Invoice deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};

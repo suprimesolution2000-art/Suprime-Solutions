@@ -38,4 +38,55 @@ class ProductRepository {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
+
+  /// Automatically saves or updates manual product description, HSN code & details for future bills
+  Future<void> saveOrUpdateProduct({
+    required String description,
+    required String hsnCode,
+    String unit = 'PCS',
+    double defaultRate = 0.0,
+    double gstRate = 18.0,
+  }) async {
+    final cleanDesc = description.trim();
+    if (cleanDesc.isEmpty) return;
+
+    final db = await _db.database;
+    final existing = await db.query(
+      'products',
+      where: 'LOWER(description) = LOWER(?)',
+      whereArgs: [cleanDesc],
+      limit: 1,
+    );
+
+    if (existing.isNotEmpty) {
+      final uuid = existing.first['uuid'] as String;
+      await db.update(
+        'products',
+        {
+          if (hsnCode.trim().isNotEmpty) 'hsn_code': hsnCode.trim(),
+          'unit': unit,
+          if (defaultRate > 0) 'default_rate': defaultRate,
+          'gst_rate': gstRate,
+          'active': 1,
+        },
+        where: 'uuid = ?',
+        whereArgs: [uuid],
+      );
+    } else {
+      final newUuid = 'prod-${DateTime.now().millisecondsSinceEpoch}';
+      await db.insert(
+        'products',
+        {
+          'uuid': newUuid,
+          'description': cleanDesc,
+          'hsn_code': hsnCode.trim(),
+          'unit': unit,
+          'default_rate': defaultRate,
+          'gst_rate': gstRate,
+          'active': 1,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+  }
 }

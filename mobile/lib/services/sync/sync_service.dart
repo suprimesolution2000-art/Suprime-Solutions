@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../data/database/app_database.dart';
 import '../api/api_client.dart';
 import '../../data/models/invoice_model.dart';
+import '../../data/repositories/product_repository.dart';
 
 enum SyncStatus {
   idle,
@@ -128,6 +129,21 @@ class SyncService extends ChangeNotifier {
             serverInv.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
+        }
+
+        final serverProducts = data['products'] as List? ?? [];
+        final prodRepo = ProductRepository();
+        for (final item in serverProducts) {
+          final p = Map<String, dynamic>.from(item);
+          if (p['description'] != null && (p['description'] as String).trim().isNotEmpty) {
+            await prodRepo.saveOrUpdateProduct(
+              description: p['description'],
+              hsnCode: p['hsnCode'] ?? p['hsn_code'] ?? '',
+              unit: p['unit'] ?? 'PCS',
+              defaultRate: (p['defaultRate'] ?? p['default_rate'] ?? 0.0).toDouble(),
+              gstRate: (p['gstRate'] ?? p['gst_rate'] ?? 18.0).toDouble(),
+            );
+          }
         }
       }
 

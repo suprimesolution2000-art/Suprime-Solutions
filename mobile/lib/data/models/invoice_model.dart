@@ -57,7 +57,7 @@ class InvoiceModel {
     this.totalPaid = 0.0,
     required this.balanceDue,
     this.deviceId = '',
-    this.createdBy = 'Father',
+    this.createdBy = 'Admin',
     this.syncStatus = 'synced',
   });
 
@@ -137,7 +137,7 @@ class InvoiceModel {
       totalPaid: (map['total_paid'] ?? map['totalPaid'] ?? 0.0).toDouble(),
       balanceDue: (map['balance_due'] ?? map['balanceDue'] ?? 0.0).toDouble(),
       deviceId: map['device_id'] ?? map['deviceId'] ?? '',
-      createdBy: map['created_by'] ?? map['createdBy'] ?? 'Father',
+      createdBy: map['created_by'] ?? map['createdBy'] ?? 'Admin',
       syncStatus: map['sync_status'] ?? map['syncStatus'] ?? 'synced',
     );
   }

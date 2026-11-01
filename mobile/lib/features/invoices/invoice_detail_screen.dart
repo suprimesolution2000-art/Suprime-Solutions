@@ -6,6 +6,7 @@ import '../../core/utils/currency_formatter.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/repositories/invoice_repository.dart';
 import '../../services/pdf/pdf_invoice_service.dart';
+import '../../services/api/api_client.dart';
 import '../payments/record_payment_dialog.dart';
 
 class InvoiceDetailScreen extends ConsumerStatefulWidget {
@@ -35,6 +36,82 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
     }
   }
 
+  Future<void> _confirmDeleteInvoice(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            SizedBox(width: 10),
+            Text('Delete Bill?'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to permanently delete bill ${_currentInvoice.invoiceNumber}?',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Customer: ${_currentInvoice.customer.name}\nAmount: ${CurrencyFormatter.format(_currentInvoice.grandTotal)}',
+              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'This will remove the bill from the system and update the customer balance. This action cannot be undone.',
+              style: TextStyle(fontSize: 12, color: Colors.red),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes, Delete Bill'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await InvoiceRepository().deleteInvoice(_currentInvoice.uuid);
+        try {
+          await ApiClient.instance.deleteInvoice(_currentInvoice.uuid);
+        } catch (_) {
+          // If offline, local deletion already completed
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Bill ${_currentInvoice.invoiceNumber} deleted successfully.'),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
+          Navigator.pop(context, true);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete bill: $e'),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -50,6 +127,11 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
             icon: const Icon(Icons.print),
             tooltip: 'Print Invoice',
             onPressed: () => PdfInvoiceService.printInvoice(_currentInvoice),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.white),
+            tooltip: 'Delete Bill',
+            onPressed: () => _confirmDeleteInvoice(context),
           ),
         ],
       ),
@@ -112,6 +194,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
           Expanded(
             child: PdfPreview(
               build: (format) => PdfInvoiceService.generateInvoicePdfBytes(_currentInvoice),
+              pdfFileName: PdfInvoiceService.getPdfFileName(_currentInvoice),
               canChangeOrientation: false,
               canChangePageFormat: false,
               canDebug: false,
@@ -119,7 +202,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
             ),
           ),
 
-          // Bottom Action Bar with Large Buttons for Father
+          // Bottom Action Bar with Large Buttons
           Container(
             padding: const EdgeInsets.all(12),
             decoration: const BoxDecoration(

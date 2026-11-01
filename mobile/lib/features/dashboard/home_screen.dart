@@ -120,7 +120,7 @@ class HomeScreen extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Namaste, ${auth.user?.name ?? 'Father'}',
+                    'Namaste, ${auth.user?.name ?? 'User'}',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,

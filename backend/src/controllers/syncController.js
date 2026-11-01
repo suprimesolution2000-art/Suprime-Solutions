@@ -2,6 +2,7 @@ const Device = require('../models/Device');
 const Invoice = require('../models/Invoice');
 const Payment = require('../models/Payment');
 const Customer = require('../models/Customer');
+const Product = require('../models/Product');
 const { reserveNumberBlockForDevice } = require('../services/invoiceService');
 const { calculateInvoiceFinancials } = require('../services/gstCalculationService');
 const env = require('../config/env');
@@ -21,7 +22,7 @@ exports.registerDevice = async (req, res, next) => {
       device = await Device.create({
         deviceId,
         deviceName: deviceName || 'Android Device',
-        registeredUser: req.user ? req.user.name : 'Father',
+        registeredUser: req.user ? req.user.name : 'Owner',
         currentRangeFrom: block.fromNumber,
         currentRangeTo: block.toNumber,
         nextUsableNumber: block.fromNumber,
@@ -114,6 +115,28 @@ exports.pushSync = async (req, res, next) => {
             syncStatus: 'synced'
           });
           results.invoicesSynced++;
+
+          // Auto-catalogue any products in invoice items
+          if (Array.isArray(inv.items)) {
+            for (const itm of inv.items) {
+              if (itm.description && itm.description.trim()) {
+                await Product.findOneAndUpdate(
+                  { description: itm.description.trim() },
+                  {
+                    $set: {
+                      description: itm.description.trim(),
+                      hsnCode: itm.hsnCode || '',
+                      unit: itm.unit || 'PCS',
+                      defaultRate: itm.rate || 0,
+                      gstRate: itm.gstRate || 18,
+                      active: true
+                    }
+                  },
+                  { upsert: true }
+                );
+              }
+            }
+          }
         }
       } catch (err) {
         results.errors.push({ type: 'Invoice', id: inv.uuid, error: err.message });
@@ -163,10 +186,11 @@ exports.pullSync = async (req, res, next) => {
     const { since } = req.query;
     const sinceDate = since ? new Date(since) : new Date(0);
 
-    const [customers, invoices, payments] = await Promise.all([
+    const [customers, invoices, payments, products] = await Promise.all([
       Customer.find({ updatedAt: { $gt: sinceDate } }),
       Invoice.find({ updatedAt: { $gt: sinceDate } }),
-      Payment.find({ updatedAt: { $gt: sinceDate } })
+      Payment.find({ updatedAt: { $gt: sinceDate } }),
+      Product.find({ active: true })
     ]);
 
     res.json({
@@ -175,7 +199,8 @@ exports.pullSync = async (req, res, next) => {
       data: {
         customers,
         invoices,
-        payments
+        payments,
+        products
       }
     });
   } catch (error) {

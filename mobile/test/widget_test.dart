@@ -16,7 +16,7 @@ void main() {
     );
   });
 
-  testWidgets('App Launches and displays Suprime Solutions title', (WidgetTester tester) async {
+  testWidgets('App Launches and displays Login Screen when unauthenticated', (WidgetTester tester) async {
     await tester.pumpWidget(
       const ProviderScope(
         child: SSSupremeSolutionsApp(),
@@ -24,6 +24,6 @@ void main() {
     );
 
     expect(find.text('Suprime Solutions'), findsOneWidget);
-    expect(find.text('CREATE NEW BILL'), findsOneWidget);
+    expect(find.text('Sign In to Dashboard'), findsOneWidget);
   });
 }

@@ -11,5 +11,6 @@ router.post('/', invoiceController.createInvoice);
 router.get('/:id', invoiceController.getInvoiceById);
 router.get('/:id/pdf', invoiceController.getInvoicePdf);
 router.post('/:id/cancel', isOwner, invoiceController.cancelInvoice);
+router.delete('/:id', invoiceController.deleteInvoice);
 
 module.exports = router;

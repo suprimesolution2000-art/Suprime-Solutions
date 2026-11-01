@@ -105,24 +105,40 @@ class _AddItemDialogState extends State<AddItemDialog> {
                 displayStringForOption: (option) => option.description,
                 optionsBuilder: (TextEditingValue textEditingValue) {
                   if (textEditingValue.text.isEmpty) {
-                    return _savedProducts.take(5);
+                    return _savedProducts.take(6);
                   }
+                  final query = textEditingValue.text.toLowerCase().trim();
                   return _savedProducts.where((p) =>
-                      p.description.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                      p.description.toLowerCase().contains(query) ||
+                      p.hsnCode.contains(query));
                 },
                 onSelected: (ProductModel selection) {
                   _descController.text = selection.description;
                   _hsnController.text = selection.hsnCode;
-                  _rateController.text = selection.defaultRate > 0 ? selection.defaultRate.toString() : '';
+                  if (selection.defaultRate > 0) {
+                    _rateController.text = selection.defaultRate.toString();
+                  }
                   setState(() {
                     _selectedUnit = selection.unit;
                     _selectedGstRate = selection.gstRate;
                   });
                 },
                 fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                  // Keep sync with _descController
+                  // Keep sync with _descController & check auto-fill for HSN
                   controller.addListener(() {
                     _descController.text = controller.text;
+                    if (_hsnController.text.trim().isEmpty && controller.text.trim().length >= 3) {
+                      final match = _savedProducts.firstWhere(
+                        (p) => p.description.trim().toLowerCase() == controller.text.trim().toLowerCase(),
+                        orElse: () => ProductModel(uuid: '', description: ''),
+                      );
+                      if (match.hsnCode.isNotEmpty) {
+                        _hsnController.text = match.hsnCode;
+                        if (_rateController.text.isEmpty && match.defaultRate > 0) {
+                          _rateController.text = match.defaultRate.toString();
+                        }
+                      }
+                    }
                   });
                   return TextField(
                     controller: controller,
@@ -148,6 +164,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
                       decoration: const InputDecoration(
                         labelText: 'HSN / SAC Code',
                         hintText: 'e.g. 8484',
+                        helperText: 'Saved for future bills',
                       ),
                     ),
                   ),
@@ -279,9 +296,20 @@ class _AddItemDialogState extends State<AddItemDialog> {
                     return;
                   }
 
+                  final hsn = _hsnController.text.trim();
+
+                  // Save product & HSN code in catalogue for all future bills
+                  ProductRepository().saveOrUpdateProduct(
+                    description: desc,
+                    hsnCode: hsn,
+                    unit: _selectedUnit,
+                    defaultRate: rate,
+                    gstRate: _selectedGstRate,
+                  );
+
                   widget.onAdd(
                     description: desc,
-                    hsnCode: _hsnController.text.trim(),
+                    hsnCode: hsn,
                     quantity: qty,
                     unit: _selectedUnit,
                     rate: rate,

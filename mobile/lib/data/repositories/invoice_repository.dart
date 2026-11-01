@@ -136,6 +136,36 @@ class InvoiceRepository {
     );
   }
 
+  Future<void> deleteInvoice(String invoiceUuid) async {
+    final db = await _db.database;
+    final inv = await getInvoiceByUuid(invoiceUuid);
+    if (inv != null && inv.status != 'cancelled') {
+      // Revert customer outstanding balance
+      try {
+        final custRows = await db.query('customers', where: 'uuid = ?', whereArgs: [inv.customer.uuid], limit: 1);
+        if (custRows.isNotEmpty) {
+          final currentBilled = (custRows.first['total_billed'] as num?)?.toDouble() ?? 0.0;
+          final currentDue = (custRows.first['outstanding_balance'] as num?)?.toDouble() ?? 0.0;
+          await db.update(
+            'customers',
+            {
+              'total_billed': (currentBilled - inv.grandTotal).clamp(0.0, double.infinity),
+              'outstanding_balance': (currentDue - inv.balanceDue).clamp(0.0, double.infinity),
+            },
+            where: 'uuid = ?',
+            whereArgs: [inv.customer.uuid],
+          );
+        }
+      } catch (_) {}
+    }
+
+    await db.delete(
+      'invoices',
+      where: 'uuid = ?',
+      whereArgs: [invoiceUuid],
+    );
+  }
+
   // Determine Financial Year for a date
   static String getFinancialYear(DateTime date) {
     final month = date.month;

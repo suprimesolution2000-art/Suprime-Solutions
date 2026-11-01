@@ -4,7 +4,10 @@ const authController = require('../controllers/authController');
 const authMiddleware = require('../middleware/auth');
 
 router.post('/login', authController.login);
+router.post('/register', authController.register);
+router.post('/recover', authController.recoverAccount);
 router.post('/refresh', authController.refreshToken);
 router.get('/me', authMiddleware, authController.getMe);
+router.put('/profile', authMiddleware, authController.updateProfile);
 
 module.exports = router;

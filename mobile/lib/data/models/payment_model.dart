@@ -23,7 +23,7 @@ class PaymentModel {
     this.referenceNumber = '',
     required this.paymentDate,
     this.notes = '',
-    this.receivedBy = 'Father',
+    this.receivedBy = 'Admin',
     this.deviceId = '',
   });
 
@@ -56,7 +56,7 @@ class PaymentModel {
       referenceNumber: map['reference_number'] ?? map['referenceNumber'] ?? '',
       paymentDate: DateTime.tryParse(map['payment_date'] ?? map['paymentDate'] ?? '') ?? DateTime.now(),
       notes: map['notes'] ?? '',
-      receivedBy: map['received_by'] ?? map['receivedBy'] ?? 'Father',
+      receivedBy: map['received_by'] ?? map['receivedBy'] ?? 'Admin',
       deviceId: map['device_id'] ?? map['deviceId'] ?? '',
     );
   }

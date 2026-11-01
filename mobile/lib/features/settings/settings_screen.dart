@@ -5,7 +5,6 @@ import '../../core/constants/app_constants.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/sync/sync_service.dart';
-import '../../services/api/api_client.dart';
 import '../../data/database/app_database.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -17,14 +16,12 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  final _serverUrlController = TextEditingController();
   final _nextNumberController = TextEditingController(text: '1');
   final _prefixController = TextEditingController(text: '');
 
   @override
   void initState() {
     super.initState();
-    _serverUrlController.text = ApiClient.instance.baseUrl;
     _loadInvoiceSettings();
   }
 
@@ -63,7 +60,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   void dispose() {
-    _serverUrlController.dispose();
     _nextNumberController.dispose();
     _prefixController.dispose();
     super.dispose();
@@ -83,7 +79,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. User & Role Switch Card
+            // 1. Logged In User Profile Card
             Card(
               margin: EdgeInsets.zero,
               child: Padding(
@@ -95,11 +91,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       children: [
                         CircleAvatar(
                           backgroundColor: AppColors.primaryContainer,
-                          radius: 24,
-                          child: Icon(
-                            auth.isOwner ? Icons.admin_panel_settings : Icons.badge,
+                          radius: 26,
+                          child: const Icon(
+                            Icons.person,
                             color: AppColors.primary,
-                            size: 28,
+                            size: 30,
                           ),
                         ),
                         const SizedBox(width: 14),
@@ -108,11 +104,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                auth.user?.name ?? 'Father',
-                                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                                auth.user?.name ?? 'User',
+                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                               ),
+                              const SizedBox(height: 2),
                               Text(
-                                'Role: ${auth.user?.role.toUpperCase() ?? "OWNER"}',
+                                '@${auth.user?.username ?? "user"} • Role: ${auth.user?.role.toUpperCase() ?? "OWNER"}',
                                 style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                               ),
                             ],
@@ -121,16 +118,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    const Text('Switch Active Role:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                    const SizedBox(height: 8),
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(value: 'owner', label: Text('Father (Owner)')),
-                        ButtonSegment(value: 'employee', label: Text('Staff (Employee)')),
-                      ],
-                      selected: {auth.user?.role ?? 'owner'},
-                      onSelectionChanged: (set) {
-                        authNotifier.switchRole(set.first);
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red.shade700,
+                        side: BorderSide(color: Colors.red.shade300),
+                        minimumSize: const Size(double.infinity, 44),
+                      ),
+                      icon: const Icon(Icons.logout, size: 18),
+                      label: const Text('Log Out / Switch User'),
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Log Out'),
+                            content: const Text('Are you sure you want to log out from this device?'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Cancel'),
+                              ),
+                              FilledButton(
+                                style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('Log Out'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm == true) {
+                          await authNotifier.logout();
+                        }
                       },
                     ),
                   ],
@@ -313,51 +330,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                       onPressed: _saveInvoiceSettings,
                       child: const Text('Save Numbering Settings'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // 5. Server Backend Connection URL
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.dns, color: AppColors.primary),
-                        SizedBox(width: 8),
-                        Text(
-                          'Backend Server URL',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _serverUrlController,
-                      decoration: const InputDecoration(
-                        labelText: 'API Endpoint URL',
-                        hintText: 'e.g. http://10.0.2.2:5000/api or https://api.render.com/api',
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    OutlinedButton(
-                      onPressed: () {
-                        final newUrl = _serverUrlController.text.trim();
-                        if (newUrl.isNotEmpty) {
-                          ApiClient.instance.updateBaseUrl(newUrl);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Server URL updated')),
-                          );
-                        }
-                      },
-                      child: const Text('Update Server URL'),
                     ),
                   ],
                 ),
