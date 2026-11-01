@@ -105,6 +105,7 @@ exports.pushSync = async (req, res, next) => {
 
           await Invoice.create({
             ...inv,
+            createdBy: inv.createdBy || (req.user ? req.user.name : 'Administrator'),
             netAmount: financials.netAmount,
             cgstTotal: financials.cgstTotal,
             sgstTotal: financials.sgstTotal,
@@ -116,20 +117,38 @@ exports.pushSync = async (req, res, next) => {
           });
           results.invoicesSynced++;
 
-          // Update customer ledger balances in cloud database
-          const targetCustId = inv.customerId || (inv.customer && (inv.customer.id || inv.customer.uuid));
-          if (targetCustId) {
+          // Auto-save/update customer in cloud database
+          if (inv.customer && inv.customer.name) {
+            const custName = inv.customer.name.trim();
+            const custUuid = inv.customer.uuid || inv.customerId || ('cust-' + inv.uuid);
             try {
               await Customer.findOneAndUpdate(
-                { $or: [{ _id: targetCustId }, { uuid: targetCustId }] },
+                { $or: [{ uuid: custUuid }, { name: custName }] },
                 {
+                  $set: {
+                    uuid: custUuid,
+                    name: custName,
+                    businessName: inv.customer.businessName || '',
+                    phone: inv.customer.phone || '',
+                    email: inv.customer.email || '',
+                    gstin: inv.customer.gstin || '',
+                    address: inv.customer.address || '',
+                    city: inv.customer.city || '',
+                    state: inv.customer.state || 'Chhattisgarh',
+                    stateCode: inv.customer.stateCode || '22',
+                    active: true,
+                    updatedAt: new Date()
+                  },
                   $inc: {
                     totalBilled: financials.grandTotal,
                     outstandingBalance: financials.grandTotal
                   }
-                }
+                },
+                { upsert: true, new: true }
               );
-            } catch (_) {}
+            } catch (custErr) {
+              console.error('Customer upsert error during sync:', custErr.message);
+            }
           }
 
           // Auto-catalogue any products in invoice items
@@ -187,8 +206,8 @@ exports.pushSync = async (req, res, next) => {
     }
 
     res.json({
-      success: true,
-      message: 'Sync completed',
+      success: results.errors.length === 0,
+      message: results.errors.length === 0 ? 'Sync completed' : 'Sync completed with errors',
       results
     });
   } catch (error) {

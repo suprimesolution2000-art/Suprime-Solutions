@@ -60,6 +60,29 @@ class SyncService extends ChangeNotifier {
 
       final deviceId = prefs.getString('device_id') ?? 'android_mobile_1';
 
+      // Self-healing check: Compare local invoices with cloud server
+      try {
+        final checkRes = await ApiClient.instance.pullSync(null);
+        if (checkRes.statusCode == 200 && checkRes.data['success'] == true) {
+          final serverList = checkRes.data['data']['invoices'] as List? ?? [];
+          final serverUuids = serverList.map((i) => i['uuid']?.toString()).toSet();
+          final allLocal = await db.query('invoices');
+          for (final row in allLocal) {
+            final u = row['uuid']?.toString();
+            if (u != null && !serverUuids.contains(u)) {
+              await db.update(
+                'invoices',
+                {'sync_status': 'waiting_for_internet'},
+                where: 'uuid = ?',
+                whereArgs: [u],
+              );
+            }
+          }
+        }
+      } catch (_) {
+        // Continue with normal sync flow if pre-check fails
+      }
+
       // 1. Collect pending invoices
       final pendingInvoicesData = await db.query(
         'invoices',
@@ -94,17 +117,39 @@ class SyncService extends ChangeNotifier {
           'totalPaid': inv.totalPaid,
           'balanceDue': inv.balanceDue,
           'deviceId': deviceId,
+          'createdBy': inv.createdBy.isNotEmpty ? inv.createdBy : 'Administrator',
         };
       }).toList();
 
+      // Collect all local customers to sync
+      final localCustomers = await db.query('customers', where: 'active = 1');
+      final customersToPush = localCustomers.map((c) => {
+        'uuid': c['uuid'],
+        'name': c['name'],
+        'businessName': c['business_name'] ?? '',
+        'phone': c['phone'] ?? '',
+        'email': c['email'] ?? '',
+        'gstin': c['gstin'] ?? '',
+        'address': c['address'] ?? '',
+        'city': c['city'] ?? '',
+        'state': c['state'] ?? 'Chhattisgarh',
+        'stateCode': c['state_code'] ?? '22',
+        'pincode': c['pincode'] ?? '',
+        'outstandingBalance': c['outstanding_balance'] ?? 0.0,
+        'totalBilled': c['total_billed'] ?? 0.0,
+        'totalPaid': c['total_paid'] ?? 0.0,
+        'active': true,
+      }).toList();
+
       // 2. Push to backend if any
-      if (invoicesToPush.isNotEmpty) {
+      if (invoicesToPush.isNotEmpty || customersToPush.isNotEmpty) {
         final pushRes = await ApiClient.instance.pushSync(
           deviceId: deviceId,
+          customers: customersToPush,
           invoices: invoicesToPush,
         );
 
-        if (pushRes.statusCode == 200) {
+        if (pushRes.statusCode == 200 && pushRes.data['success'] == true) {
           for (final row in pendingInvoicesData) {
             await db.update(
               'invoices',
