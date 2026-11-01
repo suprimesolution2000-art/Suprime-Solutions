@@ -22,9 +22,15 @@ android {
     defaultConfig {
         applicationId = "com.suprimesolutions.mobile_billing"
         minSdk = flutter.minSdkVersion
-        targetSdk = 34
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        targetSdk = 33
+        versionCode = 4
+        versionName = "1.0.4"
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     signingConfigs {
@@ -40,7 +46,7 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }
