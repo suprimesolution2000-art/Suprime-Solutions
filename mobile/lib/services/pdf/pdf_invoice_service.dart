@@ -42,6 +42,15 @@ class PdfInvoiceService {
 
     final double effectiveGstRate = invoice.items.isNotEmpty ? invoice.items[0].gstRate : 18.0;
 
+    final wordsLen = invoice.amountInWords.length;
+    final double wordsFontSize = wordsLen > 75
+        ? 7.2
+        : (wordsLen > 60
+            ? 7.8
+            : (wordsLen > 48
+                ? 8.5
+                : (wordsLen > 36 ? 9.0 : 9.5)));
+
     pdf.addPage(
       pw.Page(
         pageFormat: const PdfPageFormat(masterWidth, masterHeight, marginAll: 0),
@@ -396,16 +405,16 @@ class PdfInvoiceService {
               // 14. Grand Total (Row: 508.0 - 524.0 - Prominent Pen Ink)
               ..._buildRupeesPaiseRow(invoice.grandTotal, 509.5, fontBold, fontSize: 14.0),
 
-              // 15. Total Amount in Words (Row: 524.0 - 541.0)
+              // 15. Total Amount in Words (Row: 524.0 - 541.0, Shifted right to start after 'Invoice Value (in word)' label, utilizing full row width up to right border)
               pw.Positioned(
-                left: 148.0,
+                left: 168.0,
                 top: 526.0,
                 child: pw.SizedBox(
-                  width: 326.0,
+                  width: 305.0,
                   child: pw.Text(
                     invoice.amountInWords,
                     maxLines: 2,
-                    style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black),
+                    style: pw.TextStyle(font: fontBold, fontSize: wordsFontSize, color: PdfColors.black),
                   ),
                 ),
               ),

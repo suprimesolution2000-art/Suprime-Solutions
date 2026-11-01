@@ -17,7 +17,7 @@
     "poDate": { "pxX": 1720, "pxY": 660, "fontSize": 10, "align": "left" },
     "challanNo": { "pxX": 1870, "pxY": 760, "fontSize": 10, "align": "left" },
     "challanDate": { "pxX": 1720, "pxY": 870, "fontSize": 10, "align": "left" },
-    "amountInWords": { "pxX": 765, "pxY": 2498, "fontSize": 9.5, "align": "left" }
+    "amountInWords": { "pxX": 785, "pxY": 2498, "fontSize": 9.5, "align": "left" }
   },
   "table": {
     "startY": 1120,
