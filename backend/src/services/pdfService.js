@@ -76,27 +76,27 @@ async function generateInvoicePdf(invoice) {
     });
   }
 
-  // 1. Header Details
-  drawText(invoice.invoiceNumber, coords.fields.invoiceNo.pxX, coords.fields.invoiceNo.pxY, 11, true);
+  // 1. Header Details (Enlarged & Bold for High Visibility)
+  drawText(invoice.invoiceNumber, coords.fields.invoiceNo.pxX, coords.fields.invoiceNo.pxY, 18, true);
 
   const formattedDate = invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString('en-GB') : '';
-  drawText(formattedDate, coords.fields.invoiceDate.pxX, coords.fields.invoiceDate.pxY, 10);
+  drawText(formattedDate, coords.fields.invoiceDate.pxX, coords.fields.invoiceDate.pxY, 14, true);
 
-  // 2. Customer Details
+  // 2. Customer Details (Enlarged & Bold)
   const cust = invoice.customer || {};
-  drawText(cust.name || cust.businessName || '', coords.fields.customerName.pxX, coords.fields.customerName.pxY, 10.5, true);
-  drawText(cust.address || '', coords.fields.customerAddress.pxX, coords.fields.customerAddress.pxY, 9.5);
-  drawText(cust.state || 'Chhattisgarh', coords.fields.state.pxX, coords.fields.state.pxY, 10);
-  drawText(cust.stateCode || '22', coords.fields.stateCode.pxX, coords.fields.stateCode.pxY, 10);
-  drawText(cust.gstin || '', coords.fields.gstin.pxX, coords.fields.gstin.pxY, 10.5, true);
+  drawText(cust.name || cust.businessName || '', coords.fields.customerName.pxX, coords.fields.customerName.pxY, 16, true);
+  drawText(cust.address || '', coords.fields.customerAddress.pxX, coords.fields.customerAddress.pxY, 13.5, false);
+  drawText(cust.state || 'Chhattisgarh', coords.fields.state.pxX, coords.fields.state.pxY, 14, true);
+  drawText(cust.stateCode || '22', coords.fields.stateCode.pxX, coords.fields.stateCode.pxY, 14, true);
+  drawText(cust.gstin || '', coords.fields.gstin.pxX, coords.fields.gstin.pxY, 15.5, true);
 
   // PO & Challan
-  if (invoice.poNumber) drawText(invoice.poNumber, coords.fields.poNo.pxX, coords.fields.poNo.pxY, 9.5);
-  if (invoice.poDate) drawText(new Date(invoice.poDate).toLocaleDateString('en-GB'), coords.fields.poDate.pxX, coords.fields.poDate.pxY, 9.5);
-  if (invoice.challanNumber) drawText(invoice.challanNumber, coords.fields.challanNo.pxX, coords.fields.challanNo.pxY, 9.5);
-  if (invoice.challanDate) drawText(new Date(invoice.challanDate).toLocaleDateString('en-GB'), coords.fields.challanDate.pxX, coords.fields.challanDate.pxY, 9.5);
+  if (invoice.poNumber) drawText(invoice.poNumber, coords.fields.poNo.pxX, coords.fields.poNo.pxY, 13.5, true);
+  if (invoice.poDate) drawText(new Date(invoice.poDate).toLocaleDateString('en-GB'), coords.fields.poDate.pxX, coords.fields.poDate.pxY, 13.5, true);
+  if (invoice.challanNumber) drawText(invoice.challanNumber, coords.fields.challanNo.pxX, coords.fields.challanNo.pxY, 13.5, true);
+  if (invoice.challanDate) drawText(new Date(invoice.challanDate).toLocaleDateString('en-GB'), coords.fields.challanDate.pxX, coords.fields.challanDate.pxY, 13.5, true);
 
-  // 3. Table Rows
+  // 3. Table Rows (Enlarged & High-Legibility)
   const items = invoice.items || [];
   const startY = coords.table.startY;
   const rowGap = coords.table.rowGap;
@@ -107,13 +107,13 @@ async function generateInvoicePdf(invoice) {
     const rupees = Math.floor(amountVal);
     const paise = Math.round((amountVal - rupees) * 100);
 
-    drawCenteredText(item.sno || idx + 1, coords.table.columns.sno.centerPx, y, 9.5);
-    drawText(item.description || '', coords.table.columns.description.leftPx, y, 9.5);
-    drawCenteredText(item.hsnCode || '', coords.table.columns.hsn.centerPx, y, 9.5);
-    drawCenteredText(`${item.quantity} ${item.unit || 'PCS'}`, coords.table.columns.qty.centerPx, y, 9.5);
-    drawRightText(Number(item.rate).toFixed(2), coords.table.columns.rate.rightPx, y, 9.5);
-    drawRightText(String(rupees), coords.table.columns.amountRs.rightPx, y, 9.5);
-    drawCenteredText(String(paise).padStart(2, '0'), coords.table.columns.amountP.centerPx, y, 9.5);
+    drawCenteredText(item.sno || idx + 1, coords.table.columns.sno.centerPx, y, 14, true);
+    drawText(item.description || '', coords.table.columns.description.leftPx, y, 13, true);
+    drawCenteredText(item.hsnCode || '', coords.table.columns.hsn.centerPx, y, 13, true);
+    drawCenteredText(`${item.quantity} ${item.unit || 'PCS'}`, coords.table.columns.qty.centerPx, y, 13.5, true);
+    drawRightText(Number(item.rate).toFixed(2), coords.table.columns.rate.rightPx, y, 13.5, true);
+    drawRightText(String(rupees), coords.table.columns.amountRs.rightPx, y, 14, true);
+    drawCenteredText(String(paise).padStart(2, '0'), coords.table.columns.amountP.centerPx, y, 13.5, true);
   });
 
   // 4. Summary & Tax Rows
@@ -126,54 +126,54 @@ async function generateInvoicePdf(invoice) {
 
   // Net Amount
   const netParts = splitRupeesPaise(invoice.netAmount);
-  drawRightText(netParts.rs, coords.summary.netAmount.rsRightPx, coords.summary.netAmount.y, 9.5);
-  drawCenteredText(netParts.p, coords.summary.netAmount.pCenterPx, coords.summary.netAmount.y, 9.5);
+  drawRightText(netParts.rs, coords.summary.netAmount.rsRightPx, coords.summary.netAmount.y, 14.5, true);
+  drawCenteredText(netParts.p, coords.summary.netAmount.pCenterPx, coords.summary.netAmount.y, 13.5, true);
 
   // SGST & CGST or IGST
   if (!invoice.isInterState) {
     const sgstRate = ((invoice.items && invoice.items[0] && invoice.items[0].gstRate) || 18) / 2;
-    drawCenteredText(sgstRate.toFixed(1), coords.summary.sgst.rateCenterPx, coords.summary.sgst.y, 9);
+    drawCenteredText(sgstRate.toFixed(1), coords.summary.sgst.rateCenterPx, coords.summary.sgst.y, 13.5, true);
     const sgstParts = splitRupeesPaise(invoice.sgstTotal);
-    drawRightText(sgstParts.rs, coords.summary.sgst.rsRightPx, coords.summary.sgst.y, 9.5);
-    drawCenteredText(sgstParts.p, coords.summary.sgst.pCenterPx, coords.summary.sgst.y, 9.5);
+    drawRightText(sgstParts.rs, coords.summary.sgst.rsRightPx, coords.summary.sgst.y, 14, true);
+    drawCenteredText(sgstParts.p, coords.summary.sgst.pCenterPx, coords.summary.sgst.y, 13.5, true);
 
-    drawCenteredText(sgstRate.toFixed(1), coords.summary.cgst.rateCenterPx, coords.summary.cgst.y, 9);
+    drawCenteredText(sgstRate.toFixed(1), coords.summary.cgst.rateCenterPx, coords.summary.cgst.y, 13.5, true);
     const cgstParts = splitRupeesPaise(invoice.cgstTotal);
-    drawRightText(cgstParts.rs, coords.summary.cgst.rsRightPx, coords.summary.cgst.y, 9.5);
-    drawCenteredText(cgstParts.p, coords.summary.cgst.pCenterPx, coords.summary.cgst.y, 9.5);
+    drawRightText(cgstParts.rs, coords.summary.cgst.rsRightPx, coords.summary.cgst.y, 14, true);
+    drawCenteredText(cgstParts.p, coords.summary.cgst.pCenterPx, coords.summary.cgst.y, 13.5, true);
 
     // IGST 0
-    drawCenteredText('0.0', coords.summary.igst.rateCenterPx, coords.summary.igst.y, 9);
-    drawRightText('0', coords.summary.igst.rsRightPx, coords.summary.igst.y, 9.5);
-    drawCenteredText('00', coords.summary.igst.pCenterPx, coords.summary.igst.y, 9.5);
+    drawCenteredText('0.0', coords.summary.igst.rateCenterPx, coords.summary.igst.y, 13.5, true);
+    drawRightText('0', coords.summary.igst.rsRightPx, coords.summary.igst.y, 14, true);
+    drawCenteredText('00', coords.summary.igst.pCenterPx, coords.summary.igst.y, 13.5, true);
   } else {
     const igstRate = (invoice.items && invoice.items[0] && invoice.items[0].gstRate) || 18;
-    drawCenteredText('0.0', coords.summary.sgst.rateCenterPx, coords.summary.sgst.y, 9);
-    drawRightText('0', coords.summary.sgst.rsRightPx, coords.summary.sgst.y, 9.5);
-    drawCenteredText('00', coords.summary.sgst.pCenterPx, coords.summary.sgst.y, 9.5);
+    drawCenteredText('0.0', coords.summary.sgst.rateCenterPx, coords.summary.sgst.y, 13.5, true);
+    drawRightText('0', coords.summary.sgst.rsRightPx, coords.summary.sgst.y, 14, true);
+    drawCenteredText('00', coords.summary.sgst.pCenterPx, coords.summary.sgst.y, 13.5, true);
 
-    drawCenteredText('0.0', coords.summary.cgst.rateCenterPx, coords.summary.cgst.y, 9);
-    drawRightText('0', coords.summary.cgst.rsRightPx, coords.summary.cgst.y, 9.5);
-    drawCenteredText('00', coords.summary.cgst.pCenterPx, coords.summary.cgst.y, 9.5);
+    drawCenteredText('0.0', coords.summary.cgst.rateCenterPx, coords.summary.cgst.y, 13.5, true);
+    drawRightText('0', coords.summary.cgst.rsRightPx, coords.summary.cgst.y, 14, true);
+    drawCenteredText('00', coords.summary.cgst.pCenterPx, coords.summary.cgst.y, 13.5, true);
 
-    drawCenteredText(igstRate.toFixed(1), coords.summary.igst.rateCenterPx, coords.summary.igst.y, 9);
+    drawCenteredText(igstRate.toFixed(1), coords.summary.igst.rateCenterPx, coords.summary.igst.y, 13.5, true);
     const igstParts = splitRupeesPaise(invoice.igstTotal);
-    drawRightText(igstParts.rs, coords.summary.igst.rsRightPx, coords.summary.igst.y, 9.5);
-    drawCenteredText(igstParts.p, coords.summary.igst.pCenterPx, coords.summary.igst.y, 9.5);
+    drawRightText(igstParts.rs, coords.summary.igst.rsRightPx, coords.summary.igst.y, 14, true);
+    drawCenteredText(igstParts.p, coords.summary.igst.pCenterPx, coords.summary.igst.y, 13.5, true);
   }
 
   // Round off
   const roundParts = splitRupeesPaise(invoice.roundOff);
-  drawRightText(roundParts.rs, coords.summary.roundOff.rsRightPx, coords.summary.roundOff.y, 9.5);
-  drawCenteredText(roundParts.p, coords.summary.roundOff.pCenterPx, coords.summary.roundOff.y, 9.5);
+  drawRightText(roundParts.rs, coords.summary.roundOff.rsRightPx, coords.summary.roundOff.y, 13.5, true);
+  drawCenteredText(roundParts.p, coords.summary.roundOff.pCenterPx, coords.summary.roundOff.y, 13.5, true);
 
-  // Grand Total
+  // Grand Total (Extra Large & Bold for Maximum Readability)
   const totalParts = splitRupeesPaise(invoice.grandTotal);
-  drawRightText(totalParts.rs, coords.summary.totalAmount.rsRightPx, coords.summary.totalAmount.y, 11, true);
-  drawCenteredText(totalParts.p, coords.summary.totalAmount.pCenterPx, coords.summary.totalAmount.y, 11, true);
+  drawRightText(totalParts.rs, coords.summary.totalAmount.rsRightPx, coords.summary.totalAmount.y, 18, true);
+  drawCenteredText(totalParts.p, coords.summary.totalAmount.pCenterPx, coords.summary.totalAmount.y, 16, true);
 
   // Amount in words
-  drawText(invoice.amountInWords || '', coords.fields.amountInWords.pxX, coords.fields.amountInWords.pxY, 9.5);
+  drawText(invoice.amountInWords || '', coords.fields.amountInWords.pxX, coords.fields.amountInWords.pxY, 13.5, true);
 
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes);

@@ -21,8 +21,8 @@ class PdfInvoiceService {
   static Future<Uint8List> generateInvoicePdfBytes(InvoiceModel invoice) async {
     final pdf = pw.Document();
 
-    // Load master scanned template image from assets
-    final templateImageBytes = await rootBundle.load('assets/invoice-template/template_original.jpeg');
+    // Load master 300 DPI high-definition scanned template image from assets
+    final templateImageBytes = await rootBundle.load('assets/invoice-template/template_hq_300dpi.jpg');
     final templateImage = pw.MemoryImage(templateImageBytes.buffer.asUint8List());
 
     final fontNormal = await PdfGoogleFonts.robotoRegular();
@@ -43,82 +43,85 @@ class PdfInvoiceService {
                 child: pw.Image(templateImage, fit: pw.BoxFit.fill),
               ),
 
-              // 2. Invoice Number
+              // 2. Invoice Number (Enlarged & High Visibility)
               pw.Positioned(
                 left: _ptX(1820),
-                top: _ptY(260),
+                top: _ptY(255),
                 child: pw.Text(
                   invoice.invoiceNumber,
-                  style: pw.TextStyle(font: fontBold, fontSize: 11, color: PdfColors.black),
+                  style: pw.TextStyle(font: fontBold, fontSize: 18, color: PdfColors.black),
                 ),
               ),
 
-              // 3. Invoice Date
+              // 3. Invoice Date (Enlarged & Bold)
               pw.Positioned(
-                left: _ptX(1930),
-                top: _ptY(350),
+                left: _ptX(1915),
+                top: _ptY(348),
                 child: pw.Text(
                   DateFormatter.format(invoice.invoiceDate),
-                  style: pw.TextStyle(font: fontNormal, fontSize: 10.5, color: PdfColors.black),
+                  style: pw.TextStyle(font: fontBold, fontSize: 14, color: PdfColors.black),
                 ),
               ),
 
-              // 4. Customer Name (Line 1 under M/s)
+              // 4. Customer Name (Line 1 under M/s - Large & Bold)
               pw.Positioned(
                 left: _ptX(280),
                 top: _ptY(535),
                 child: pw.Text(
                   invoice.customer.name.toUpperCase(),
-                  style: pw.TextStyle(font: fontBold, fontSize: 10.5, color: PdfColors.black),
+                  style: pw.TextStyle(font: fontBold, fontSize: 16, color: PdfColors.black),
                 ),
               ),
 
-              // 5. Customer Address (Line 2)
+              // 5. Customer Address (Line 2 - Clear & Large)
               pw.Positioned(
                 left: _ptX(200),
                 top: _ptY(635),
-                child: pw.Text(
-                  invoice.customer.address,
-                  style: pw.TextStyle(font: fontNormal, fontSize: 9.5, color: PdfColors.black),
+                child: pw.SizedBox(
+                  width: _ptX(1300),
+                  child: pw.Text(
+                    invoice.customer.address,
+                    style: pw.TextStyle(font: fontNormal, fontSize: 13.5, color: PdfColors.black),
+                  ),
                 ),
               ),
 
-              // 6. State & State Code
+              // 6. State & State Code (Large & Bold)
               pw.Positioned(
                 left: _ptX(340),
-                top: _ptY(785),
+                top: _ptY(780),
                 child: pw.Text(
                   invoice.customer.state,
-                  style: pw.TextStyle(font: fontNormal, fontSize: 10, color: PdfColors.black),
+                  style: pw.TextStyle(font: fontBold, fontSize: 14, color: PdfColors.black),
                 ),
               ),
               pw.Positioned(
                 left: _ptX(1200),
-                top: _ptY(785),
+                top: _ptY(780),
                 child: pw.Text(
                   invoice.customer.stateCode,
-                  style: pw.TextStyle(font: fontNormal, fontSize: 10, color: PdfColors.black),
+                  style: pw.TextStyle(font: fontBold, fontSize: 14, color: PdfColors.black),
                 ),
               ),
 
-              // 7. GSTIN No.
+              // 7. GSTIN No. (Large & Bold)
               pw.Positioned(
                 left: _ptX(520),
-                top: _ptY(870),
+                top: _ptY(868),
                 child: pw.Text(
                   invoice.customer.gstin,
-                  style: pw.TextStyle(font: fontBold, fontSize: 10.5, color: PdfColors.black),
+                  style: pw.TextStyle(font: fontBold, fontSize: 15.5, color: PdfColors.black),
                 ),
               ),
 
-              // 8. P.O. No. & Date
+              // 8. P.O. No. & Date (Large & Bold)
               if (invoice.poNumber.isNotEmpty)
                 pw.Positioned(
                   left: _ptX(1750),
                   top: _ptY(555),
                   child: pw.Text(
                     invoice.poNumber,
-                    style: pw.TextStyle(font: fontNormal, fontSize: 9.5, color: PdfColors.black),
+                    style: pw.TextStyle(font: fontBold, fontSize: 13.5, color: PdfColors.black),
                   ),
                 ),
               if (invoice.poDate != null)
@@ -127,18 +130,18 @@ class PdfInvoiceService {
                   top: _ptY(660),
                   child: pw.Text(
                     DateFormatter.format(invoice.poDate),
-                    style: pw.TextStyle(font: fontNormal, fontSize: 9.5, color: PdfColors.black),
+                    style: pw.TextStyle(font: fontBold, fontSize: 13.5, color: PdfColors.black),
                   ),
                 ),
 
-              // 9. Challan No. & Date
+              // 9. Challan No. & Date (Large & Bold)
               if (invoice.challanNumber.isNotEmpty)
                 pw.Positioned(
                   left: _ptX(1870),
                   top: _ptY(760),
                   child: pw.Text(
                     invoice.challanNumber,
-                    style: pw.TextStyle(font: fontNormal, fontSize: 9.5, color: PdfColors.black),
+                    style: pw.TextStyle(font: fontBold, fontSize: 13.5, color: PdfColors.black),
                   ),
                 ),
               if (invoice.challanDate != null)
@@ -147,11 +150,11 @@ class PdfInvoiceService {
                   top: _ptY(870),
                   child: pw.Text(
                     DateFormatter.format(invoice.challanDate),
-                    style: pw.TextStyle(font: fontNormal, fontSize: 9.5, color: PdfColors.black),
+                    style: pw.TextStyle(font: fontBold, fontSize: 13.5, color: PdfColors.black),
                   ),
                 ),
 
-              // 10. Table Line Items (Up to 11 rows)
+              // 10. Table Line Items (Up to 11 rows - All Enlarged & Bold)
               ...List.generate(
                 invoice.items.length > 11 ? 11 : invoice.items.length,
                 (idx) {
@@ -171,11 +174,11 @@ class PdfInvoiceService {
                         child: pw.SizedBox(
                           width: _ptX(50),
                           child: pw.Center(
-                            child: pw.Text('${itm.sno}', style: pw.TextStyle(font: fontNormal, fontSize: 9.5)),
+                            child: pw.Text('${itm.sno}', style: pw.TextStyle(font: fontBold, fontSize: 14)),
                           ),
                         ),
                       ),
-                      // Description (Left at 335)
+                      // Description (Left at 335 - Bold & Prominent)
                       pw.Positioned(
                         left: _ptX(335),
                         top: y,
@@ -185,7 +188,7 @@ class PdfInvoiceService {
                             itm.description,
                             maxLines: 1,
                             overflow: pw.TextOverflow.clip,
-                            style: pw.TextStyle(font: fontNormal, fontSize: 9.5),
+                            style: pw.TextStyle(font: fontBold, fontSize: 13),
                           ),
                         ),
                       ),
@@ -196,7 +199,7 @@ class PdfInvoiceService {
                         child: pw.SizedBox(
                           width: _ptX(120),
                           child: pw.Center(
-                            child: pw.Text(itm.hsnCode, style: pw.TextStyle(font: fontNormal, fontSize: 9.5)),
+                            child: pw.Text(itm.hsnCode, style: pw.TextStyle(font: fontBold, fontSize: 13)),
                           ),
                         ),
                       ),
@@ -207,7 +210,7 @@ class PdfInvoiceService {
                         child: pw.SizedBox(
                           width: _ptX(140),
                           child: pw.Center(
-                            child: pw.Text('${itm.quantity.toStringAsFixed(itm.quantity.truncateToDouble() == itm.quantity ? 0 : 2)} ${itm.unit}', style: pw.TextStyle(font: fontNormal, fontSize: 9.5)),
+                            child: pw.Text('${itm.quantity.toStringAsFixed(itm.quantity.truncateToDouble() == itm.quantity ? 0 : 2)} ${itm.unit}', style: pw.TextStyle(font: fontBold, fontSize: 13.5)),
                           ),
                         ),
                       ),
@@ -219,7 +222,7 @@ class PdfInvoiceService {
                           width: _ptX(280),
                           child: pw.Align(
                             alignment: pw.Alignment.centerRight,
-                            child: pw.Text(itm.rate.toStringAsFixed(2), style: pw.TextStyle(font: fontNormal, fontSize: 9.5)),
+                            child: pw.Text(itm.rate.toStringAsFixed(2), style: pw.TextStyle(font: fontBold, fontSize: 13.5)),
                           ),
                         ),
                       ),
@@ -231,7 +234,7 @@ class PdfInvoiceService {
                           width: _ptX(400),
                           child: pw.Align(
                             alignment: pw.Alignment.centerRight,
-                            child: pw.Text('$rupees', style: pw.TextStyle(font: fontNormal, fontSize: 9.5)),
+                            child: pw.Text('$rupees', style: pw.TextStyle(font: fontBold, fontSize: 14)),
                           ),
                         ),
                       ),
@@ -242,7 +245,7 @@ class PdfInvoiceService {
                         child: pw.SizedBox(
                           width: _ptX(100),
                           child: pw.Center(
-                            child: pw.Text(paise.toString().padLeft(2, '0'), style: pw.TextStyle(font: fontNormal, fontSize: 9.5)),
+                            child: pw.Text(paise.toString().padLeft(2, '0'), style: pw.TextStyle(font: fontBold, fontSize: 13.5)),
                           ),
                         ),
                       ),
@@ -252,9 +255,9 @@ class PdfInvoiceService {
               ),
 
               // 11. Net Amount (Y = 2110)
-              ..._buildRupeesPaiseRow(invoice.netAmount, 2110.0, fontNormal),
+              ..._buildRupeesPaiseRow(invoice.netAmount, 2110.0, fontBold, isBold: true, fontSize: 14.5),
 
-              // 12. Taxes (SGST & CGST or IGST)
+              // 12. Taxes (SGST & CGST or IGST - Large & Bold)
               if (!invoice.isInterState) ...[
                 // SGST Rate
                 pw.Positioned(
@@ -263,11 +266,11 @@ class PdfInvoiceService {
                   child: pw.SizedBox(
                     width: _ptX(80),
                     child: pw.Center(
-                      child: pw.Text(((invoice.items.isNotEmpty ? invoice.items[0].gstRate : 18.0) / 2).toStringAsFixed(1), style: pw.TextStyle(font: fontNormal, fontSize: 9)),
+                      child: pw.Text(((invoice.items.isNotEmpty ? invoice.items[0].gstRate : 18.0) / 2).toStringAsFixed(1), style: pw.TextStyle(font: fontBold, fontSize: 13.5)),
                     ),
                   ),
                 ),
-                ..._buildRupeesPaiseRow(invoice.sgstTotal, 2175.0, fontNormal),
+                ..._buildRupeesPaiseRow(invoice.sgstTotal, 2175.0, fontBold, isBold: true, fontSize: 14),
 
                 // CGST Rate
                 pw.Positioned(
@@ -276,11 +279,11 @@ class PdfInvoiceService {
                   child: pw.SizedBox(
                     width: _ptX(80),
                     child: pw.Center(
-                      child: pw.Text(((invoice.items.isNotEmpty ? invoice.items[0].gstRate : 18.0) / 2).toStringAsFixed(1), style: pw.TextStyle(font: fontNormal, fontSize: 9)),
+                      child: pw.Text(((invoice.items.isNotEmpty ? invoice.items[0].gstRate : 18.0) / 2).toStringAsFixed(1), style: pw.TextStyle(font: fontBold, fontSize: 13.5)),
                     ),
                   ),
                 ),
-                ..._buildRupeesPaiseRow(invoice.cgstTotal, 2235.0, fontNormal),
+                ..._buildRupeesPaiseRow(invoice.cgstTotal, 2235.0, fontBold, isBold: true, fontSize: 14),
 
                 // IGST 0
                 pw.Positioned(
@@ -289,17 +292,17 @@ class PdfInvoiceService {
                   child: pw.SizedBox(
                     width: _ptX(80),
                     child: pw.Center(
-                      child: pw.Text('0.0', style: pw.TextStyle(font: fontNormal, fontSize: 9)),
+                      child: pw.Text('0.0', style: pw.TextStyle(font: fontBold, fontSize: 13.5)),
                     ),
                   ),
                 ),
-                ..._buildRupeesPaiseRow(0.0, 2295.0, fontNormal),
+                ..._buildRupeesPaiseRow(0.0, 2295.0, fontBold, isBold: true, fontSize: 14),
               ] else ...[
                 // Intra-state 0
-                pw.Positioned(left: _ptX(1420), top: _ptY(2175), child: pw.Text('0.0', style: pw.TextStyle(font: fontNormal, fontSize: 9))),
-                ..._buildRupeesPaiseRow(0.0, 2175.0, fontNormal),
-                pw.Positioned(left: _ptX(1420), top: _ptY(2235), child: pw.Text('0.0', style: pw.TextStyle(font: fontNormal, fontSize: 9))),
-                ..._buildRupeesPaiseRow(0.0, 2235.0, fontNormal),
+                pw.Positioned(left: _ptX(1420), top: _ptY(2175), child: pw.Text('0.0', style: pw.TextStyle(font: fontBold, fontSize: 13.5))),
+                ..._buildRupeesPaiseRow(0.0, 2175.0, fontBold, isBold: true, fontSize: 14),
+                pw.Positioned(left: _ptX(1420), top: _ptY(2235), child: pw.Text('0.0', style: pw.TextStyle(font: fontBold, fontSize: 13.5))),
+                ..._buildRupeesPaiseRow(0.0, 2235.0, fontBold, isBold: true, fontSize: 14),
 
                 // IGST
                 pw.Positioned(
@@ -308,20 +311,20 @@ class PdfInvoiceService {
                   child: pw.SizedBox(
                     width: _ptX(80),
                     child: pw.Center(
-                      child: pw.Text((invoice.items.isNotEmpty ? invoice.items[0].gstRate : 18.0).toStringAsFixed(1), style: pw.TextStyle(font: fontNormal, fontSize: 9)),
+                      child: pw.Text((invoice.items.isNotEmpty ? invoice.items[0].gstRate : 18.0).toStringAsFixed(1), style: pw.TextStyle(font: fontBold, fontSize: 13.5)),
                     ),
                   ),
                 ),
-                ..._buildRupeesPaiseRow(invoice.igstTotal, 2295.0, fontNormal),
+                ..._buildRupeesPaiseRow(invoice.igstTotal, 2295.0, fontBold, isBold: true, fontSize: 14),
               ],
 
               // 13. Round Off (Y = 2355)
-              ..._buildRupeesPaiseRow(invoice.roundOff, 2355.0, fontNormal),
+              ..._buildRupeesPaiseRow(invoice.roundOff, 2355.0, fontBold, isBold: true, fontSize: 13.5),
 
-              // 14. Grand Total (Y = 2420)
-              ..._buildRupeesPaiseRow(invoice.grandTotal, 2420.0, fontBold, isBold: true, fontSize: 11),
+              // 14. Grand Total (Y = 2420 - Huge & Extra Bold)
+              ..._buildRupeesPaiseRow(invoice.grandTotal, 2420.0, fontBold, isBold: true, fontSize: 18),
 
-              // 15. Invoice Value in Words (Y = 2498, X = 765)
+              // 15. Invoice Value in Words (Y = 2498, X = 765 - Large & Bold)
               pw.Positioned(
                 left: _ptX(765),
                 top: _ptY(2498),
@@ -329,7 +332,7 @@ class PdfInvoiceService {
                   width: _ptX(1400),
                   child: pw.Text(
                     invoice.amountInWords,
-                    style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black),
+                    style: pw.TextStyle(font: fontBold, fontSize: 13.5, color: PdfColors.black),
                   ),
                 ),
               ),
@@ -342,7 +345,7 @@ class PdfInvoiceService {
     return pdf.save();
   }
 
-  static List<pw.Widget> _buildRupeesPaiseRow(double val, double yPx, pw.Font font, {bool isBold = false, double fontSize = 9.5}) {
+  static List<pw.Widget> _buildRupeesPaiseRow(double val, double yPx, pw.Font font, {bool isBold = false, double fontSize = 14.0}) {
     final r = val.floor();
     final p = ((val - r) * 100).round().abs();
 
