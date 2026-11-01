@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.suprimesolutions.mobile_billing"
-    compileSdk = 34
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
