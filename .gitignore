@@ -18,6 +18,7 @@ mobile/.flutter-plugins-dependencies
 
 # Android
 mobile/android/.gradle/
+mobile/android/.kotlin/
 mobile/android/local.properties
 mobile/android/**/build/
 
