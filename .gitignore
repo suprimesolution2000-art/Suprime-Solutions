@@ -1,0 +1,35 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+.env
+backend/.env
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+mobile/build/
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+
+# Android
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/**/build/
+
+# Python / Cache
+__pycache__/
+*.pyc
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,95 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../data/models/invoice_model.dart';
+import '../data/repositories/invoice_repository.dart';
+
+class InvoiceListState {
+  final List<InvoiceModel> invoices;
+  final bool isLoading;
+  final String searchQuery;
+  final String filterChip; // 'all', 'paid', 'unpaid', 'partial', 'overdue'
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final String? errorMessage;
+
+  InvoiceListState({
+    this.invoices = const [],
+    this.isLoading = false,
+    this.searchQuery = '',
+    this.filterChip = 'all',
+    this.startDate,
+    this.endDate,
+    this.errorMessage,
+  });
+
+  InvoiceListState copyWith({
+    List<InvoiceModel>? invoices,
+    bool? isLoading,
+    String? searchQuery,
+    String? filterChip,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? errorMessage,
+  }) {
+    return InvoiceListState(
+      invoices: invoices ?? this.invoices,
+      isLoading: isLoading ?? this.isLoading,
+      searchQuery: searchQuery ?? this.searchQuery,
+      filterChip: filterChip ?? this.filterChip,
+      startDate: startDate ?? this.startDate,
+      endDate: endDate ?? this.endDate,
+      errorMessage: errorMessage,
+    );
+  }
+}
+
+class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
+  final InvoiceRepository _repo = InvoiceRepository();
+
+  InvoiceListNotifier() : super(InvoiceListState()) {
+    fetchInvoices();
+  }
+
+  Future<void> fetchInvoices() async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    try {
+      final list = await _repo.getInvoices(
+        searchQuery: state.searchQuery,
+        paymentFilter: state.filterChip,
+        startDate: state.startDate,
+        endDate: state.endDate,
+      );
+      state = state.copyWith(invoices: list, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+    }
+  }
+
+  void setSearchQuery(String query) {
+    state = state.copyWith(searchQuery: query);
+    fetchInvoices();
+  }
+
+  void setFilterChip(String chip) {
+    state = state.copyWith(filterChip: chip);
+    fetchInvoices();
+  }
+
+  void setDateRange(DateTime? start, DateTime? end) {
+    state = state.copyWith(startDate: start, endDate: end);
+    fetchInvoices();
+  }
+
+  void clearFilters() {
+    state = state.copyWith(
+      searchQuery: '',
+      filterChip: 'all',
+      startDate: null,
+      endDate: null,
+    );
+    fetchInvoices();
+  }
+}
+
+final invoiceListProvider = StateNotifierProvider<InvoiceListNotifier, InvoiceListState>((ref) {
+  return InvoiceListNotifier();
+});

@@ -1,0 +1,44 @@
+{
+  "pageSize": {
+    "width": 817.0,
+    "height": 1000.0,
+    "sourcePixelWidth": 2296,
+    "sourcePixelHeight": 2809
+  },
+  "fields": {
+    "invoiceNo": { "pxX": 1820, "pxY": 260, "fontSize": 12, "align": "left" },
+    "invoiceDate": { "pxX": 1930, "pxY": 350, "fontSize": 10.5, "align": "left" },
+    "customerName": { "pxX": 280, "pxY": 535, "fontSize": 11, "align": "left" },
+    "customerAddress": { "pxX": 200, "pxY": 635, "fontSize": 10, "align": "left" },
+    "state": { "pxX": 340, "pxY": 785, "fontSize": 10.5, "align": "left" },
+    "stateCode": { "pxX": 1200, "pxY": 785, "fontSize": 10.5, "align": "left" },
+    "gstin": { "pxX": 520, "pxY": 870, "fontSize": 11, "align": "left" },
+    "poNo": { "pxX": 1750, "pxY": 555, "fontSize": 10, "align": "left" },
+    "poDate": { "pxX": 1720, "pxY": 660, "fontSize": 10, "align": "left" },
+    "challanNo": { "pxX": 1870, "pxY": 760, "fontSize": 10, "align": "left" },
+    "challanDate": { "pxX": 1720, "pxY": 870, "fontSize": 10, "align": "left" },
+    "amountInWords": { "pxX": 765, "pxY": 2498, "fontSize": 9.5, "align": "left" }
+  },
+  "table": {
+    "startY": 1120,
+    "rowGap": 75,
+    "maxRowsPerPage": 11,
+    "columns": {
+      "sno": { "centerPx": 235, "fontSize": 10, "align": "center" },
+      "description": { "leftPx": 335, "maxRightPx": 970, "fontSize": 10, "align": "left" },
+      "hsn": { "centerPx": 1080, "fontSize": 10, "align": "center" },
+      "qty": { "centerPx": 1260, "fontSize": 10, "align": "center" },
+      "rate": { "rightPx": 1630, "fontSize": 10, "align": "right" },
+      "amountRs": { "rightPx": 2060, "fontSize": 10, "align": "right" },
+      "amountP": { "centerPx": 2135, "fontSize": 10, "align": "center" }
+    }
+  },
+  "summary": {
+    "netAmount": { "y": 2110, "rsRightPx": 2060, "pCenterPx": 2135 },
+    "sgst": { "y": 2175, "rateCenterPx": 1460, "rsRightPx": 2060, "pCenterPx": 2135 },
+    "cgst": { "y": 2235, "rateCenterPx": 1460, "rsRightPx": 2060, "pCenterPx": 2135 },
+    "igst": { "y": 2295, "rateCenterPx": 1460, "rsRightPx": 2060, "pCenterPx": 2135 },
+    "roundOff": { "y": 2355, "rsRightPx": 2060, "pCenterPx": 2135 },
+    "totalAmount": { "y": 2420, "rsRightPx": 2060, "pCenterPx": 2135 }
+  }
+}
