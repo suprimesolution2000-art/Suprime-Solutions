@@ -197,24 +197,22 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
           await ApiClient.instance.deleteInvoice(inv.uuid);
         } catch (_) {}
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Bill ${inv.invoiceNumber} deleted successfully.'),
-              backgroundColor: Colors.red.shade700,
-            ),
-          );
-          ref.read(invoiceListProvider.notifier).fetchInvoices();
-        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Bill ${inv.invoiceNumber} deleted successfully.'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+        ref.read(invoiceListProvider.notifier).fetchInvoices();
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to delete bill: $e'),
-              backgroundColor: Colors.red.shade700,
-            ),
-          );
-        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete bill: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
       }
     }
   }

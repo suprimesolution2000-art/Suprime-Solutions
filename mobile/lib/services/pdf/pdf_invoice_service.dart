@@ -21,7 +21,6 @@ class PdfInvoiceService {
     final templateImageBytes = await rootBundle.load('assets/invoice-template/template_hq_300dpi.jpg');
     final templateImage = pw.MemoryImage(templateImageBytes.buffer.asUint8List());
 
-    final fontNormal = await PdfGoogleFonts.robotoRegular();
     final fontBold = await PdfGoogleFonts.robotoBold();
 
     // Prepare address lines

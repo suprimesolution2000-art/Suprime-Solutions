@@ -216,7 +216,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                         Expanded(
                           flex: 3,
                           child: DropdownButtonFormField<String>(
-                            value: _selectedState,
+                            initialValue: _selectedState,
                             decoration: const InputDecoration(
                               labelText: 'State (Place of Supply)',
                             ),
@@ -445,7 +445,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: billState.items.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        separatorBuilder: (context, index) => const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final itm = billState.items[index];
                           return Padding(

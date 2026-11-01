@@ -183,8 +183,7 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                                       style: const TextStyle(fontWeight: FontWeight.bold),
                                     ),
                                     subtitle: Text(
-                                      'Against: ${p.invoiceNumber}  •  ${DateFormatter.format(p.paymentDate)}' +
-                                          (p.referenceNumber.isNotEmpty ? '\nRef: ${p.referenceNumber}' : ''),
+                                      'Against: ${p.invoiceNumber}  •  ${DateFormatter.format(p.paymentDate)}${p.referenceNumber.isNotEmpty ? "\nRef: ${p.referenceNumber}" : ""}',
                                     ),
                                   ),
                                 );

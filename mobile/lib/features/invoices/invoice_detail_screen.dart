@@ -90,24 +90,22 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
           // If offline, local deletion already completed
         }
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Bill ${_currentInvoice.invoiceNumber} deleted successfully.'),
-              backgroundColor: Colors.red.shade700,
-            ),
-          );
-          Navigator.pop(context, true);
-        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Bill ${_currentInvoice.invoiceNumber} deleted successfully.'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+        Navigator.pop(context, true);
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to delete bill: $e'),
-              backgroundColor: Colors.red.shade700,
-            ),
-          );
-        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete bill: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
       }
     }
   }

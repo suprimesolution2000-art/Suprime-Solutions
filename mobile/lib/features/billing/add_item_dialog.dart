@@ -172,7 +172,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
                   Expanded(
                     flex: 2,
                     child: DropdownButtonFormField<String>(
-                      value: _selectedUnit,
+                      initialValue: _selectedUnit,
                       decoration: const InputDecoration(
                         labelText: 'Unit *',
                       ),
@@ -232,7 +232,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<double>(
-                      value: _selectedGstRate,
+                      initialValue: _selectedGstRate,
                       decoration: const InputDecoration(
                         labelText: 'GST Rate *',
                       ),

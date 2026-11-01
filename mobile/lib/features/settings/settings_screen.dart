@@ -6,6 +6,7 @@ import '../../core/utils/date_formatter.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/sync/sync_service.dart';
 import '../../data/database/app_database.dart';
+import '../admin/staff_management_screen.dart';
 import 'package:sqflite/sqflite.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -154,6 +155,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ),
+            if (auth.isOwner) ...[
+              const SizedBox(height: 16),
+              Card(
+                margin: EdgeInsets.zero,
+                elevation: 2,
+                color: Colors.blue.shade50,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.blue.shade200),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  leading: const CircleAvatar(
+                    backgroundColor: AppColors.primary,
+                    child: Icon(Icons.manage_accounts, color: Colors.white),
+                  ),
+                  title: const Text(
+                    'Staff & User Accounts',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  subtitle: const Text(
+                    'View employee credentials, add staff, or reset passwords.',
+                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: AppColors.primary),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const StaffManagementScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
 
             // 2. Cloud Sync Management Card
@@ -221,14 +258,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ? null
                               : () async {
                                   final ok = await SyncService.instance.synchronize();
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(ok ? 'Sync successful!' : 'Saved offline on device.'),
-                                        backgroundColor: ok ? AppColors.paid : Colors.deepOrange,
-                                      ),
-                                    );
-                                  }
+                                  if (!mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(ok ? 'Sync successful!' : 'Saved offline on device.'),
+                                      backgroundColor: ok ? AppColors.paid : Colors.deepOrange,
+                                    ),
+                                  );
                                 },
                         ),
                       ],

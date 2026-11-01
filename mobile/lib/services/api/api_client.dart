@@ -113,17 +113,38 @@ class ApiClient {
     });
   }
 
-  // Auth: Recover ID or Reset Password
-  Future<Response> recoverAccount({
+  // Admin: Get all staff users
+  Future<Response> getAdminUsers() async {
+    return await dio.get('/admin/users');
+  }
+
+  // Admin: Create staff user
+  Future<Response> createAdminUser({
+    required String name,
+    required String username,
+    required String password,
     String? phone,
-    String? username,
-    String? newPassword,
+    String role = 'employee',
   }) async {
-    return await dio.post('/auth/recover', data: {
+    return await dio.post('/admin/users', data: {
+      'name': name,
+      'username': username,
+      'password': password,
       if (phone != null && phone.isNotEmpty) 'phone': phone,
-      if (username != null && username.isNotEmpty) 'username': username,
-      if (newPassword != null && newPassword.isNotEmpty) 'newPassword': newPassword,
+      'role': role,
     });
+  }
+
+  // Admin: Reset user password
+  Future<Response> resetAdminUserPassword(String userId, String newPassword) async {
+    return await dio.put('/admin/users/$userId/password', data: {
+      'newPassword': newPassword,
+    });
+  }
+
+  // Admin: Delete user
+  Future<Response> deleteAdminUser(String userId) async {
+    return await dio.delete('/admin/users/$userId');
   }
 
   // Device registration
@@ -152,7 +173,7 @@ class ApiClient {
   // Sync Pull
   Future<Response> pullSync(String? sinceIsoDate) async {
     return await dio.get('/sync/pull', queryParameters: {
-      if (sinceIsoDate != null) 'since': sinceIsoDate,
+      'since': ?sinceIsoDate,
     });
   }
 

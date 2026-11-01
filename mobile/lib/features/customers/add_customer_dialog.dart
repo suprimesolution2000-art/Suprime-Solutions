@@ -117,7 +117,7 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _selectedState,
+                      initialValue: _selectedState,
                       decoration: const InputDecoration(labelText: 'State'),
                       items: const [
                         DropdownMenuItem(value: 'Chhattisgarh', child: Text('Chhattisgarh (22)')),

@@ -150,7 +150,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -159,7 +159,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: color.withOpacity(0.12),
+            backgroundColor: color.withValues(alpha: 0.12),
             radius: 24,
             child: Icon(icon, color: color, size: 24),
           ),

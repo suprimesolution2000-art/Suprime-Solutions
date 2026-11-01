@@ -187,7 +187,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
 
               // Payment Method
               DropdownButtonFormField<String>(
-                value: _selectedMethod,
+                initialValue: _selectedMethod,
                 decoration: const InputDecoration(
                   labelText: 'Payment Mode *',
                   prefixIcon: Icon(Icons.account_balance_wallet_outlined),
