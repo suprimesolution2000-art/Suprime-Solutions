@@ -3,6 +3,7 @@ const Invoice = require('../models/Invoice');
 const Payment = require('../models/Payment');
 const { v4: uuidv4 } = require('uuid');
 const { findByIdOrUuid } = require('../utils/idHelper');
+const { escapeRegex } = require('../utils/regexHelper');
 
 // Universal customer search & list
 exports.getCustomers = async (req, res, next) => {
@@ -11,7 +12,7 @@ exports.getCustomers = async (req, res, next) => {
     const query = { active: true };
 
     if (search && search.trim()) {
-      const regex = new RegExp(search.trim(), 'i');
+      const regex = new RegExp(escapeRegex(search.trim()), 'i');
       query.$or = [
         { name: regex },
         { businessName: regex },

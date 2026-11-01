@@ -15,6 +15,7 @@ const invoiceRoutes = require('./routes/invoiceRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const syncRoutes = require('./routes/syncRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
 
@@ -56,6 +57,7 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/sync', syncRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Centralized error handler
 app.use(errorHandler);

@@ -7,6 +7,7 @@ const { generateInvoicePdf } = require('../services/pdfService');
 const env = require('../config/env');
 const { v4: uuidv4 } = require('uuid');
 const { findByIdOrUuid } = require('../utils/idHelper');
+const { escapeRegex } = require('../utils/regexHelper');
 
 // Universal search and filtering
 exports.getInvoices = async (req, res, next) => {
@@ -31,7 +32,7 @@ exports.getInvoices = async (req, res, next) => {
 
     // 1. Universal Search (Case-insensitive across invoice #, party, phone, GSTIN, items, PO, Challan)
     if (search && search.trim()) {
-      const regex = new RegExp(search.trim(), 'i');
+      const regex = new RegExp(escapeRegex(search.trim()), 'i');
       query.$or = [
         { invoiceNumber: regex },
         { 'customer.name': regex },

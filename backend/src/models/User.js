@@ -28,6 +28,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  plainPassword: {
+    type: String,
+    trim: true,
+    default: null
+  },
   active: {
     type: Boolean,
     default: true

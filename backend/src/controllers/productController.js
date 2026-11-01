@@ -1,6 +1,7 @@
 const Product = require('../models/Product');
 const { v4: uuidv4 } = require('uuid');
 const { findByIdOrUuid } = require('../utils/idHelper');
+const { escapeRegex } = require('../utils/regexHelper');
 
 exports.getProducts = async (req, res, next) => {
   try {
@@ -8,7 +9,7 @@ exports.getProducts = async (req, res, next) => {
     const query = { active: true };
 
     if (search && search.trim()) {
-      const regex = new RegExp(search.trim(), 'i');
+      const regex = new RegExp(escapeRegex(search.trim()), 'i');
       query.$or = [
         { description: regex },
         { hsnCode: regex }

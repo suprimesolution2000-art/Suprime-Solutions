@@ -116,6 +116,22 @@ exports.pushSync = async (req, res, next) => {
           });
           results.invoicesSynced++;
 
+          // Update customer ledger balances in cloud database
+          const targetCustId = inv.customerId || (inv.customer && (inv.customer.id || inv.customer.uuid));
+          if (targetCustId) {
+            try {
+              await Customer.findOneAndUpdate(
+                { $or: [{ _id: targetCustId }, { uuid: targetCustId }] },
+                {
+                  $inc: {
+                    totalBilled: financials.grandTotal,
+                    outstandingBalance: financials.grandTotal
+                  }
+                }
+              );
+            } catch (_) {}
+          }
+
           // Auto-catalogue any products in invoice items
           if (Array.isArray(inv.items)) {
             for (const itm of inv.items) {
