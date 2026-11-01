@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../providers/invoice_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/repositories/invoice_repository.dart';
 import '../../services/pdf/pdf_invoice_service.dart';
@@ -218,6 +219,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
   }
 
   Widget _buildInvoiceCard(BuildContext context, InvoiceModel inv) {
+    final isOwner = ref.watch(authProvider).isOwner;
     Color badgeBg;
     Color badgeText;
     String badgeLabel;
@@ -318,16 +320,17 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                           ],
                         ),
                       ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text('Delete Bill', style: TextStyle(color: Colors.red)),
-                          ],
+                      if (isOwner)
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text('Delete Bill', style: TextStyle(color: Colors.red)),
+                            ],
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ],

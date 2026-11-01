@@ -7,6 +7,7 @@ import '../../data/models/invoice_model.dart';
 import '../../data/repositories/invoice_repository.dart';
 import '../../services/pdf/pdf_invoice_service.dart';
 import '../../services/api/api_client.dart';
+import '../../providers/auth_provider.dart';
 import '../payments/record_payment_dialog.dart';
 
 class InvoiceDetailScreen extends ConsumerStatefulWidget {
@@ -112,6 +113,8 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isOwner = ref.watch(authProvider).isOwner;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_currentInvoice.invoiceNumber),
@@ -126,11 +129,12 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
             tooltip: 'Print Invoice',
             onPressed: () => PdfInvoiceService.printInvoice(_currentInvoice),
           ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.white),
-            tooltip: 'Delete Bill',
-            onPressed: () => _confirmDeleteInvoice(context),
-          ),
+          if (isOwner)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.white),
+              tooltip: 'Delete Bill',
+              onPressed: () => _confirmDeleteInvoice(context),
+            ),
         ],
       ),
       body: Column(
