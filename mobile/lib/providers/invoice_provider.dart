@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/invoice_model.dart';
 import '../data/repositories/invoice_repository.dart';
+import '../services/sync/sync_service.dart';
 
 class InvoiceListState {
   final List<InvoiceModel> invoices;
@@ -44,9 +46,24 @@ class InvoiceListState {
 
 class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
   final InvoiceRepository _repo = InvoiceRepository();
+  VoidCallback? _syncListener;
 
   InvoiceListNotifier() : super(InvoiceListState()) {
     fetchInvoices();
+    _syncListener = () {
+      if (SyncService.instance.status == SyncStatus.synced) {
+        fetchInvoices();
+      }
+    };
+    SyncService.instance.addListener(_syncListener!);
+  }
+
+  @override
+  void dispose() {
+    if (_syncListener != null) {
+      SyncService.instance.removeListener(_syncListener!);
+    }
+    super.dispose();
   }
 
   Future<void> fetchInvoices() async {

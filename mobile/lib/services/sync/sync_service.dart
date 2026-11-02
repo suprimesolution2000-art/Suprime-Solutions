@@ -4,6 +4,9 @@ import 'package:sqflite/sqflite.dart';
 import '../../data/database/app_database.dart';
 import '../api/api_client.dart';
 import '../../data/models/invoice_model.dart';
+import '../../data/models/customer_model.dart';
+import '../../data/models/payment_model.dart';
+import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/product_repository.dart';
 
 enum SyncStatus {
@@ -165,8 +168,20 @@ class SyncService extends ChangeNotifier {
       final pullRes = await ApiClient.instance.pullSync(_lastSyncTime?.toIso8601String());
       if (pullRes.statusCode == 200 && pullRes.data['success'] == true) {
         final data = pullRes.data['data'];
-        final serverInvoices = data['invoices'] as List? ?? [];
+        final custRepo = CustomerRepository();
 
+        // 3a. Save cloud customers to local SQLite
+        final serverCustomers = data['customers'] as List? ?? [];
+        for (final item in serverCustomers) {
+          final custMap = Map<String, dynamic>.from(item);
+          final serverCust = CustomerModel.fromMap(custMap);
+          if (serverCust.name.trim().isNotEmpty) {
+            await custRepo.saveCustomer(serverCust);
+          }
+        }
+
+        // 3b. Save cloud invoices and ensure invoice customer is saved locally
+        final serverInvoices = data['invoices'] as List? ?? [];
         for (final item in serverInvoices) {
           final serverInv = InvoiceModel.fromMap(Map<String, dynamic>.from(item));
           await db.insert(
@@ -174,8 +189,26 @@ class SyncService extends ChangeNotifier {
             serverInv.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
+          if (serverInv.customer.name.trim().isNotEmpty) {
+            await custRepo.saveCustomer(serverInv.customer);
+          }
         }
 
+        // 3c. Save cloud payments
+        final serverPayments = data['payments'] as List? ?? [];
+        for (final item in serverPayments) {
+          final payMap = Map<String, dynamic>.from(item);
+          final serverPay = PaymentModel.fromMap(payMap);
+          if (serverPay.uuid.isNotEmpty) {
+            await db.insert(
+              'payments',
+              serverPay.toMap(),
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          }
+        }
+
+        // 3d. Save products catalogue
         final serverProducts = data['products'] as List? ?? [];
         final prodRepo = ProductRepository();
         for (final item in serverProducts) {

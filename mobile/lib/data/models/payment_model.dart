@@ -45,19 +45,27 @@ class PaymentModel {
   }
 
   factory PaymentModel.fromMap(Map<String, dynamic> map) {
+    double parseNum(dynamic val) {
+      if (val == null) return 0.0;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? 0.0;
+    }
+
+    final rawUuid = (map['uuid'] ?? map['_id'] ?? '').toString();
+
     return PaymentModel(
-      uuid: map['uuid'] ?? '',
-      invoiceId: map['invoice_id'] ?? map['invoiceId'] ?? '',
-      invoiceNumber: map['invoice_number'] ?? map['invoiceNumber'] ?? '',
-      customerId: map['customer_id'] ?? map['customerId'] ?? '',
-      customerName: map['customer_name'] ?? map['customerName'] ?? '',
-      amount: (map['amount'] ?? 0.0).toDouble(),
-      paymentMethod: map['payment_method'] ?? map['paymentMethod'] ?? 'UPI',
-      referenceNumber: map['reference_number'] ?? map['referenceNumber'] ?? '',
+      uuid: rawUuid,
+      invoiceId: (map['invoice_id'] ?? map['invoiceId'] ?? '').toString(),
+      invoiceNumber: (map['invoice_number'] ?? map['invoiceNumber'] ?? '').toString(),
+      customerId: (map['customer_id'] ?? map['customerId'] ?? '').toString(),
+      customerName: (map['customer_name'] ?? map['customerName'] ?? '').toString(),
+      amount: parseNum(map['amount']),
+      paymentMethod: (map['payment_method'] ?? map['paymentMethod'] ?? 'UPI').toString(),
+      referenceNumber: (map['reference_number'] ?? map['referenceNumber'] ?? '').toString(),
       paymentDate: DateTime.tryParse(map['payment_date'] ?? map['paymentDate'] ?? '') ?? DateTime.now(),
-      notes: map['notes'] ?? '',
-      receivedBy: map['received_by'] ?? map['receivedBy'] ?? 'Admin',
-      deviceId: map['device_id'] ?? map['deviceId'] ?? '',
+      notes: (map['notes'] ?? '').toString(),
+      receivedBy: (map['received_by'] ?? map['receivedBy'] ?? 'Admin').toString(),
+      deviceId: (map['device_id'] ?? map['deviceId'] ?? '').toString(),
     );
   }
 }

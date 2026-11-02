@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/repositories/invoice_repository.dart';
+import '../services/sync/sync_service.dart';
 
 class DashboardSummary {
   final double todaySales;
@@ -47,9 +49,24 @@ class DashboardSummary {
 
 class DashboardNotifier extends StateNotifier<DashboardSummary> {
   final InvoiceRepository _repo = InvoiceRepository();
+  VoidCallback? _syncListener;
 
   DashboardNotifier() : super(DashboardSummary()) {
     refreshSummary();
+    _syncListener = () {
+      if (SyncService.instance.status == SyncStatus.synced) {
+        refreshSummary();
+      }
+    };
+    SyncService.instance.addListener(_syncListener!);
+  }
+
+  @override
+  void dispose() {
+    if (_syncListener != null) {
+      SyncService.instance.removeListener(_syncListener!);
+    }
+    super.dispose();
   }
 
   Future<void> refreshSummary() async {

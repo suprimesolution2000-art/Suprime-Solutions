@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/customer_model.dart';
 import '../data/repositories/customer_repository.dart';
+import '../services/sync/sync_service.dart';
 
 class CustomerListState {
   final List<CustomerModel> customers;
@@ -32,9 +34,24 @@ class CustomerListState {
 
 class CustomerListNotifier extends StateNotifier<CustomerListState> {
   final CustomerRepository _repo = CustomerRepository();
+  VoidCallback? _syncListener;
 
   CustomerListNotifier() : super(CustomerListState()) {
     fetchCustomers();
+    _syncListener = () {
+      if (SyncService.instance.status == SyncStatus.synced) {
+        fetchCustomers();
+      }
+    };
+    SyncService.instance.addListener(_syncListener!);
+  }
+
+  @override
+  void dispose() {
+    if (_syncListener != null) {
+      SyncService.instance.removeListener(_syncListener!);
+    }
+    super.dispose();
   }
 
   Future<void> fetchCustomers() async {

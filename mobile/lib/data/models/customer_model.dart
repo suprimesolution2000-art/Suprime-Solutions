@@ -54,22 +54,35 @@ class CustomerModel {
   }
 
   factory CustomerModel.fromMap(Map<String, dynamic> map) {
+    double parseNum(dynamic val) {
+      if (val == null) return 0.0;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? 0.0;
+    }
+
+    final rawUuid = (map['uuid'] ?? map['_id'] ?? '').toString();
+    final isActive = map['active'] == null ||
+        map['active'] == 1 ||
+        map['active'] == true ||
+        map['active'] == '1' ||
+        map['active'] == 'true';
+
     return CustomerModel(
-      uuid: map['uuid'] ?? '',
-      name: map['name'] ?? '',
-      businessName: map['business_name'] ?? map['businessName'] ?? '',
-      phone: map['phone'] ?? '',
-      email: map['email'] ?? '',
-      gstin: map['gstin'] ?? '',
-      address: map['address'] ?? '',
-      city: map['city'] ?? 'Bilaspur',
-      state: map['state'] ?? 'Chhattisgarh',
-      stateCode: map['state_code'] ?? map['stateCode'] ?? '22',
-      pincode: map['pincode'] ?? '',
-      outstandingBalance: (map['outstanding_balance'] ?? map['outstandingBalance'] ?? 0.0).toDouble(),
-      totalBilled: (map['total_billed'] ?? map['totalBilled'] ?? 0.0).toDouble(),
-      totalPaid: (map['total_paid'] ?? map['totalPaid'] ?? 0.0).toDouble(),
-      active: map['active'] == 1 || map['active'] == true,
+      uuid: rawUuid,
+      name: (map['name'] ?? '').toString(),
+      businessName: (map['business_name'] ?? map['businessName'] ?? '').toString(),
+      phone: (map['phone'] ?? '').toString(),
+      email: (map['email'] ?? '').toString(),
+      gstin: (map['gstin'] ?? '').toString(),
+      address: (map['address'] ?? '').toString(),
+      city: (map['city'] ?? 'Bilaspur').toString(),
+      state: (map['state'] ?? 'Chhattisgarh').toString(),
+      stateCode: (map['state_code'] ?? map['stateCode'] ?? '22').toString(),
+      pincode: (map['pincode'] ?? '').toString(),
+      outstandingBalance: parseNum(map['outstanding_balance'] ?? map['outstandingBalance']),
+      totalBilled: parseNum(map['total_billed'] ?? map['totalBilled']),
+      totalPaid: parseNum(map['total_paid'] ?? map['totalPaid']),
+      active: isActive,
     );
   }
 

@@ -59,6 +59,42 @@ class CustomerRepository {
 
   Future<void> saveCustomer(CustomerModel customer) async {
     final db = await _db.database;
+    if (customer.uuid.isNotEmpty) {
+      final existingByUuid = await db.query(
+        'customers',
+        where: 'uuid = ?',
+        whereArgs: [customer.uuid],
+        limit: 1,
+      );
+      if (existingByUuid.isNotEmpty) {
+        await db.update(
+          'customers',
+          customer.toMap(),
+          where: 'uuid = ?',
+          whereArgs: [customer.uuid],
+        );
+        return;
+      }
+    }
+
+    if (customer.name.trim().isNotEmpty) {
+      final existingByName = await db.query(
+        'customers',
+        where: 'LOWER(name) = ?',
+        whereArgs: [customer.name.trim().toLowerCase()],
+        limit: 1,
+      );
+      if (existingByName.isNotEmpty) {
+        await db.update(
+          'customers',
+          customer.toMap(),
+          where: 'uuid = ?',
+          whereArgs: [existingByName.first['uuid']],
+        );
+        return;
+      }
+    }
+
     await db.insert(
       'customers',
       customer.toMap(),

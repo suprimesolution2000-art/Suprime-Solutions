@@ -171,10 +171,12 @@ class ApiClient {
   }
 
   // Sync Pull
-  Future<Response> pullSync(String? sinceIsoDate) async {
-    return await dio.get('/sync/pull', queryParameters: {
-      'since': ?sinceIsoDate,
-    });
+  Future<Response> pullSync([String? sinceIsoDate]) async {
+    final Map<String, dynamic> query = {};
+    if (sinceIsoDate != null && sinceIsoDate.trim().isNotEmpty && sinceIsoDate != 'null') {
+      query['since'] = sinceIsoDate;
+    }
+    return await dio.get('/sync/pull', queryParameters: query);
   }
 
   // Invoice Delete

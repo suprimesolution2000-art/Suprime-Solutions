@@ -240,13 +240,39 @@ exports.pushSync = async (req, res, next) => {
 exports.pullSync = async (req, res, next) => {
   try {
     const { since } = req.query;
-    const sinceDate = since ? new Date(since) : new Date(0);
+    let sinceDate = null;
+
+    if (since && since !== 'null' && since !== 'undefined') {
+      const parsed = new Date(since);
+      if (!isNaN(parsed.getTime())) {
+        sinceDate = parsed;
+      }
+    }
+
+    const isFullSync = !sinceDate;
+
+    const custQuery = isFullSync
+      ? { active: true }
+      : {
+          $and: [
+            { active: true },
+            {
+              $or: [
+                { updatedAt: { $gt: sinceDate } },
+                { updatedAt: { $exists: false } }
+              ]
+            }
+          ]
+        };
+
+    const invQuery = isFullSync ? {} : { updatedAt: { $gt: sinceDate } };
+    const payQuery = isFullSync ? {} : { updatedAt: { $gt: sinceDate } };
 
     const [customers, invoices, payments, products] = await Promise.all([
-      Customer.find({ updatedAt: { $gt: sinceDate } }),
-      Invoice.find({ updatedAt: { $gt: sinceDate } }),
-      Payment.find({ updatedAt: { $gt: sinceDate } }),
-      Product.find({ active: true })
+      Customer.find(custQuery).lean(),
+      Invoice.find(invQuery).lean(),
+      Payment.find(payQuery).lean(),
+      Product.find({ active: true }).lean()
     ]);
 
     res.json({

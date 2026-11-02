@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../providers/customer_provider.dart';
 import '../../data/models/customer_model.dart';
+import '../../services/sync/sync_service.dart';
 import 'customer_ledger_screen.dart';
 import 'add_customer_dialog.dart';
 
@@ -48,7 +49,11 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => notifier.fetchCustomers(),
+            tooltip: 'Sync & Refresh',
+            onPressed: () async {
+              await SyncService.instance.synchronize();
+              await notifier.fetchCustomers();
+            },
           ),
         ],
       ),
@@ -83,23 +88,42 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             child: customerState.isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : customerState.customers.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.people_outline, size: 64, color: AppColors.textMuted),
-                            const SizedBox(height: 12),
-                            Text(
-                              _searchController.text.isNotEmpty
-                                  ? 'No customers found matching "${_searchController.text}"'
-                                  : 'No customers added yet',
-                              style: const TextStyle(fontSize: 16, color: AppColors.textSecondary),
+                    ? RefreshIndicator(
+                        onRefresh: () async {
+                          await SyncService.instance.synchronize();
+                          await notifier.fetchCustomers();
+                        },
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          child: Container(
+                            height: 350,
+                            alignment: Alignment.center,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.people_outline, size: 64, color: AppColors.textMuted),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _searchController.text.isNotEmpty
+                                      ? 'No customers found matching "${_searchController.text}"'
+                                      : 'No customers added yet',
+                                  style: const TextStyle(fontSize: 16, color: AppColors.textSecondary),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Pull down to sync from cloud',
+                                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       )
                     : RefreshIndicator(
-                        onRefresh: () async => notifier.fetchCustomers(),
+                        onRefresh: () async {
+                          await SyncService.instance.synchronize();
+                          await notifier.fetchCustomers();
+                        },
                         child: ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           itemCount: customerState.customers.length,

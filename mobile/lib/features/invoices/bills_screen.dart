@@ -9,6 +9,7 @@ import '../../data/models/invoice_model.dart';
 import '../../data/repositories/invoice_repository.dart';
 import '../../services/pdf/pdf_invoice_service.dart';
 import '../../services/api/api_client.dart';
+import '../../services/sync/sync_service.dart';
 import 'invoice_detail_screen.dart';
 
 class BillsScreen extends ConsumerStatefulWidget {
@@ -127,8 +128,11 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.refresh),
-                    tooltip: 'Refresh',
-                    onPressed: () => notifier.fetchInvoices(),
+                    tooltip: 'Sync & Refresh',
+                    onPressed: () async {
+                      await SyncService.instance.synchronize();
+                      await notifier.fetchInvoices();
+                    },
                   ),
                 ],
               ),
@@ -183,23 +187,42 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
             child: invoiceState.isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : invoiceState.invoices.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.receipt_long_outlined, size: 64, color: AppColors.textMuted),
-                            const SizedBox(height: 12),
-                            Text(
-                              _searchController.text.isNotEmpty
-                                  ? 'No bills found matching "${_searchController.text}"'
-                                  : 'No bills found in this filter',
-                              style: const TextStyle(fontSize: 16, color: AppColors.textSecondary),
+                    ? RefreshIndicator(
+                        onRefresh: () async {
+                          await SyncService.instance.synchronize();
+                          await notifier.fetchInvoices();
+                        },
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          child: Container(
+                            height: 350,
+                            alignment: Alignment.center,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.receipt_long_outlined, size: 64, color: AppColors.textMuted),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _searchController.text.isNotEmpty
+                                      ? 'No bills found matching "${_searchController.text}"'
+                                      : 'No bills found in this filter',
+                                  style: const TextStyle(fontSize: 16, color: AppColors.textSecondary),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Pull down to sync from cloud',
+                                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       )
                     : RefreshIndicator(
-                        onRefresh: () async => notifier.fetchInvoices(),
+                        onRefresh: () async {
+                          await SyncService.instance.synchronize();
+                          await notifier.fetchInvoices();
+                        },
                         child: ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           itemCount: invoiceState.invoices.length,

@@ -4,6 +4,8 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/customer_provider.dart';
+import '../../providers/invoice_provider.dart';
 import '../../services/sync/sync_service.dart';
 import '../billing/create_bill_screen.dart';
 import '../reports/reports_screen.dart';
@@ -83,14 +85,19 @@ class HomeScreen extends ConsumerWidget {
               return IconButton(
                 icon: Icon(icon, color: color),
                 tooltip: tip,
-                onPressed: () {
-                  SyncService.instance.synchronize();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(sync.statusMessage),
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
+                onPressed: () async {
+                  await SyncService.instance.synchronize();
+                  ref.read(dashboardProvider.notifier).refreshSummary();
+                  ref.read(customerListProvider.notifier).fetchCustomers();
+                  ref.read(invoiceListProvider.notifier).fetchInvoices();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(sync.statusMessage),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
                 },
               );
             },
@@ -98,16 +105,21 @@ class HomeScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh Figures',
-            onPressed: () {
-              ref.read(dashboardProvider.notifier).refreshSummary();
+            onPressed: () async {
+              await SyncService.instance.synchronize();
+              await ref.read(dashboardProvider.notifier).refreshSummary();
+              ref.read(customerListProvider.notifier).fetchCustomers();
+              ref.read(invoiceListProvider.notifier).fetchInvoices();
             },
           ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          await ref.read(dashboardProvider.notifier).refreshSummary();
           await SyncService.instance.synchronize();
+          await ref.read(dashboardProvider.notifier).refreshSummary();
+          ref.read(customerListProvider.notifier).fetchCustomers();
+          ref.read(invoiceListProvider.notifier).fetchInvoices();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
