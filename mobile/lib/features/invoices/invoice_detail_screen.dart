@@ -9,6 +9,7 @@ import '../../services/pdf/pdf_invoice_service.dart';
 import '../../services/api/api_client.dart';
 import '../../providers/auth_provider.dart';
 import '../payments/record_payment_dialog.dart';
+import '../billing/create_bill_screen.dart';
 
 class InvoiceDetailScreen extends ConsumerStatefulWidget {
   final InvoiceModel invoice;
@@ -129,6 +130,22 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
             tooltip: 'Print Invoice',
             onPressed: () => PdfInvoiceService.printInvoice(_currentInvoice),
           ),
+          if (_currentInvoice.status != 'cancelled')
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit Bill',
+              onPressed: () async {
+                final result = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CreateBillScreen(invoiceToEdit: _currentInvoice),
+                  ),
+                );
+                if (result == true) {
+                  await _refreshInvoice();
+                }
+              },
+            ),
           if (isOwner)
             IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.white),
@@ -150,26 +167,33 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Grand Total: ${CurrencyFormatter.format(_currentInvoice.grandTotal)}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                    ),
-                    Text(
-                      _currentInvoice.balanceDue > 0
-                          ? 'Balance Due: ${CurrencyFormatter.format(_currentInvoice.balanceDue)}'
-                          : 'Fully Paid',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: _currentInvoice.balanceDue > 0 ? AppColors.unpaid : AppColors.paid,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Grand Total: ${CurrencyFormatter.format(_currentInvoice.grandTotal)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
+                      Text(
+                        _currentInvoice.balanceDue > 0
+                            ? 'Balance Due: ${CurrencyFormatter.format(_currentInvoice.balanceDue)}'
+                            : 'Fully Paid',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _currentInvoice.balanceDue > 0 ? AppColors.unpaid : AppColors.paid,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
-                if (_currentInvoice.balanceDue > 0 && _currentInvoice.status != 'cancelled')
+                if (_currentInvoice.balanceDue > 0 && _currentInvoice.status != 'cancelled') ...[
+                  const SizedBox(width: 8),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
@@ -188,6 +212,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                       );
                     },
                   ),
+                ],
               ],
             ),
           ),

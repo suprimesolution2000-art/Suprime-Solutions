@@ -104,34 +104,61 @@ exports.pushSync = async (req, res, next) => {
     for (const inv of invoices) {
       try {
         const existing = await Invoice.findOne({ uuid: inv.uuid });
+
+        // If invoice is marked cancelled or inactive from mobile
+        if (inv.status === 'cancelled' || inv.active === false) {
+          if (existing && existing.status !== 'cancelled') {
+            if (existing.customer && existing.customer.uuid) {
+              await Customer.updateOne(
+                { uuid: existing.customer.uuid },
+                {
+                  $inc: {
+                    totalBilled: -existing.grandTotal,
+                    outstandingBalance: -existing.balanceDue,
+                    totalPaid: -(existing.totalPaid || 0)
+                  }
+                }
+              );
+            }
+            await Payment.deleteMany({ invoiceId: existing.uuid });
+            existing.status = 'cancelled';
+            existing.active = false;
+            existing.syncStatus = 'synced';
+            existing.updatedAt = new Date();
+            await existing.save();
+            results.invoicesSynced++;
+          }
+          continue;
+        }
+
+        // Normalize items (support both snake_case and camelCase from mobile)
+        const normalizedItems = (inv.items || []).map((itm, idx) => ({
+          sno: itm.sno || idx + 1,
+          description: itm.description || '',
+          hsnCode: itm.hsnCode || itm.hsn_code || '',
+          quantity: Number(itm.quantity) || 0,
+          unit: itm.unit || 'PCS',
+          rate: Number(itm.rate) || 0,
+          discount: Number(itm.discount) || 0,
+          taxableValue: Number(itm.taxableValue !== undefined ? itm.taxableValue : itm.taxable_value) || 0,
+          gstRate: Number(itm.gstRate !== undefined ? itm.gstRate : (itm.gst_rate !== undefined ? itm.gst_rate : 18.0)),
+          cgstRate: Number(itm.cgstRate !== undefined ? itm.cgstRate : itm.cgst_rate) || 0,
+          cgstAmount: Number(itm.cgstAmount !== undefined ? itm.cgstAmount : itm.cgst_amount) || 0,
+          sgstRate: Number(itm.sgstRate !== undefined ? itm.sgstRate : itm.sgst_rate) || 0,
+          sgstAmount: Number(itm.sgstAmount !== undefined ? itm.sgstAmount : itm.sgst_amount) || 0,
+          igstRate: Number(itm.igstRate !== undefined ? itm.igstRate : itm.igst_rate) || 0,
+          igstAmount: Number(itm.igstAmount !== undefined ? itm.igstAmount : itm.igst_amount) || 0,
+          totalAmount: Number(itm.totalAmount !== undefined ? itm.totalAmount : itm.total_amount) || 0,
+        }));
+
+        // Validate calculations
+        const financials = calculateInvoiceFinancials(
+          normalizedItems,
+          inv.customer ? inv.customer.stateCode : '22',
+          env.COMPANY.stateCode || '22'
+        );
+
         if (!existing) {
-          // Normalize items (support both snake_case and camelCase from mobile)
-          const normalizedItems = (inv.items || []).map((itm, idx) => ({
-            sno: itm.sno || idx + 1,
-            description: itm.description || '',
-            hsnCode: itm.hsnCode || itm.hsn_code || '',
-            quantity: Number(itm.quantity) || 0,
-            unit: itm.unit || 'PCS',
-            rate: Number(itm.rate) || 0,
-            discount: Number(itm.discount) || 0,
-            taxableValue: Number(itm.taxableValue !== undefined ? itm.taxableValue : itm.taxable_value) || 0,
-            gstRate: Number(itm.gstRate !== undefined ? itm.gstRate : (itm.gst_rate !== undefined ? itm.gst_rate : 18.0)),
-            cgstRate: Number(itm.cgstRate !== undefined ? itm.cgstRate : itm.cgst_rate) || 0,
-            cgstAmount: Number(itm.cgstAmount !== undefined ? itm.cgstAmount : itm.cgst_amount) || 0,
-            sgstRate: Number(itm.sgstRate !== undefined ? itm.sgstRate : itm.sgst_rate) || 0,
-            sgstAmount: Number(itm.sgstAmount !== undefined ? itm.sgstAmount : itm.sgst_amount) || 0,
-            igstRate: Number(itm.igstRate !== undefined ? itm.igstRate : itm.igst_rate) || 0,
-            igstAmount: Number(itm.igstAmount !== undefined ? itm.igstAmount : itm.igst_amount) || 0,
-            totalAmount: Number(itm.totalAmount !== undefined ? itm.totalAmount : itm.total_amount) || 0,
-          }));
-
-          // Validate calculations
-          const financials = calculateInvoiceFinancials(
-            normalizedItems,
-            inv.customer ? inv.customer.stateCode : '22',
-            env.COMPANY.stateCode || '22'
-          );
-
           await Invoice.create({
             ...inv,
             items: financials.items,
@@ -147,7 +174,7 @@ exports.pushSync = async (req, res, next) => {
           });
           results.invoicesSynced++;
 
-          // Auto-save/update customer in cloud database
+          // Auto-save/update customer in cloud database (preserve deactivated state if existing)
           if (inv.customer && inv.customer.name) {
             const custName = inv.customer.name.trim();
             const custUuid = inv.customer.uuid || inv.customerId || ('cust-' + inv.uuid);
@@ -166,8 +193,10 @@ exports.pushSync = async (req, res, next) => {
                     city: inv.customer.city || '',
                     state: inv.customer.state || 'Chhattisgarh',
                     stateCode: inv.customer.stateCode || '22',
-                    active: true,
                     updatedAt: new Date()
+                  },
+                  $setOnInsert: {
+                    active: true
                   },
                   $inc: {
                     totalBilled: financials.grandTotal,
@@ -180,26 +209,72 @@ exports.pushSync = async (req, res, next) => {
               console.error('Customer upsert error during sync:', custErr.message);
             }
           }
+        } else {
+          // Existing invoice was edited offline and pushed to cloud
+          const deltaGrandTotal = Math.round((financials.grandTotal - existing.grandTotal) * 100) / 100;
+          const newBalanceDue = Math.max(0, Math.round((financials.grandTotal - (existing.totalPaid || 0)) * 100) / 100);
+          const deltaBalanceDue = Math.round((newBalanceDue - existing.balanceDue) * 100) / 100;
 
-          // Auto-catalogue any products in invoice items
-          if (Array.isArray(inv.items)) {
-            for (const itm of inv.items) {
-              if (itm.description && itm.description.trim()) {
-                await Product.findOneAndUpdate(
-                  { description: itm.description.trim() },
-                  {
-                    $set: {
-                      description: itm.description.trim(),
-                      hsnCode: itm.hsnCode || '',
-                      unit: itm.unit || 'PCS',
-                      defaultRate: itm.rate || 0,
-                      gstRate: itm.gstRate || 18,
-                      active: true
-                    }
-                  },
-                  { upsert: true }
-                );
+          if (existing.customer && existing.customer.uuid) {
+            await Customer.updateOne(
+              { uuid: existing.customer.uuid },
+              {
+                $inc: {
+                  totalBilled: deltaGrandTotal,
+                  outstandingBalance: deltaBalanceDue
+                }
               }
+            );
+          }
+
+          existing.items = financials.items;
+          existing.netAmount = financials.netAmount;
+          existing.cgstTotal = financials.cgstTotal;
+          existing.sgstTotal = financials.sgstTotal;
+          existing.igstTotal = financials.igstTotal;
+          existing.roundOff = financials.roundOff;
+          existing.grandTotal = financials.grandTotal;
+          existing.amountInWords = financials.amountInWords;
+          existing.balanceDue = newBalanceDue;
+          existing.paymentStatus = newBalanceDue === 0 ? 'paid' : ((existing.totalPaid || 0) > 0 ? 'partially_paid' : 'unpaid');
+          if (inv.poNumber !== undefined) existing.poNumber = inv.poNumber;
+          if (inv.poDate !== undefined) existing.poDate = inv.poDate ? new Date(inv.poDate) : null;
+          if (inv.challanNumber !== undefined) existing.challanNumber = inv.challanNumber;
+          if (inv.challanDate !== undefined) existing.challanDate = inv.challanDate ? new Date(inv.challanDate) : null;
+          if (inv.dueDate !== undefined) existing.dueDate = inv.dueDate ? new Date(inv.dueDate) : null;
+          if (inv.customer) {
+            existing.customer = {
+              ...existing.customer,
+              ...inv.customer
+            };
+          }
+          existing.syncStatus = 'synced';
+          existing.updatedAt = new Date();
+          await existing.save();
+          results.invoicesSynced++;
+        }
+
+        // Auto-catalogue any products in invoice items without resurrecting deactivated ones
+        if (Array.isArray(inv.items)) {
+          for (const itm of inv.items) {
+            if (itm.description && itm.description.trim()) {
+              await Product.findOneAndUpdate(
+                { description: itm.description.trim() },
+                {
+                  $set: {
+                    description: itm.description.trim(),
+                    hsnCode: itm.hsnCode || '',
+                    unit: itm.unit || 'PCS',
+                    defaultRate: itm.rate || 0,
+                    gstRate: itm.gstRate || 18,
+                    updatedAt: new Date()
+                  },
+                  $setOnInsert: {
+                    active: true
+                  }
+                },
+                { upsert: true }
+              );
             }
           }
         }
@@ -297,7 +372,14 @@ exports.pullSync = async (req, res, next) => {
           ]
         };
 
-    const invQuery = isFullSync ? {} : { updatedAt: { $gt: sinceDate } };
+    const invQuery = isFullSync
+      ? { active: { $ne: false }, status: { $ne: 'cancelled' } }
+      : {
+          $or: [
+            { updatedAt: { $gt: sinceDate } },
+            { updatedAt: { $exists: false } }
+          ]
+        };
     const payQuery = isFullSync ? {} : { updatedAt: { $gt: sinceDate } };
 
     // In full sync, return all active products; in incremental sync, return all modified products (including deactivated)

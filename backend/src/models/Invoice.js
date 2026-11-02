@@ -145,6 +145,11 @@ const invoiceSchema = new mongoose.Schema({
     type: String,
     enum: ['synced', 'local_only', 'conflict'],
     default: 'synced'
+  },
+  active: {
+    type: Boolean,
+    default: true,
+    index: true
   }
 }, {
   timestamps: true

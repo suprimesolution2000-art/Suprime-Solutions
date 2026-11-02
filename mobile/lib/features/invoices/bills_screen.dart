@@ -10,6 +10,7 @@ import '../../data/repositories/invoice_repository.dart';
 import '../../services/pdf/pdf_invoice_service.dart';
 import '../../services/api/api_client.dart';
 import '../../services/sync/sync_service.dart';
+import '../billing/create_bill_screen.dart';
 import 'invoice_detail_screen.dart';
 
 class BillsScreen extends ConsumerStatefulWidget {
@@ -416,25 +417,31 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        inv.invoiceNumber,
-                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.primary),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: badgeBg,
-                          borderRadius: BorderRadius.circular(6),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            inv.invoiceNumber,
+                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.primary),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        child: Text(
-                          badgeLabel,
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: badgeText),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: badgeBg,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            badgeLabel,
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: badgeText),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   PopupMenuButton<String>(
                     icon: const Icon(Icons.more_vert, size: 20, color: AppColors.textSecondary),
@@ -444,6 +451,15 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                         PdfInvoiceService.shareInvoicePdf(inv);
                       } else if (val == 'print') {
                         PdfInvoiceService.printInvoice(inv);
+                      } else if (val == 'edit') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CreateBillScreen(invoiceToEdit: inv),
+                          ),
+                        ).then((_) {
+                          ref.read(invoiceListProvider.notifier).fetchInvoices();
+                        });
                       } else if (val == 'delete') {
                         _confirmDeleteInvoice(context, inv);
                       }
@@ -469,6 +485,17 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                           ],
                         ),
                       ),
+                      if (inv.status != 'cancelled')
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),
+                              SizedBox(width: 8),
+                              Text('Edit Bill'),
+                            ],
+                          ),
+                        ),
                       if (isOwner)
                         const PopupMenuItem(
                           value: 'delete',
@@ -510,13 +537,21 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '${inv.items.length} ${inv.items.length == 1 ? 'item' : 'items'} • ${inv.customer.phone}',
-                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  Expanded(
+                    child: Text(
+                      '${inv.items.length} ${inv.items.length == 1 ? 'item' : 'items'} • ${inv.customer.phone}',
+                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  Text(
-                    CurrencyFormatter.format(inv.grandTotal),
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  const SizedBox(width: 8),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      CurrencyFormatter.format(inv.grandTotal),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    ),
                   ),
                 ],
               ),

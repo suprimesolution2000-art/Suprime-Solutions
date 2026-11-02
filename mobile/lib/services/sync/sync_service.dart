@@ -260,6 +260,10 @@ class SyncService extends ChangeNotifier {
           if (activeTombstones.contains('deleted_customer_${serverCust.uuid}')) {
             continue;
           }
+          if (custMap['active'] == false || custMap['active'] == 0 || custMap['active'] == 'false') {
+            await db.update('customers', {'active': 0}, where: 'uuid = ?', whereArgs: [serverCust.uuid]);
+            continue;
+          }
           if (serverCust.name.trim().isNotEmpty) {
             await custRepo.saveCustomer(serverCust);
           }
@@ -268,8 +272,14 @@ class SyncService extends ChangeNotifier {
         // 3b. Save cloud invoices (skipping deleted invoices and protecting unsynced local drafts)
         final serverInvoices = data['invoices'] as List? ?? [];
         for (final item in serverInvoices) {
-          final serverInv = InvoiceModel.fromMap(Map<String, dynamic>.from(item));
-          if (activeTombstones.contains('deleted_invoice_${serverInv.uuid}')) {
+          final invMap = Map<String, dynamic>.from(item);
+          final serverInv = InvoiceModel.fromMap(invMap);
+          if (activeTombstones.contains('deleted_invoice_${serverInv.uuid}') ||
+              serverInv.status == 'cancelled' ||
+              invMap['active'] == false) {
+            // Deleted or cancelled invoice: remove from local DB and clean up orphaned payments
+            await db.delete('invoices', where: 'uuid = ?', whereArgs: [serverInv.uuid]);
+            await db.delete('payments', where: 'invoice_id = ?', whereArgs: [serverInv.uuid]);
             continue;
           }
 
@@ -288,8 +298,17 @@ class SyncService extends ChangeNotifier {
             serverInv.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
-          if (serverInv.customer.name.trim().isNotEmpty) {
-            await custRepo.saveCustomer(serverInv.customer);
+          if (serverInv.customer.name.trim().isNotEmpty &&
+              !activeTombstones.contains('deleted_customer_${serverInv.customer.uuid}')) {
+            final existingCust = await db.query(
+              'customers',
+              where: 'uuid = ?',
+              whereArgs: [serverInv.customer.uuid],
+              limit: 1,
+            );
+            if (existingCust.isEmpty || (existingCust.first['active'] == 1 || existingCust.first['active'] == 'true')) {
+              await custRepo.saveCustomer(serverInv.customer);
+            }
           }
         }
 
@@ -298,7 +317,7 @@ class SyncService extends ChangeNotifier {
         for (final item in serverPayments) {
           final payMap = Map<String, dynamic>.from(item);
           final serverPay = PaymentModel.fromMap(payMap);
-          if (serverPay.uuid.isNotEmpty) {
+          if (serverPay.uuid.isNotEmpty && !activeTombstones.contains('deleted_invoice_${serverPay.invoiceId}')) {
             await db.insert(
               'payments',
               serverPay.toMap(),
@@ -314,6 +333,10 @@ class SyncService extends ChangeNotifier {
           final p = Map<String, dynamic>.from(item);
           final serverProd = ProductModel.fromMap(p);
           if (activeTombstones.contains('deleted_product_${serverProd.uuid}')) {
+            continue;
+          }
+          if (p['active'] == false || p['active'] == 0 || p['active'] == 'false') {
+            await db.update('products', {'active': 0}, where: 'uuid = ?', whereArgs: [serverProd.uuid]);
             continue;
           }
           if (serverProd.description.trim().isNotEmpty) {

@@ -9,6 +9,12 @@ class CustomerRepository {
   // Auto-heal customers from local invoices
   Future<int> recoverCustomersFromInvoices() async {
     final db = await _db.database;
+    final allSettings = await db.query('app_settings');
+    final activeTombstones = allSettings
+        .where((r) => (r['key'] as String).startsWith('deleted_customer_'))
+        .map((r) => (r['key'] as String).replaceFirst('deleted_customer_', ''))
+        .toSet();
+
     final invoices = await db.query('invoices');
     int recovered = 0;
     for (final invRow in invoices) {
@@ -18,6 +24,13 @@ class CustomerRepository {
           final custMap = jsonDecode(custJson);
           final cust = CustomerModel.fromMap(Map<String, dynamic>.from(custMap));
           if (cust.name.trim().isNotEmpty) {
+            // Do NOT resurrect if tombstoned as deleted
+            if (activeTombstones.contains(cust.uuid)) continue;
+            // Check if customer exists in DB and was soft-deleted (active == 0)
+            final existing = await db.query('customers', where: 'uuid = ?', whereArgs: [cust.uuid], limit: 1);
+            if (existing.isNotEmpty && (existing.first['active'] == 0 || existing.first['active'] == 'false')) {
+              continue;
+            }
             await saveCustomer(cust);
             recovered++;
           }
@@ -85,7 +98,7 @@ class CustomerRepository {
     return CustomerModel.fromMap(results.first);
   }
 
-  Future<void> saveCustomer(CustomerModel customer) async {
+  Future<void> saveCustomer(CustomerModel customer, {bool preserveInactive = true}) async {
     final db = await _db.database;
     if (customer.uuid.isNotEmpty) {
       final existingByUuid = await db.query(
@@ -95,9 +108,14 @@ class CustomerRepository {
         limit: 1,
       );
       if (existingByUuid.isNotEmpty) {
+        final existingActive = existingByUuid.first['active'];
+        final map = customer.toMap();
+        if (preserveInactive && (existingActive == 0 || existingActive == 'false')) {
+          map['active'] = 0;
+        }
         await db.update(
           'customers',
-          customer.toMap(),
+          map,
           where: 'uuid = ?',
           whereArgs: [customer.uuid],
         );
@@ -114,8 +132,12 @@ class CustomerRepository {
       );
       if (existingByName.isNotEmpty) {
         final existingUuid = existingByName.first['uuid'] as String;
+        final existingActive = existingByName.first['active'];
         final updatedMap = customer.toMap();
         updatedMap['uuid'] = existingUuid; // Preserve existing customer UUID for relational integrity
+        if (preserveInactive && (existingActive == 0 || existingActive == 'false')) {
+          updatedMap['active'] = 0;
+        }
         await db.update(
           'customers',
           updatedMap,
@@ -126,9 +148,16 @@ class CustomerRepository {
       }
     }
 
+    // Check if there's a deleted tombstone before inserting
+    final tombstones = await db.query('app_settings', where: 'key = ?', whereArgs: ['deleted_customer_${customer.uuid}']);
+    final map = customer.toMap();
+    if (preserveInactive && tombstones.isNotEmpty) {
+      map['active'] = 0;
+    }
+
     await db.insert(
       'customers',
-      customer.toMap(),
+      map,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }

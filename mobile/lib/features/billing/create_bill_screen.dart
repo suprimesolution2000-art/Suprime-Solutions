@@ -5,12 +5,15 @@ import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../providers/billing_provider.dart';
 import '../../data/models/customer_model.dart';
+import '../../data/models/invoice_model.dart';
 import '../../data/repositories/customer_repository.dart';
 import 'add_item_dialog.dart';
 import '../invoices/invoice_detail_screen.dart';
 
 class CreateBillScreen extends ConsumerStatefulWidget {
-  const CreateBillScreen({super.key});
+  final InvoiceModel? invoiceToEdit;
+
+  const CreateBillScreen({super.key, this.invoiceToEdit});
 
   @override
   ConsumerState<CreateBillScreen> createState() => _CreateBillScreenState();
@@ -34,12 +37,29 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   void initState() {
     super.initState();
     _loadRecentCustomers();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final num = ref.read(billingProvider).invoiceNumber;
-      if (num.isNotEmpty) {
-        _invoiceNumberController.text = num;
-      }
-    });
+    if (widget.invoiceToEdit != null) {
+      final inv = widget.invoiceToEdit!;
+      _customerNameController.text = inv.customer.name;
+      _phoneController.text = inv.customer.phone;
+      _gstinController.text = inv.customer.gstin;
+      _addressController.text = inv.customer.address;
+      _selectedState = inv.customer.state;
+      _invoiceNumberController.text = inv.invoiceNumber;
+      _poController.text = inv.poNumber;
+      _challanController.text = inv.challanNumber;
+      _showPoDetails = inv.poNumber.isNotEmpty || inv.challanNumber.isNotEmpty;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(billingProvider.notifier).initForEdit(inv);
+      });
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(billingProvider.notifier).resetForm();
+        final num = ref.read(billingProvider).invoiceNumber;
+        if (num.isNotEmpty) {
+          _invoiceNumberController.text = num;
+        }
+      });
+    }
   }
 
   Future<void> _loadRecentCustomers() async {
@@ -88,22 +108,23 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New Tax Invoice'),
+        title: Text(widget.invoiceToEdit != null ? 'Edit Bill (${widget.invoiceToEdit!.invoiceNumber})' : 'New Tax Invoice'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Clear Form',
-            onPressed: () {
-              billingNotifier.resetForm();
-              _customerNameController.clear();
-              _phoneController.clear();
-              _gstinController.clear();
-              _addressController.clear();
-              _invoiceNumberController.clear();
-              _poController.clear();
-              _challanController.clear();
-            },
-          ),
+          if (widget.invoiceToEdit == null)
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Clear Form',
+              onPressed: () {
+                billingNotifier.resetForm();
+                _customerNameController.clear();
+                _phoneController.clear();
+                _gstinController.clear();
+                _addressController.clear();
+                _invoiceNumberController.clear();
+                _poController.clear();
+                _challanController.clear();
+              },
+            ),
         ],
       ),
       body: SingleChildScrollView(
@@ -262,12 +283,15 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text('Tax Type', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                                Text(
-                                  billState.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST (Local)',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: billState.isInterState ? Colors.deepOrange : AppColors.primary,
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    billState.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST (Local)',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: billState.isInterState ? Colors.deepOrange : AppColors.primary,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -535,9 +559,18 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                           'GRAND TOTAL',
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
                         ),
-                        Text(
-                          CurrencyFormatter.format(billState.grandTotal),
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                CurrencyFormatter.format(billState.grandTotal),
+                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.primary),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -565,32 +598,56 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
               onPressed: billState.isSaving
                   ? null
                   : () async {
-                      final invoice = await billingNotifier.saveAndIssueInvoice();
-                      if (!context.mounted) return;
-                      if (invoice != null) {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => InvoiceDetailScreen(invoice: invoice),
-                          ),
-                        );
-                      } else {
-                        final currentError = ref.read(billingProvider).errorMessage;
-                        if (currentError != null) {
+                      if (widget.invoiceToEdit != null) {
+                        final updated = await billingNotifier.updateExistingInvoice();
+                        if (!context.mounted) return;
+                        if (updated != null) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(currentError),
-                              backgroundColor: Colors.red,
+                              content: Text('Bill ${updated.invoiceNumber} updated successfully!'),
+                              backgroundColor: Colors.green.shade700,
                             ),
                           );
+                          Navigator.pop(context, true);
+                        } else {
+                          final currentError = ref.read(billingProvider).errorMessage;
+                          if (currentError != null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(currentError),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      } else {
+                        final invoice = await billingNotifier.saveAndIssueInvoice();
+                        if (!context.mounted) return;
+                        if (invoice != null) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => InvoiceDetailScreen(invoice: invoice),
+                            ),
+                          );
+                        } else {
+                          final currentError = ref.read(billingProvider).errorMessage;
+                          if (currentError != null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(currentError),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
                         }
                       }
                     },
               child: billState.isSaving
                   ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text(
-                      'SAVE & GENERATE INVOICE',
-                      style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  : Text(
+                      widget.invoiceToEdit != null ? 'UPDATE INVOICE' : 'SAVE & GENERATE INVOICE',
+                      style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                     ),
             ),
             const SizedBox(height: 20),
@@ -606,8 +663,12 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontSize: 14, color: AppColors.textSecondary)),
-          Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 14, color: AppColors.textSecondary))),
+          const SizedBox(width: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+          ),
         ],
       ),
     );

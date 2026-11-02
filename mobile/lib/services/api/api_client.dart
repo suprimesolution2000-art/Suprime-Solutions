@@ -181,6 +181,11 @@ class ApiClient {
     return await dio.get('/sync/pull', queryParameters: query);
   }
 
+  // Invoice Update
+  Future<Response> updateInvoice(String id, Map<String, dynamic> invoiceData) async {
+    return await dio.put('/invoices/$id', data: invoiceData);
+  }
+
   // Invoice Delete
   Future<Response> deleteInvoice(String id) async {
     return await dio.delete('/invoices/$id');

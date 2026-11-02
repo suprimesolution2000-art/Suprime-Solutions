@@ -54,6 +54,14 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
       );
       return;
     }
+    if (amount > widget.invoice.balanceDue + 0.001) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Payment amount cannot exceed balance due of ${CurrencyFormatter.format(widget.invoice.balanceDue)}'),
+        ),
+      );
+      return;
+    }
 
     setState(() => _isSaving = true);
 
@@ -158,16 +166,27 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(widget.invoice.invoiceNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text(widget.invoice.customer.name, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(widget.invoice.invoiceNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text(
+                            widget.invoice.customer.name,
+                            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
-                    Text(
-                      'Due: ${CurrencyFormatter.format(widget.invoice.balanceDue)}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.unpaid),
+                    const SizedBox(width: 8),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Due: ${CurrencyFormatter.format(widget.invoice.balanceDue)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.unpaid),
+                      ),
                     ),
                   ],
                 ),

@@ -375,6 +375,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                 title: Text(
                                   p.description,
                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 subtitle: Padding(
                                   padding: const EdgeInsets.only(top: 4),
@@ -412,17 +414,25 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Text(
-                                      CurrencyFormatter.format(p.defaultRate),
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary),
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        CurrencyFormatter.format(p.defaultRate),
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary),
+                                      ),
                                     ),
                                     const SizedBox(width: 4),
                                     IconButton(
+                                      padding: const EdgeInsets.all(6),
+                                      constraints: const BoxConstraints(),
                                       icon: const Icon(Icons.edit_outlined, size: 20, color: AppColors.primary),
                                       tooltip: 'Edit Product',
                                       onPressed: () => _showAddOrEditDialog(product: p),
                                     ),
+                                    const SizedBox(width: 4),
                                     IconButton(
+                                      padding: const EdgeInsets.all(6),
+                                      constraints: const BoxConstraints(),
                                       icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
                                       tooltip: 'Delete Product',
                                       onPressed: () => _confirmDeleteProduct(p),

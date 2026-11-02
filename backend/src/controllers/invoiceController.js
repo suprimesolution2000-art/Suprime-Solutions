@@ -1,5 +1,7 @@
 const Invoice = require('../models/Invoice');
 const Customer = require('../models/Customer');
+const Payment = require('../models/Payment');
+const Product = require('../models/Product');
 const AuditLog = require('../models/AuditLog');
 const { calculateInvoiceFinancials } = require('../services/gstCalculationService');
 const { allocateInvoiceNumber, getFinancialYear } = require('../services/invoiceService');
@@ -343,7 +345,149 @@ exports.cancelInvoice = async (req, res, next) => {
   }
 };
 
-// @desc    Delete invoice permanently
+// @desc    Update existing invoice
+// @route   PUT /api/invoices/:id
+// @access  Private
+exports.updateInvoice = async (req, res, next) => {
+  try {
+    const invoice = await Invoice.findOne(findByIdOrUuid(req.params.id));
+
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: 'Invoice not found.' });
+    }
+
+    if (invoice.status === 'cancelled') {
+      return res.status(400).json({ success: false, message: 'Cannot edit a cancelled invoice.' });
+    }
+
+    const {
+      customer,
+      items,
+      invoiceDate,
+      dueDate,
+      poNumber,
+      poDate,
+      challanNumber,
+      challanDate,
+      deviceId
+    } = req.body;
+
+    if (items && !items.length) {
+      return res.status(400).json({ success: false, message: 'At least one line item is required.' });
+    }
+
+    const updatedCustomer = customer || invoice.customer;
+    const customerStateCode = updatedCustomer.stateCode || '22';
+    const businessStateCode = env.COMPANY.stateCode || '22';
+
+    // Recalculate financials
+    const itemsToCalculate = items || invoice.items;
+    const financials = calculateInvoiceFinancials(itemsToCalculate, customerStateCode, businessStateCode);
+
+    const deltaGrandTotal = Math.round((financials.grandTotal - invoice.grandTotal) * 100) / 100;
+    const newBalanceDue = Math.max(0, Math.round((financials.grandTotal - (invoice.totalPaid || 0)) * 100) / 100);
+    const deltaBalanceDue = Math.round((newBalanceDue - invoice.balanceDue) * 100) / 100;
+
+    // Adjust customer ledger for financial differences
+    if (invoice.customer && invoice.customer.uuid) {
+      await Customer.updateOne(
+        { uuid: invoice.customer.uuid },
+        {
+          $inc: {
+            totalBilled: deltaGrandTotal,
+            outstandingBalance: deltaBalanceDue
+          }
+        }
+      );
+    }
+
+    // Update customer snapshot if provided
+    if (customer) {
+      invoice.customer = {
+        uuid: customer.uuid || invoice.customer.uuid,
+        name: (customer.name || invoice.customer.name).trim(),
+        businessName: customer.businessName !== undefined ? customer.businessName : invoice.customer.businessName,
+        phone: customer.phone !== undefined ? customer.phone : invoice.customer.phone,
+        email: customer.email !== undefined ? customer.email : invoice.customer.email,
+        gstin: customer.gstin !== undefined ? customer.gstin : invoice.customer.gstin,
+        address: customer.address !== undefined ? customer.address : invoice.customer.address,
+        city: customer.city !== undefined ? customer.city : invoice.customer.city,
+        state: customer.state || invoice.customer.state,
+        stateCode: customer.stateCode || invoice.customer.stateCode
+      };
+    }
+
+    if (invoiceDate) invoice.invoiceDate = new Date(invoiceDate);
+    if (dueDate !== undefined) invoice.dueDate = dueDate ? new Date(dueDate) : null;
+    if (poNumber !== undefined) invoice.poNumber = poNumber.trim();
+    if (poDate !== undefined) invoice.poDate = poDate ? new Date(poDate) : null;
+    if (challanNumber !== undefined) invoice.challanNumber = challanNumber.trim();
+    if (challanDate !== undefined) invoice.challanDate = challanDate ? new Date(challanDate) : null;
+
+    invoice.isInterState = financials.isInterState;
+    invoice.items = financials.items;
+    invoice.netAmount = financials.netAmount;
+    invoice.cgstTotal = financials.cgstTotal;
+    invoice.sgstTotal = financials.sgstTotal;
+    invoice.igstTotal = financials.igstTotal;
+    invoice.roundOff = financials.roundOff;
+    invoice.grandTotal = financials.grandTotal;
+    invoice.amountInWords = financials.amountInWords;
+    invoice.balanceDue = newBalanceDue;
+    invoice.paymentStatus = newBalanceDue === 0 ? 'paid' : ((invoice.totalPaid || 0) > 0 ? 'partially_paid' : 'unpaid');
+    invoice.updatedAt = new Date();
+    await invoice.save();
+
+    // Auto-catalog any products in updated invoice items
+    if (Array.isArray(financials.items)) {
+      for (const itm of financials.items) {
+        if (itm.description && itm.description.trim()) {
+          await Product.findOneAndUpdate(
+            { description: itm.description.trim() },
+            {
+              $set: {
+                description: itm.description.trim(),
+                hsnCode: itm.hsnCode || '',
+                unit: itm.unit || 'PCS',
+                defaultRate: itm.rate || 0,
+                gstRate: itm.gstRate || 18,
+                updatedAt: new Date()
+              },
+              $setOnInsert: {
+                active: true
+              }
+            },
+            { upsert: true }
+          );
+        }
+      }
+    }
+
+    await AuditLog.create({
+      action: 'UPDATE_INVOICE',
+      entity: 'Invoice',
+      entityId: invoice.uuid,
+      performedBy: req.user ? req.user.name : 'User',
+      role: req.user ? req.user.role : 'owner',
+      deviceId,
+      details: {
+        invoiceNumber: invoice.invoiceNumber,
+        grandTotal: financials.grandTotal,
+        deltaGrandTotal
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Invoice updated successfully',
+      data: invoice
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Delete invoice permanently (soft-delete for sync propagation)
 // @route   DELETE /api/invoices/:id
 // @access  Private (Owner)
 exports.deleteInvoice = async (req, res, next) => {
@@ -361,13 +505,22 @@ exports.deleteInvoice = async (req, res, next) => {
         {
           $inc: {
             totalBilled: -invoice.grandTotal,
-            outstandingBalance: -invoice.balanceDue
+            outstandingBalance: -invoice.balanceDue,
+            totalPaid: -(invoice.totalPaid || 0)
           }
         }
       );
     }
 
-    await Invoice.deleteOne({ _id: invoice._id });
+    // Remove any associated payments
+    await Payment.deleteMany({ invoiceId: invoice.uuid });
+
+    // Mark as cancelled and deactivated so incremental sync propagates to other devices
+    invoice.status = 'cancelled';
+    invoice.active = false;
+    invoice.syncStatus = 'synced';
+    invoice.updatedAt = new Date();
+    await invoice.save();
 
     await AuditLog.create({
       action: 'DELETE_INVOICE',

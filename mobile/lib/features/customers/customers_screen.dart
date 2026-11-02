@@ -201,11 +201,15 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                     Text(
                       customer.name,
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     Text(
                       customer.phone + (customer.gstin.isNotEmpty ? ' • ${customer.gstin}' : ''),
                       style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     if (customer.address.isNotEmpty) ...[
                       const SizedBox(height: 2),
@@ -219,23 +223,29 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   const Text('Outstanding Due', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
                   const SizedBox(height: 2),
-                  Text(
-                    CurrencyFormatter.format(customer.outstandingBalance),
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: hasDue ? AppColors.unpaid : AppColors.paid,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      CurrencyFormatter.format(customer.outstandingBalance),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: hasDue ? AppColors.unpaid : AppColors.paid,
+                      ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(width: 4),
               PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
                 icon: const Icon(Icons.more_vert, size: 20, color: AppColors.textMuted),
                 onSelected: (val) {
                   if (val == 'ledger') {

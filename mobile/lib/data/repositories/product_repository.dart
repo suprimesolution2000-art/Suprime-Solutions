@@ -30,11 +30,18 @@ class ProductRepository {
     return results.map((m) => ProductModel.fromMap(m)).toList();
   }
 
-  Future<void> saveProduct(ProductModel product) async {
+  Future<void> saveProduct(ProductModel product, {bool preserveInactive = true}) async {
     final db = await _db.database;
+    final map = product.toMap();
+    if (preserveInactive) {
+      final existing = await db.query('products', where: 'uuid = ?', whereArgs: [product.uuid], limit: 1);
+      if (existing.isNotEmpty && (existing.first['active'] == 0 || existing.first['active'] == 'false')) {
+        map['active'] = 0;
+      }
+    }
     await db.insert(
       'products',
-      product.toMap(),
+      map,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -48,6 +55,7 @@ class ProductRepository {
     double defaultRate = 0.0,
     double gstRate = 18.0,
     bool active = true,
+    bool preserveInactive = true,
   }) async {
     final cleanDesc = description.trim();
     if (cleanDesc.isEmpty) return;
@@ -63,6 +71,8 @@ class ProductRepository {
         limit: 1,
       );
       if (existingByUuid.isNotEmpty) {
+        final existingActive = existingByUuid.first['active'];
+        final finalActive = (preserveInactive && (existingActive == 0 || existingActive == 'false')) ? 0 : (active ? 1 : 0);
         await db.update(
           'products',
           {
@@ -71,7 +81,7 @@ class ProductRepository {
             'unit': unit,
             'default_rate': defaultRate,
             'gst_rate': gstRate,
-            'active': active ? 1 : 0,
+            'active': finalActive,
           },
           where: 'uuid = ?',
           whereArgs: [uuid],
@@ -89,6 +99,8 @@ class ProductRepository {
 
     if (existing.isNotEmpty) {
       final existingUuid = existing.first['uuid'] as String;
+      final existingActive = existing.first['active'];
+      final finalActive = (preserveInactive && (existingActive == 0 || existingActive == 'false')) ? 0 : (active ? 1 : 0);
       await db.update(
         'products',
         {
@@ -97,13 +109,15 @@ class ProductRepository {
           'unit': unit,
           'default_rate': defaultRate,
           'gst_rate': gstRate,
-          'active': active ? 1 : 0,
+          'active': finalActive,
         },
         where: 'uuid = ?',
         whereArgs: [existingUuid],
       );
     } else {
       final newUuid = uuid ?? 'prod-${DateTime.now().millisecondsSinceEpoch}';
+      final tombstones = await db.query('app_settings', where: 'key = ?', whereArgs: ['deleted_product_$newUuid']);
+      final finalActive = (preserveInactive && tombstones.isNotEmpty) ? 0 : (active ? 1 : 0);
       await db.insert(
         'products',
         {
@@ -113,7 +127,7 @@ class ProductRepository {
           'unit': unit,
           'default_rate': defaultRate,
           'gst_rate': gstRate,
-          'active': active ? 1 : 0,
+          'active': finalActive,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );

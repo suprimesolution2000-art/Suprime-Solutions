@@ -136,20 +136,54 @@ class InvoiceRepository {
     );
   }
 
+  Future<void> updateInvoice(
+    InvoiceModel invoice, {
+    double deltaGrandTotal = 0.0,
+    double deltaBalanceDue = 0.0,
+  }) async {
+    final db = await _db.database;
+    await db.update(
+      'invoices',
+      invoice.toMap(),
+      where: 'uuid = ?',
+      whereArgs: [invoice.uuid],
+    );
+
+    // Adjust customer ledger balance
+    try {
+      final custRows = await db.query('customers', where: 'uuid = ?', whereArgs: [invoice.customer.uuid], limit: 1);
+      if (custRows.isNotEmpty) {
+        final currentBilled = (custRows.first['total_billed'] as num?)?.toDouble() ?? 0.0;
+        final currentDue = (custRows.first['outstanding_balance'] as num?)?.toDouble() ?? 0.0;
+        await db.update(
+          'customers',
+          {
+            'total_billed': (currentBilled + deltaGrandTotal).clamp(0.0, double.infinity),
+            'outstanding_balance': (currentDue + deltaBalanceDue).clamp(0.0, double.infinity),
+          },
+          where: 'uuid = ?',
+          whereArgs: [invoice.customer.uuid],
+        );
+      }
+    } catch (_) {}
+  }
+
   Future<void> deleteInvoice(String invoiceUuid) async {
     final db = await _db.database;
     final inv = await getInvoiceByUuid(invoiceUuid);
     if (inv != null && inv.status != 'cancelled') {
-      // Revert customer outstanding balance
+      // Revert customer outstanding balance and payments
       try {
         final custRows = await db.query('customers', where: 'uuid = ?', whereArgs: [inv.customer.uuid], limit: 1);
         if (custRows.isNotEmpty) {
           final currentBilled = (custRows.first['total_billed'] as num?)?.toDouble() ?? 0.0;
+          final currentPaid = (custRows.first['total_paid'] as num?)?.toDouble() ?? 0.0;
           final currentDue = (custRows.first['outstanding_balance'] as num?)?.toDouble() ?? 0.0;
           await db.update(
             'customers',
             {
               'total_billed': (currentBilled - inv.grandTotal).clamp(0.0, double.infinity),
+              'total_paid': (currentPaid - inv.totalPaid).clamp(0.0, double.infinity),
               'outstanding_balance': (currentDue - inv.balanceDue).clamp(0.0, double.infinity),
             },
             where: 'uuid = ?',
@@ -158,6 +192,15 @@ class InvoiceRepository {
         }
       } catch (_) {}
     }
+
+    // Clean up any payments associated with this deleted invoice
+    try {
+      await db.delete(
+        'payments',
+        where: 'invoice_id = ?',
+        whereArgs: [invoiceUuid],
+      );
+    } catch (_) {}
 
     // Record tombstone so cloud pullSync does not resurrect this deleted invoice
     try {

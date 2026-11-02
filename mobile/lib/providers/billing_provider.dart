@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import '../data/database/app_database.dart';
 import '../data/models/customer_model.dart';
 import '../data/models/invoice_item_model.dart';
 import '../data/models/invoice_model.dart';
@@ -9,6 +10,7 @@ import '../data/repositories/customer_repository.dart';
 import '../data/repositories/product_repository.dart';
 import '../core/utils/number_to_words.dart';
 import '../core/constants/app_constants.dart';
+import '../services/api/api_client.dart';
 import '../services/sync/sync_service.dart';
 
 class BillingState {
@@ -24,6 +26,8 @@ class BillingState {
   final bool isSaving;
   final String? errorMessage;
   final InvoiceModel? lastSavedInvoice;
+  final String? editingInvoiceUuid;
+  final InvoiceModel? originalInvoice;
 
   BillingState({
     required this.customer,
@@ -38,7 +42,11 @@ class BillingState {
     this.isSaving = false,
     this.errorMessage,
     this.lastSavedInvoice,
+    this.editingInvoiceUuid,
+    this.originalInvoice,
   });
+
+  bool get isEditMode => editingInvoiceUuid != null;
 
   bool get isInterState => customer.stateCode.trim() != AppConstants.stateCode;
 
@@ -82,6 +90,8 @@ class BillingState {
     bool? isSaving,
     String? errorMessage,
     InvoiceModel? lastSavedInvoice,
+    String? editingInvoiceUuid,
+    InvoiceModel? originalInvoice,
   }) {
     return BillingState(
       customer: customer ?? this.customer,
@@ -96,6 +106,8 @@ class BillingState {
       isSaving: isSaving ?? this.isSaving,
       errorMessage: errorMessage,
       lastSavedInvoice: lastSavedInvoice ?? this.lastSavedInvoice,
+      editingInvoiceUuid: editingInvoiceUuid ?? this.editingInvoiceUuid,
+      originalInvoice: originalInvoice ?? this.originalInvoice,
     );
   }
 }
@@ -383,6 +395,135 @@ class BillingNotifier extends StateNotifier<BillingState> {
       return invoice;
     } catch (e) {
       state = state.copyWith(isSaving: false, errorMessage: 'Failed to save bill: $e');
+      return null;
+    }
+  }
+
+  void initForEdit(InvoiceModel invoice) {
+    state = BillingState(
+      customer: invoice.customer,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceDate: invoice.invoiceDate,
+      dueDate: invoice.dueDate,
+      poNumber: invoice.poNumber,
+      poDate: invoice.poDate,
+      challanNumber: invoice.challanNumber,
+      challanDate: invoice.challanDate,
+      items: invoice.items,
+      editingInvoiceUuid: invoice.uuid,
+      originalInvoice: invoice,
+    );
+  }
+
+  Future<InvoiceModel?> updateExistingInvoice() async {
+    if (state.originalInvoice == null || state.editingInvoiceUuid == null) {
+      return null;
+    }
+    if (state.customer.name.trim().isEmpty) {
+      state = state.copyWith(errorMessage: 'Please enter customer name');
+      return null;
+    }
+    if (state.items.isEmpty) {
+      state = state.copyWith(errorMessage: 'Please add at least one item');
+      return null;
+    }
+
+    state = state.copyWith(isSaving: true, errorMessage: null);
+
+    try {
+      final orig = state.originalInvoice!;
+      final deltaGrandTotal = state.grandTotal - orig.grandTotal;
+      final newBalanceDue = (state.grandTotal - orig.totalPaid).clamp(0.0, double.infinity);
+      final deltaBalanceDue = newBalanceDue - orig.balanceDue;
+
+      final newPaymentStatus = newBalanceDue == 0.0
+          ? 'paid'
+          : (orig.totalPaid > 0.0 ? 'partially_paid' : 'unpaid');
+
+      final updatedInvoice = orig.copyWith(
+        customer: state.customer,
+        invoiceDate: state.invoiceDate,
+        dueDate: state.dueDate,
+        poNumber: state.poNumber,
+        poDate: state.poDate,
+        challanNumber: state.challanNumber,
+        challanDate: state.challanDate,
+        isInterState: state.isInterState,
+        items: state.items,
+        netAmount: state.netAmount,
+        cgstTotal: state.cgstTotal,
+        sgstTotal: state.sgstTotal,
+        igstTotal: state.igstTotal,
+        roundOff: state.roundOff,
+        grandTotal: state.grandTotal,
+        amountInWords: state.amountInWords,
+        paymentStatus: newPaymentStatus,
+        balanceDue: newBalanceDue,
+        syncStatus: 'waiting_for_internet',
+      );
+
+      // 1. Update SQLite
+      await _invoiceRepo.updateInvoice(
+        updatedInvoice,
+        deltaGrandTotal: deltaGrandTotal,
+        deltaBalanceDue: deltaBalanceDue,
+      );
+
+      // 2. Also save/update customer in SQLite
+      await _customerRepo.saveCustomer(state.customer);
+
+      // 3. Save products
+      final prodRepo = ProductRepository();
+      for (final itm in state.items) {
+        if (itm.description.trim().isNotEmpty) {
+          await prodRepo.saveOrUpdateProduct(
+            description: itm.description,
+            hsnCode: itm.hsnCode,
+            unit: itm.unit,
+            defaultRate: itm.rate,
+            gstRate: itm.gstRate,
+          );
+        }
+      }
+
+      // 4. Try online sync or background sync
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final deviceId = prefs.getString('device_id') ?? 'android_mobile_1';
+        final body = {
+          'customer': state.customer.toMap(),
+          'items': state.items.map((e) => e.toApiMap()).toList(),
+          'invoiceDate': state.invoiceDate.toIso8601String(),
+          'dueDate': state.dueDate?.toIso8601String(),
+          'poNumber': state.poNumber,
+          'poDate': state.poDate?.toIso8601String(),
+          'challanNumber': state.challanNumber,
+          'challanDate': state.challanDate?.toIso8601String(),
+          'deviceId': deviceId,
+        };
+        final res = await ApiClient.instance.updateInvoice(updatedInvoice.uuid, body);
+        if (res.statusCode == 200) {
+          final db = await AppDatabase.instance.database;
+          await db.update(
+            'invoices',
+            {'sync_status': 'synced'},
+            where: 'uuid = ?',
+            whereArgs: [updatedInvoice.uuid],
+          );
+        }
+      } catch (_) {
+        // Will sync on next sync pass
+      }
+
+      SyncService.instance.synchronize();
+
+      state = state.copyWith(
+        isSaving: false,
+        lastSavedInvoice: updatedInvoice,
+      );
+      return updatedInvoice;
+    } catch (e) {
+      state = state.copyWith(isSaving: false, errorMessage: 'Failed to update bill: $e');
       return null;
     }
   }
