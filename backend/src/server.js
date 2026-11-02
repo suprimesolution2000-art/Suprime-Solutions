@@ -37,7 +37,7 @@ const authLimiter = rateLimit({
   max: 100,
   message: { success: false, message: 'Too many requests, please try again later.' }
 });
-app.use('/api/auth/login', authLimiter);
+app.use('/api/auth', authLimiter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -64,7 +64,11 @@ app.use(errorHandler);
 
 // Connect DB and Start server
 const startServer = async () => {
-  await connectDB();
+  const conn = await connectDB();
+  if (!conn && env.NODE_ENV === 'production') {
+    console.error('[FATAL] Failed to connect to MongoDB Atlas in production. Server will not accept traffic.');
+    process.exit(1);
+  }
   const PORT = env.PORT;
   const server = app.listen(PORT, () => {
     console.log(`[Server] SS Supreme Solutions Backend running on http://localhost:${PORT}`);

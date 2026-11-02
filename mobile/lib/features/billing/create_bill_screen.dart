@@ -397,6 +397,15 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                           icon: const Icon(Icons.add, size: 20),
                           label: const Text('Add Item', style: TextStyle(fontSize: 15)),
                           onPressed: () {
+                            if (billState.items.length >= 11) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Maximum 11 items allowed per invoice for single-page paper template.'),
+                                  backgroundColor: Colors.orange,
+                                ),
+                              );
+                              return;
+                            }
                             showDialog(
                               context: context,
                               builder: (_) => AddItemDialog(
@@ -565,13 +574,16 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                             builder: (_) => InvoiceDetailScreen(invoice: invoice),
                           ),
                         );
-                      } else if (billState.errorMessage != null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(billState.errorMessage!),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
+                      } else {
+                        final currentError = ref.read(billingProvider).errorMessage;
+                        if (currentError != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(currentError),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
                       }
                     },
               child: billState.isSaving

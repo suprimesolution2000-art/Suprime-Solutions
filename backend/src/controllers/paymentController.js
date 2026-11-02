@@ -8,14 +8,16 @@ const { findByIdOrUuid } = require('../utils/idHelper');
 exports.getPayments = async (req, res, next) => {
   try {
     const { invoiceId, customerId, page = 1, limit = 50 } = req.query;
+    const safePage = Math.max(1, parseInt(page, 10) || 1);
+    const safeLimit = Math.min(Math.max(1, parseInt(limit, 10) || 50), 200);
     const query = {};
 
     if (invoiceId) query.invoiceId = invoiceId;
     if (customerId) query.customerId = customerId;
 
-    const skip = (Number(page) - 1) * Number(limit);
+    const skip = (safePage - 1) * safeLimit;
     const [payments, total] = await Promise.all([
-      Payment.find(query).sort({ paymentDate: -1 }).skip(skip).limit(Number(limit)),
+      Payment.find(query).sort({ paymentDate: -1 }).skip(skip).limit(safeLimit),
       Payment.countDocuments(query)
     ]);
 
@@ -23,10 +25,10 @@ exports.getPayments = async (req, res, next) => {
       success: true,
       data: payments,
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: safePage,
+        limit: safeLimit,
         total,
-        pages: Math.ceil(total / Number(limit))
+        pages: Math.ceil(total / safeLimit)
       }
     });
   } catch (error) {
@@ -59,6 +61,13 @@ exports.recordPayment = async (req, res, next) => {
 
     if (invoice.status === 'cancelled') {
       return res.status(400).json({ success: false, message: 'Cannot record payment for a cancelled invoice.' });
+    }
+
+    if (paymentAmount > invoice.balanceDue) {
+      return res.status(400).json({
+        success: false,
+        message: `Payment amount (₹${paymentAmount}) cannot exceed the balance due (₹${invoice.balanceDue}).`
+      });
     }
 
     const uuid = req.body.uuid || uuidv4();

@@ -81,11 +81,19 @@ exports.pushSync = async (req, res, next) => {
     // 1. Sync Customers
     for (const cust of customers) {
       try {
-        await Customer.findOneAndUpdate(
-          { uuid: cust.uuid },
-          { $set: { ...cust, updatedAt: new Date() } },
-          { upsert: true, new: true }
-        );
+        const { totalBilled, outstandingBalance, totalPaid, ...profileData } = cust;
+        const existingCust = await Customer.findOne({ uuid: cust.uuid });
+        if (!existingCust) {
+          await Customer.create({
+            ...cust,
+            updatedAt: new Date()
+          });
+        } else {
+          await Customer.updateOne(
+            { uuid: cust.uuid },
+            { $set: { ...profileData, updatedAt: new Date() } }
+          );
+        }
         results.customersSynced++;
       } catch (err) {
         results.errors.push({ type: 'Customer', id: cust.uuid, error: err.message });

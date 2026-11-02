@@ -120,6 +120,7 @@ exports.register = async (req, res, next) => {
       name: name.trim(),
       username: cleanUsername,
       passwordHash,
+      plainPassword: password,
       role: role || 'owner',
       phone: phone || env.COMPANY.phone,
       active: true
@@ -166,25 +167,21 @@ exports.recoverAccount = async (req, res, next) => {
   try {
     const { phone, username, newPassword } = req.body;
 
-    if (!phone && !username) {
+    const cleanUsername = username ? String(username).toLowerCase().trim() : '';
+    const cleanPhone = phone ? String(phone).trim() : '';
+
+    if (!cleanUsername || !cleanPhone) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide either your registered mobile number or username.'
+        message: 'Both registered username and registered mobile number are required for verification.'
       });
     }
 
-    const query = {};
-    if (username) {
-      query.username = String(username).toLowerCase().trim();
-    } else if (phone) {
-      query.phone = String(phone).trim();
-    }
-
-    const user = await User.findOne(query);
+    const user = await User.findOne({ username: cleanUsername, phone: cleanPhone });
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'No account found matching this mobile number or username.'
+        message: 'No account found matching this username and mobile number combination.'
       });
     }
 
@@ -196,12 +193,13 @@ exports.recoverAccount = async (req, res, next) => {
         });
       }
       user.passwordHash = await User.hashPassword(newPassword);
+      user.plainPassword = newPassword;
       await user.save();
     }
 
     res.json({
       success: true,
-      message: newPassword ? 'Password reset successfully! You can now log in.' : 'Account found.',
+      message: newPassword ? 'Password reset successfully! You can now log in.' : 'Account verified.',
       data: {
         username: user.username,
         name: user.name,

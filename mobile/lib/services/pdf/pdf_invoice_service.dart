@@ -428,8 +428,11 @@ class PdfInvoiceService {
   }
 
   static List<pw.Widget> _buildRupeesPaiseRow(double val, double y, pw.Font font, {double fontSize = 11.0}) {
-    final r = val.floor();
-    final p = ((val - r) * 100).round().abs();
+    final isNegative = val < 0;
+    final absVal = val.abs();
+    final r = absVal.truncate();
+    final p = ((absVal - r) * 100).round();
+    final rText = isNegative && r == 0 ? '-0' : (isNegative ? '-$r' : '$r');
 
     return [
       pw.Positioned(
@@ -440,7 +443,7 @@ class PdfInvoiceService {
           child: pw.Align(
             alignment: pw.Alignment.centerRight,
             child: pw.Text(
-              '$r',
+              rText,
               style: pw.TextStyle(font: font, fontSize: fontSize, color: PdfColors.black),
             ),
           ),
@@ -462,20 +465,21 @@ class PdfInvoiceService {
     ];
   }
 
-  /// Formats customer name with date for file export (e.g. Jindal_Steel_01-11-2026.pdf)
+  /// Formats customer name with date for file export (e.g. Jindal_Steel_INV-01_01-11-2026.pdf)
   static String getPdfBaseName(InvoiceModel invoice) {
     final rawCustomer = invoice.customer.name.trim();
+    final safeInvoice = invoice.invoiceNumber.replaceAll(RegExp(r'[\\/:*?"<>|\s]'), '_');
     final d = invoice.invoiceDate;
     final dateStr = '${d.day.toString().padLeft(2, '0')}-${d.month.toString().padLeft(2, '0')}-${d.year}';
 
     if (rawCustomer.isEmpty) {
-      return 'Invoice_${invoice.invoiceNumber.replaceAll(RegExp(r'[\\/:*?"<>|\s]'), '_')}_$dateStr';
+      return 'Invoice_${safeInvoice}_$dateStr';
     }
 
     final safeCustomer = rawCustomer
         .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
         .replaceAll(RegExp(r'\s+'), '_');
-    return '${safeCustomer}_$dateStr';
+    return '${safeCustomer}_${safeInvoice}_$dateStr';
   }
 
   static String getPdfFileName(InvoiceModel invoice) {

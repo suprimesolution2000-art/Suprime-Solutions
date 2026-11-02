@@ -7,6 +7,7 @@
 // Number to Indian Words converter
 function numberToIndianWords(amount) {
   if (amount === 0) return 'Rupees Zero Only';
+  if (amount < 0) return 'Minus ' + numberToIndianWords(Math.abs(amount));
 
   const units = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
     'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];

@@ -81,9 +81,11 @@ exports.getInvoices = async (req, res, next) => {
     const sort = {};
     sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
-    const skip = (Number(page) - 1) * Number(limit);
+    const safePage = Math.max(1, parseInt(page, 10) || 1);
+    const safeLimit = Math.min(Math.max(1, parseInt(limit, 10) || 25), 200);
+    const skip = (safePage - 1) * safeLimit;
     const [invoices, total] = await Promise.all([
-      Invoice.find(query).sort(sort).skip(skip).limit(Number(limit)),
+      Invoice.find(query).sort(sort).skip(skip).limit(safeLimit),
       Invoice.countDocuments(query)
     ]);
 
@@ -91,10 +93,10 @@ exports.getInvoices = async (req, res, next) => {
       success: true,
       data: invoices,
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: safePage,
+        limit: safeLimit,
         total,
-        pages: Math.ceil(total / Number(limit))
+        pages: Math.ceil(total / safeLimit)
       }
     });
   } catch (error) {
@@ -352,8 +354,8 @@ exports.deleteInvoice = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Invoice not found.' });
     }
 
-    // Adjust customer ledger balance if unpaid / partially paid
-    if (invoice.customer && invoice.customer.uuid) {
+    // Adjust customer ledger balance only if invoice was not already cancelled
+    if (invoice.status !== 'cancelled' && invoice.customer && invoice.customer.uuid) {
       await Customer.updateOne(
         { uuid: invoice.customer.uuid },
         {

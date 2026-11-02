@@ -6,6 +6,7 @@ const { escapeRegex } = require('../utils/regexHelper');
 exports.getProducts = async (req, res, next) => {
   try {
     const { search, limit = 100 } = req.query;
+    const safeLimit = Math.min(Math.max(1, parseInt(limit, 10) || 100), 500);
     const query = { active: true };
 
     if (search && search.trim()) {
@@ -16,7 +17,7 @@ exports.getProducts = async (req, res, next) => {
       ];
     }
 
-    const products = await Product.find(query).sort({ description: 1 }).limit(Number(limit));
+    const products = await Product.find(query).sort({ description: 1 }).limit(safeLimit);
     res.json({ success: true, data: products });
   } catch (error) {
     next(error);
@@ -49,9 +50,19 @@ exports.createProduct = async (req, res, next) => {
 
 exports.updateProduct = async (req, res, next) => {
   try {
+    const { description, hsnCode, unit, defaultRate, gstRate, active } = req.body;
+    const updateFields = { updatedAt: new Date() };
+
+    if (description !== undefined) updateFields.description = description.trim();
+    if (hsnCode !== undefined) updateFields.hsnCode = hsnCode.trim();
+    if (unit !== undefined) updateFields.unit = unit;
+    if (defaultRate !== undefined) updateFields.defaultRate = Number(defaultRate) || 0;
+    if (gstRate !== undefined) updateFields.gstRate = Number(gstRate) || 0;
+    if (active !== undefined) updateFields.active = Boolean(active);
+
     const product = await Product.findOneAndUpdate(
       findByIdOrUuid(req.params.id),
-      { $set: { ...req.body, updatedAt: new Date() } },
+      { $set: updateFields },
       { new: true }
     );
 

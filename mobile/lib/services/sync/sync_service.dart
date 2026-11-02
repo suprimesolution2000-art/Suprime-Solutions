@@ -170,12 +170,55 @@ class SyncService extends ChangeNotifier {
         'active': p['active'] == 1 || p['active'] == true,
       }).toList();
 
+      // Collect local payments to sync
+      final localPayments = await db.query('payments');
+      final paymentsToPush = localPayments.map((p) => {
+        'uuid': p['uuid'],
+        'invoiceId': p['invoice_id'],
+        'invoiceNumber': p['invoice_number'],
+        'customerId': p['customer_id'],
+        'customerName': p['customer_name'],
+        'amount': p['amount'],
+        'paymentMethod': p['payment_method'],
+        'referenceNumber': p['reference_number'] ?? '',
+        'paymentDate': p['payment_date'],
+        'notes': p['notes'] ?? '',
+        'receivedBy': p['received_by'] ?? 'Admin',
+        'deviceId': p['device_id'] ?? deviceId,
+      }).toList();
+
+      // Process pending cloud deletions (tombstones recorded while offline)
+      final allSettings = await db.query('app_settings');
+      for (final s in allSettings) {
+        final key = s['key'] as String;
+        if (key.startsWith('deleted_invoice_')) {
+          final uuid = key.replaceFirst('deleted_invoice_', '');
+          try {
+            await ApiClient.instance.deleteInvoice(uuid);
+            await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+          } catch (_) {}
+        } else if (key.startsWith('deleted_customer_')) {
+          final uuid = key.replaceFirst('deleted_customer_', '');
+          try {
+            await ApiClient.instance.deleteCustomer(uuid);
+            await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+          } catch (_) {}
+        } else if (key.startsWith('deleted_product_')) {
+          final uuid = key.replaceFirst('deleted_product_', '');
+          try {
+            await ApiClient.instance.deleteProduct(uuid);
+            await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+          } catch (_) {}
+        }
+      }
+
       // 2. Push to backend if any
-      if (invoicesToPush.isNotEmpty || customersToPush.isNotEmpty || productsToPush.isNotEmpty) {
+      if (invoicesToPush.isNotEmpty || customersToPush.isNotEmpty || productsToPush.isNotEmpty || paymentsToPush.isNotEmpty) {
         final pushRes = await ApiClient.instance.pushSync(
           deviceId: deviceId,
           customers: customersToPush,
           invoices: invoicesToPush,
+          payments: paymentsToPush,
           products: productsToPush,
         );
 
@@ -205,20 +248,41 @@ class SyncService extends ChangeNotifier {
         final data = pullRes.data['data'];
         final custRepo = CustomerRepository();
 
-        // 3a. Save cloud customers to local SQLite
+        final activeTombstones = (await db.query('app_settings'))
+            .map((r) => r['key'] as String)
+            .toSet();
+
+        // 3a. Save cloud customers to local SQLite (ignoring deleted customers)
         final serverCustomers = data['customers'] as List? ?? [];
         for (final item in serverCustomers) {
           final custMap = Map<String, dynamic>.from(item);
           final serverCust = CustomerModel.fromMap(custMap);
+          if (activeTombstones.contains('deleted_customer_${serverCust.uuid}')) {
+            continue;
+          }
           if (serverCust.name.trim().isNotEmpty) {
             await custRepo.saveCustomer(serverCust);
           }
         }
 
-        // 3b. Save cloud invoices and ensure invoice customer is saved locally
+        // 3b. Save cloud invoices (skipping deleted invoices and protecting unsynced local drafts)
         final serverInvoices = data['invoices'] as List? ?? [];
         for (final item in serverInvoices) {
           final serverInv = InvoiceModel.fromMap(Map<String, dynamic>.from(item));
+          if (activeTombstones.contains('deleted_invoice_${serverInv.uuid}')) {
+            continue;
+          }
+
+          final localExisting = await db.query(
+            'invoices',
+            where: 'uuid = ?',
+            whereArgs: [serverInv.uuid],
+            limit: 1,
+          );
+          if (localExisting.isNotEmpty && localExisting.first['sync_status'] != 'synced') {
+            continue; // Protect local offline changes
+          }
+
           await db.insert(
             'invoices',
             serverInv.toMap(),
@@ -249,6 +313,9 @@ class SyncService extends ChangeNotifier {
         for (final item in serverProducts) {
           final p = Map<String, dynamic>.from(item);
           final serverProd = ProductModel.fromMap(p);
+          if (activeTombstones.contains('deleted_product_${serverProd.uuid}')) {
+            continue;
+          }
           if (serverProd.description.trim().isNotEmpty) {
             await prodRepo.saveProduct(serverProd);
           }

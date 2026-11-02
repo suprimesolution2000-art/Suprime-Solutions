@@ -52,6 +52,7 @@ class NumberToWords {
 
   static String convert(double amount) {
     if (amount == 0) return 'Rupees Zero Only';
+    if (amount < 0) return 'Minus ${convert(amount.abs())}';
 
     final rounded = (amount * 100).round() / 100;
     final rupees = rounded.floor();

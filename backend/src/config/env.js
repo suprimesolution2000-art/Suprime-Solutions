@@ -1,5 +1,9 @@
 require('dotenv').config();
 
+if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('super_secure'))) {
+  console.warn('[SECURITY WARNING] Production running with default or insecure JWT_SECRET. Please set a strong custom JWT_SECRET.');
+}
+
 module.exports = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT || 5000,
@@ -9,17 +13,17 @@ module.exports = {
   JWT_EXPIRES_IN: '7d',
   JWT_REFRESH_EXPIRES_IN: '30d',
   COMPANY: {
-    name: 'Suprime Solutions',
-    gstin: '22FWDPD2626D1Z7',
-    ePan: 'FWDPD2626D',
-    phone: '9981365878',
-    address: 'Mahalaxmi Bole, Beside Yashoda Dairy, Tikrapara, Bilaspur (C.G.) 495001',
-    state: 'Chhattisgarh',
-    stateCode: '22',
+    name: process.env.COMPANY_NAME || 'Suprime Solutions',
+    gstin: process.env.COMPANY_GSTIN || '22FWDPD2626D1Z7',
+    ePan: process.env.COMPANY_EPAN || 'FWDPD2626D',
+    phone: process.env.COMPANY_PHONE || '9981365878',
+    address: process.env.COMPANY_ADDRESS || 'Mahalaxmi Bole, Beside Yashoda Dairy, Tikrapara, Bilaspur (C.G.) 495001',
+    state: process.env.COMPANY_STATE || 'Chhattisgarh',
+    stateCode: process.env.COMPANY_STATE_CODE || '22',
     bank: {
-      name: 'Punjab National Bank',
-      accountNumber: '1539050003087',
-      ifsc: 'PUNB0324500'
+      name: process.env.BANK_NAME || 'Punjab National Bank',
+      accountNumber: process.env.BANK_ACCOUNT || '1539050003087',
+      ifsc: process.env.BANK_IFSC || 'PUNB0324500'
     },
     terms: [
       'Subject to Bilaspur (C.G.) Jurisdiction',

@@ -5,13 +5,25 @@ const path = require('path');
 const TEMPLATE_PATH = path.join(__dirname, '../../../assets/invoice-template/master_invoice.pdf');
 const COORDS_PATH = path.join(__dirname, '../../../assets/invoice-template/overlay_coordinates.json');
 
+let cachedTemplateBytes = null;
+let cachedCoords = null;
+
+function loadTemplateData() {
+  if (!cachedTemplateBytes) {
+    cachedTemplateBytes = fs.readFileSync(TEMPLATE_PATH);
+  }
+  if (!cachedCoords) {
+    cachedCoords = JSON.parse(fs.readFileSync(COORDS_PATH, 'utf8'));
+  }
+  return { templateBytes: cachedTemplateBytes, coords: cachedCoords };
+}
+
 /**
  * Generate PDF buffer for an invoice overlaid on the original scanned template
  * @param {Object} invoice
  */
 async function generateInvoicePdf(invoice) {
-  const templateBytes = fs.readFileSync(TEMPLATE_PATH);
-  const coords = JSON.parse(fs.readFileSync(COORDS_PATH, 'utf8'));
+  const { templateBytes, coords } = loadTemplateData();
 
   const pdfDoc = await PDFDocument.load(templateBytes);
   const pages = pdfDoc.getPages();
@@ -119,9 +131,11 @@ async function generateInvoicePdf(invoice) {
   // 4. Summary & Tax Rows
   function splitRupeesPaise(val) {
     const v = Number(val) || 0;
-    const r = Math.floor(v);
-    const p = Math.round((v - r) * 100);
-    return { rs: String(r), p: String(p).padStart(2, '0') };
+    const sign = v < 0 ? '-' : '';
+    const absV = Math.abs(v);
+    const r = Math.floor(absV);
+    const p = Math.round((absV - r) * 100);
+    return { rs: (sign && r === 0 ? '-0' : sign + r), p: String(p).padStart(2, '0') };
   }
 
   // Net Amount

@@ -9,6 +9,8 @@ const { escapeRegex } = require('../utils/regexHelper');
 exports.getCustomers = async (req, res, next) => {
   try {
     const { search, page = 1, limit = 50 } = req.query;
+    const safePage = Math.max(1, parseInt(page, 10) || 1);
+    const safeLimit = Math.min(Math.max(1, parseInt(limit, 10) || 50), 200);
     const query = { active: true };
 
     if (search && search.trim()) {
@@ -21,9 +23,9 @@ exports.getCustomers = async (req, res, next) => {
       ];
     }
 
-    const skip = (Number(page) - 1) * Number(limit);
+    const skip = (safePage - 1) * safeLimit;
     const [customers, total] = await Promise.all([
-      Customer.find(query).sort({ name: 1 }).skip(skip).limit(Number(limit)),
+      Customer.find(query).sort({ name: 1 }).skip(skip).limit(safeLimit),
       Customer.countDocuments(query)
     ]);
 
@@ -31,10 +33,10 @@ exports.getCustomers = async (req, res, next) => {
       success: true,
       data: customers,
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: safePage,
+        limit: safeLimit,
         total,
-        pages: Math.ceil(total / Number(limit))
+        pages: Math.ceil(total / safeLimit)
       }
     });
   } catch (error) {
@@ -134,9 +136,26 @@ exports.createCustomer = async (req, res, next) => {
 
 exports.updateCustomer = async (req, res, next) => {
   try {
+    const {
+      name, businessName, phone, email, gstin, address, city, state, stateCode, pincode, active
+    } = req.body;
+
+    const updateFields = { updatedAt: new Date() };
+    if (name !== undefined) updateFields.name = name.trim();
+    if (businessName !== undefined) updateFields.businessName = businessName ? businessName.trim() : '';
+    if (phone !== undefined) updateFields.phone = phone ? phone.trim() : '';
+    if (email !== undefined) updateFields.email = email ? email.trim() : '';
+    if (gstin !== undefined) updateFields.gstin = gstin ? gstin.trim().toUpperCase() : '';
+    if (address !== undefined) updateFields.address = address ? address.trim() : '';
+    if (city !== undefined) updateFields.city = city.trim();
+    if (state !== undefined) updateFields.state = state.trim();
+    if (stateCode !== undefined) updateFields.stateCode = stateCode.trim();
+    if (pincode !== undefined) updateFields.pincode = pincode.trim();
+    if (active !== undefined) updateFields.active = Boolean(active);
+
     const customer = await Customer.findOneAndUpdate(
       findByIdOrUuid(req.params.id),
-      { $set: { ...req.body, updatedAt: new Date() } },
+      { $set: updateFields },
       { new: true }
     );
 

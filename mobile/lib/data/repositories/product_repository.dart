@@ -69,7 +69,7 @@ class ProductRepository {
             'description': cleanDesc,
             if (hsnCode.trim().isNotEmpty) 'hsn_code': hsnCode.trim(),
             'unit': unit,
-            if (defaultRate > 0) 'default_rate': defaultRate,
+            'default_rate': defaultRate,
             'gst_rate': gstRate,
             'active': active ? 1 : 0,
           },
@@ -92,9 +92,10 @@ class ProductRepository {
       await db.update(
         'products',
         {
+          'description': cleanDesc,
           if (hsnCode.trim().isNotEmpty) 'hsn_code': hsnCode.trim(),
           'unit': unit,
-          if (defaultRate > 0) 'default_rate': defaultRate,
+          'default_rate': defaultRate,
           'gst_rate': gstRate,
           'active': active ? 1 : 0,
         },
@@ -121,6 +122,14 @@ class ProductRepository {
 
   Future<void> deleteProduct(String productUuid) async {
     final db = await _db.database;
+    try {
+      await db.insert(
+        'app_settings',
+        {'key': 'deleted_product_$productUuid', 'value': DateTime.now().toIso8601String()},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (_) {}
+
     await db.update(
       'products',
       {'active': 0},

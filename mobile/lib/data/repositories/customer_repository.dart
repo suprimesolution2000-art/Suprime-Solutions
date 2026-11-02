@@ -113,11 +113,14 @@ class CustomerRepository {
         limit: 1,
       );
       if (existingByName.isNotEmpty) {
+        final existingUuid = existingByName.first['uuid'] as String;
+        final updatedMap = customer.toMap();
+        updatedMap['uuid'] = existingUuid; // Preserve existing customer UUID for relational integrity
         await db.update(
           'customers',
-          customer.toMap(),
+          updatedMap,
           where: 'uuid = ?',
-          whereArgs: [existingByName.first['uuid']],
+          whereArgs: [existingUuid],
         );
         return;
       }
@@ -144,6 +147,14 @@ class CustomerRepository {
 
   Future<void> deleteCustomer(String customerUuid) async {
     final db = await _db.database;
+    try {
+      await db.insert(
+        'app_settings',
+        {'key': 'deleted_customer_$customerUuid', 'value': DateTime.now().toIso8601String()},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (_) {}
+
     await db.update(
       'customers',
       {'active': 0},

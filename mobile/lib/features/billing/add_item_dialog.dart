@@ -295,6 +295,18 @@ class _AddItemDialogState extends State<AddItemDialog> {
                     );
                     return;
                   }
+                  if (discount < 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Discount cannot be negative')),
+                    );
+                    return;
+                  }
+                  if (discount > (qty * rate)) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Discount cannot exceed item total (Qty × Rate)')),
+                    );
+                    return;
+                  }
 
                   final hsn = _hsnController.text.trim();
 

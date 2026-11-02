@@ -78,7 +78,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: Image.asset(
-                        'assets/icons/app_icon.png',
+                        'assets/images/app_logo.png',
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => const Icon(
                           Icons.receipt_long,

@@ -159,6 +159,15 @@ class InvoiceRepository {
       } catch (_) {}
     }
 
+    // Record tombstone so cloud pullSync does not resurrect this deleted invoice
+    try {
+      await db.insert(
+        'app_settings',
+        {'key': 'deleted_invoice_$invoiceUuid', 'value': DateTime.now().toIso8601String()},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (_) {}
+
     await db.delete(
       'invoices',
       where: 'uuid = ?',
@@ -241,7 +250,8 @@ class InvoiceRepository {
 
     if (customInvoiceNumber != null && customInvoiceNumber.trim().isNotEmpty) {
       invoiceNumber = customInvoiceNumber.trim();
-      final parsed = int.tryParse(RegExp(r'\d+').stringMatch(invoiceNumber) ?? '');
+      final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber) ?? RegExp(r'(\d+)').firstMatch(invoiceNumber);
+      final parsed = match != null ? int.tryParse(match.group(1)!) : null;
       seqNum = parsed ?? nextNum;
       nextNum = (parsed != null && parsed >= nextNum) ? parsed + 1 : nextNum + 1;
     } else {
