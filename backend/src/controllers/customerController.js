@@ -136,7 +136,7 @@ exports.updateCustomer = async (req, res, next) => {
   try {
     const customer = await Customer.findOneAndUpdate(
       findByIdOrUuid(req.params.id),
-      { $set: req.body },
+      { $set: { ...req.body, updatedAt: new Date() } },
       { new: true }
     );
 
@@ -145,6 +145,24 @@ exports.updateCustomer = async (req, res, next) => {
     }
 
     res.json({ success: true, message: 'Customer updated successfully', data: customer });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.deleteCustomer = async (req, res, next) => {
+  try {
+    const customer = await Customer.findOneAndUpdate(
+      findByIdOrUuid(req.params.id),
+      { $set: { active: false, updatedAt: new Date() } },
+      { new: true }
+    );
+
+    if (!customer) {
+      return res.status(404).json({ success: false, message: 'Customer not found.' });
+    }
+
+    res.json({ success: true, message: 'Customer deleted successfully' });
   } catch (error) {
     next(error);
   }

@@ -161,12 +161,14 @@ class ApiClient {
     List<Map<String, dynamic>> customers = const [],
     List<Map<String, dynamic>> invoices = const [],
     List<Map<String, dynamic>> payments = const [],
+    List<Map<String, dynamic>> products = const [],
   }) async {
     return await dio.post('/sync/push', data: {
       'deviceId': deviceId,
       'customers': customers,
       'invoices': invoices,
       'payments': payments,
+      'products': products,
     });
   }
 
@@ -182,5 +184,15 @@ class ApiClient {
   // Invoice Delete
   Future<Response> deleteInvoice(String id) async {
     return await dio.delete('/invoices/$id');
+  }
+
+  // Customer Delete
+  Future<Response> deleteCustomer(String id) async {
+    return await dio.delete('/customers/$id');
+  }
+
+  // Product Delete
+  Future<Response> deleteProduct(String id) async {
+    return await dio.delete('/products/$id');
   }
 }

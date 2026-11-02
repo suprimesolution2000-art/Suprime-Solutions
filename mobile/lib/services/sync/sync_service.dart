@@ -6,6 +6,7 @@ import '../api/api_client.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/models/payment_model.dart';
+import '../../data/models/product_model.dart';
 import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/product_repository.dart';
 
@@ -154,15 +155,28 @@ class SyncService extends ChangeNotifier {
         'outstandingBalance': c['outstanding_balance'] ?? 0.0,
         'totalBilled': c['total_billed'] ?? 0.0,
         'totalPaid': c['total_paid'] ?? 0.0,
-        'active': true,
+        'active': c['active'] == 1 || c['active'] == true,
+      }).toList();
+
+      // Collect local products to sync
+      final localProducts = await db.query('products');
+      final productsToPush = localProducts.map((p) => {
+        'uuid': p['uuid'],
+        'description': p['description'],
+        'hsnCode': p['hsn_code'] ?? '',
+        'unit': p['unit'] ?? 'PCS',
+        'defaultRate': p['default_rate'] ?? 0.0,
+        'gstRate': p['gst_rate'] ?? 18.0,
+        'active': p['active'] == 1 || p['active'] == true,
       }).toList();
 
       // 2. Push to backend if any
-      if (invoicesToPush.isNotEmpty || customersToPush.isNotEmpty) {
+      if (invoicesToPush.isNotEmpty || customersToPush.isNotEmpty || productsToPush.isNotEmpty) {
         final pushRes = await ApiClient.instance.pushSync(
           deviceId: deviceId,
           customers: customersToPush,
           invoices: invoicesToPush,
+          products: productsToPush,
         );
 
         if (pushRes.statusCode == 200 && pushRes.data['success'] == true) {
@@ -234,14 +248,9 @@ class SyncService extends ChangeNotifier {
         final prodRepo = ProductRepository();
         for (final item in serverProducts) {
           final p = Map<String, dynamic>.from(item);
-          if (p['description'] != null && (p['description'] as String).trim().isNotEmpty) {
-            await prodRepo.saveOrUpdateProduct(
-              description: p['description'],
-              hsnCode: p['hsnCode'] ?? p['hsn_code'] ?? '',
-              unit: p['unit'] ?? 'PCS',
-              defaultRate: (p['defaultRate'] ?? p['default_rate'] ?? 0.0).toDouble(),
-              gstRate: (p['gstRate'] ?? p['gst_rate'] ?? 18.0).toDouble(),
-            );
+          final serverProd = ProductModel.fromMap(p);
+          if (serverProd.description.trim().isNotEmpty) {
+            await prodRepo.saveProduct(serverProd);
           }
         }
       }

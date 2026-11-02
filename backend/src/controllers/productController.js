@@ -51,7 +51,7 @@ exports.updateProduct = async (req, res, next) => {
   try {
     const product = await Product.findOneAndUpdate(
       findByIdOrUuid(req.params.id),
-      { $set: req.body },
+      { $set: { ...req.body, updatedAt: new Date() } },
       { new: true }
     );
 
@@ -60,6 +60,24 @@ exports.updateProduct = async (req, res, next) => {
     }
 
     res.json({ success: true, data: product });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.deleteProduct = async (req, res, next) => {
+  try {
+    const product = await Product.findOneAndUpdate(
+      findByIdOrUuid(req.params.id),
+      { $set: { active: false, updatedAt: new Date() } },
+      { new: true }
+    );
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found.' });
+    }
+
+    res.json({ success: true, message: 'Product deleted successfully' });
   } catch (error) {
     next(error);
   }

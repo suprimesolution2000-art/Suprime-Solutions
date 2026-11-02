@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../providers/customer_provider.dart';
+import '../../providers/dashboard_provider.dart';
 import '../../data/models/customer_model.dart';
+import '../../data/repositories/customer_repository.dart';
+import '../../services/api/api_client.dart';
 import '../../services/sync/sync_service.dart';
 import 'customer_ledger_screen.dart';
 import 'add_customer_dialog.dart';
@@ -231,10 +234,134 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   ),
                 ],
               ),
+              const SizedBox(width: 4),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, size: 20, color: AppColors.textMuted),
+                onSelected: (val) {
+                  if (val == 'ledger') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CustomerLedgerScreen(customer: customer),
+                      ),
+                    ).then((_) {
+                      ref.read(customerListProvider.notifier).fetchCustomers();
+                    });
+                  } else if (val == 'delete') {
+                    _confirmDeleteCustomer(context, customer);
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'ledger',
+                    child: Row(
+                      children: [
+                        Icon(Icons.receipt_long, size: 18, color: AppColors.primary),
+                        SizedBox(width: 8),
+                        Text('View Ledger'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('Delete Customer', style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDeleteCustomer(BuildContext context, CustomerModel customer) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            SizedBox(width: 10),
+            Text('Delete Customer?'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete "${customer.name}"?',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
+            if (customer.outstandingBalance > 0)
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Warning: Customer has outstanding balance of ${CurrencyFormatter.format(customer.outstandingBalance)}.',
+                        style: TextStyle(color: Colors.red.shade800, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 10),
+            const Text(
+              'This customer will be removed from your active directory across all synced devices. Prior invoices remain for accounting/GST records.',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      await CustomerRepository().deleteCustomer(customer.uuid);
+      try {
+        await ApiClient.instance.deleteCustomer(customer.uuid);
+      } catch (_) {}
+      ref.read(customerListProvider.notifier).fetchCustomers();
+      ref.read(dashboardProvider.notifier).refreshSummary();
+      SyncService.instance.synchronize();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Customer "${customer.name}" deleted.'),
+            backgroundColor: Colors.black87,
+          ),
+        );
+      }
+    }
   }
 }

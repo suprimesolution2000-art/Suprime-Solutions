@@ -141,4 +141,14 @@ class CustomerRepository {
       WHERE uuid = ?
     ''', [amountAdded, paymentDeducted, amountAdded, paymentDeducted, customerUuid]);
   }
+
+  Future<void> deleteCustomer(String customerUuid) async {
+    final db = await _db.database;
+    await db.update(
+      'customers',
+      {'active': 0},
+      where: 'uuid = ?',
+      whereArgs: [customerUuid],
+    );
+  }
 }

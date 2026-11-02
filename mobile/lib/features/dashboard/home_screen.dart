@@ -9,6 +9,7 @@ import '../../providers/invoice_provider.dart';
 import '../../services/sync/sync_service.dart';
 import '../billing/create_bill_screen.dart';
 import '../reports/reports_screen.dart';
+import '../products/products_screen.dart';
 import '../navigation/main_scaffold.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -262,7 +263,7 @@ class HomeScreen extends ConsumerWidget {
                       },
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: _buildQuickActionButton(
                       icon: Icons.people,
@@ -275,7 +276,20 @@ class HomeScreen extends ConsumerWidget {
                       },
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildQuickActionButton(
+                      icon: Icons.inventory_2,
+                      label: 'Products',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ProductsScreen()),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: _buildQuickActionButton(
                       icon: Icons.bar_chart,

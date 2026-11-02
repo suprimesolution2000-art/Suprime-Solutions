@@ -5,8 +5,11 @@ import '../../core/utils/date_formatter.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/models/payment_model.dart';
+import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/invoice_repository.dart';
 import '../../data/repositories/payment_repository.dart';
+import '../../services/api/api_client.dart';
+import '../../services/sync/sync_service.dart';
 import '../invoices/invoice_detail_screen.dart';
 
 class CustomerLedgerScreen extends StatefulWidget {
@@ -61,6 +64,13 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
     return Scaffold(
       appBar: AppBar(
         title: Text(c.name),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+            tooltip: 'Delete Customer',
+            onPressed: () => _confirmDeleteCustomer(context, c),
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -219,5 +229,88 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDeleteCustomer(BuildContext context, CustomerModel customer) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            SizedBox(width: 10),
+            Text('Delete Customer?'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete "${customer.name}"?',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
+            if (customer.outstandingBalance > 0)
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Warning: Customer has outstanding balance of ${CurrencyFormatter.format(customer.outstandingBalance)}.',
+                        style: TextStyle(color: Colors.red.shade800, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 10),
+            const Text(
+              'This customer will be removed from your active directory on all devices. Prior invoices remain for accounting/GST records.',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await CustomerRepository().deleteCustomer(customer.uuid);
+      try {
+        await ApiClient.instance.deleteCustomer(customer.uuid);
+      } catch (_) {}
+      SyncService.instance.synchronize();
+      if (mounted) {
+        Navigator.pop(context, true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Customer "${customer.name}" deleted.'),
+            backgroundColor: Colors.black87,
+          ),
+        );
+      }
+    }
   }
 }

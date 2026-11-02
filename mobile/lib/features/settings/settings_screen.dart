@@ -7,6 +7,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/sync/sync_service.dart';
 import '../../data/database/app_database.dart';
 import '../admin/staff_management_screen.dart';
+import '../products/products_screen.dart';
 import 'package:sqflite/sqflite.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -191,6 +192,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 16),
+
+            // Product Catalogue Card
+            Card(
+              margin: EdgeInsets.zero,
+              elevation: 2,
+              color: Colors.green.shade50,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.green.shade200),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                leading: CircleAvatar(
+                  backgroundColor: Colors.green.shade700,
+                  child: const Icon(Icons.inventory_2, color: Colors.white),
+                ),
+                title: const Text(
+                  'Product Catalogue & Pricing',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                subtitle: const Text(
+                  'Manage hardware, gaskets, hydraulic seals, HSN & GST rates. Add or delete items.',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: AppColors.primary),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ProductsScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
             const SizedBox(height: 16),
 
             // 2. Cloud Sync Management Card

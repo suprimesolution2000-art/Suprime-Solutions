@@ -68,12 +68,13 @@ exports.registerDevice = async (req, res, next) => {
 // Push local offline records to cloud backend
 exports.pushSync = async (req, res, next) => {
   try {
-    const { deviceId, customers = [], invoices = [], payments = [] } = req.body;
+    const { deviceId, customers = [], invoices = [], payments = [], products = [] } = req.body;
 
     const results = {
       customersSynced: 0,
       invoicesSynced: 0,
       paymentsSynced: 0,
+      productsSynced: 0,
       errors: []
     };
 
@@ -222,6 +223,33 @@ exports.pushSync = async (req, res, next) => {
       }
     }
 
+    // 4. Sync Products
+    for (const prod of products) {
+      try {
+        if (!prod.description || !prod.description.trim()) continue;
+        const prodUuid = prod.uuid || require('uuid').v4();
+        await Product.findOneAndUpdate(
+          { $or: [{ uuid: prodUuid }, { description: prod.description.trim() }] },
+          {
+            $set: {
+              uuid: prodUuid,
+              description: prod.description.trim(),
+              hsnCode: prod.hsnCode || prod.hsn_code || '',
+              unit: prod.unit || 'PCS',
+              defaultRate: Number(prod.defaultRate !== undefined ? prod.defaultRate : prod.default_rate) || 0,
+              gstRate: Number(prod.gstRate !== undefined ? prod.gstRate : prod.gst_rate) || 18,
+              active: prod.active !== undefined ? (prod.active === true || prod.active === 1 || prod.active === 'true' || prod.active === '1') : true,
+              updatedAt: new Date()
+            }
+          },
+          { upsert: true, new: true }
+        );
+        results.productsSynced++;
+      } catch (err) {
+        results.errors.push({ type: 'Product', id: prod.uuid, error: err.message });
+      }
+    }
+
     if (deviceId) {
       await Device.updateOne({ deviceId }, { $set: { lastSyncAt: new Date() } });
     }
@@ -251,28 +279,34 @@ exports.pullSync = async (req, res, next) => {
 
     const isFullSync = !sinceDate;
 
+    // In full sync, return all active customers; in incremental sync, return all modified records (including deactivated)
     const custQuery = isFullSync
       ? { active: true }
       : {
-          $and: [
-            { active: true },
-            {
-              $or: [
-                { updatedAt: { $gt: sinceDate } },
-                { updatedAt: { $exists: false } }
-              ]
-            }
+          $or: [
+            { updatedAt: { $gt: sinceDate } },
+            { updatedAt: { $exists: false } }
           ]
         };
 
     const invQuery = isFullSync ? {} : { updatedAt: { $gt: sinceDate } };
     const payQuery = isFullSync ? {} : { updatedAt: { $gt: sinceDate } };
 
+    // In full sync, return all active products; in incremental sync, return all modified products (including deactivated)
+    const prodQuery = isFullSync
+      ? { active: true }
+      : {
+          $or: [
+            { updatedAt: { $gt: sinceDate } },
+            { updatedAt: { $exists: false } }
+          ]
+        };
+
     const [customers, invoices, payments, products] = await Promise.all([
       Customer.find(custQuery).lean(),
       Invoice.find(invQuery).lean(),
       Payment.find(payQuery).lean(),
-      Product.find({ active: true }).lean()
+      Product.find(prodQuery).lean()
     ]);
 
     res.json({

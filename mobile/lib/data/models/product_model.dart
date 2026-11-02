@@ -29,15 +29,40 @@ class ProductModel {
     };
   }
 
+  Map<String, dynamic> toApiMap() {
+    return {
+      'uuid': uuid,
+      'description': description,
+      'hsnCode': hsnCode,
+      'unit': unit,
+      'defaultRate': defaultRate,
+      'gstRate': gstRate,
+      'active': active,
+    };
+  }
+
   factory ProductModel.fromMap(Map<String, dynamic> map) {
+    double parseNum(dynamic val) {
+      if (val == null) return 0.0;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? 0.0;
+    }
+
+    final rawUuid = (map['uuid'] ?? map['_id'] ?? '').toString();
+    final isActive = map['active'] == null ||
+        map['active'] == 1 ||
+        map['active'] == true ||
+        map['active'] == '1' ||
+        map['active'] == 'true';
+
     return ProductModel(
-      uuid: map['uuid'] ?? '',
-      description: map['description'] ?? '',
-      hsnCode: map['hsn_code'] ?? map['hsnCode'] ?? '',
-      unit: map['unit'] ?? 'PCS',
-      defaultRate: (map['default_rate'] ?? map['defaultRate'] ?? 0.0).toDouble(),
-      gstRate: (map['gst_rate'] ?? map['gstRate'] ?? 18.0).toDouble(),
-      active: map['active'] == 1 || map['active'] == true,
+      uuid: rawUuid,
+      description: (map['description'] ?? '').toString(),
+      hsnCode: (map['hsn_code'] ?? map['hsnCode'] ?? '').toString(),
+      unit: (map['unit'] ?? 'PCS').toString(),
+      defaultRate: parseNum(map['default_rate'] ?? map['defaultRate']),
+      gstRate: parseNum(map['gst_rate'] ?? map['gstRate'] ?? 18.0),
+      active: isActive,
     );
   }
 }

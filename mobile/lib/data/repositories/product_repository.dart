@@ -13,7 +13,7 @@ class ProductRepository {
       final query = '%${searchQuery.trim()}%';
       results = await db.rawQuery('''
         SELECT * FROM products 
-        WHERE active = 1 AND (
+        WHERE (active = 1 OR active IS NULL OR active = 'true') AND (
           description LIKE ? OR 
           hsn_code LIKE ?
         )
@@ -22,7 +22,7 @@ class ProductRepository {
     } else {
       results = await db.query(
         'products',
-        where: 'active = 1',
+        where: "active = 1 OR active IS NULL OR active = 'true'",
         orderBy: 'description ASC',
       );
     }
@@ -39,18 +39,47 @@ class ProductRepository {
     );
   }
 
-  /// Automatically saves or updates manual product description, HSN code & details for future bills
+  /// Automatically saves or updates product description, HSN code & details
   Future<void> saveOrUpdateProduct({
+    String? uuid,
     required String description,
     required String hsnCode,
     String unit = 'PCS',
     double defaultRate = 0.0,
     double gstRate = 18.0,
+    bool active = true,
   }) async {
     final cleanDesc = description.trim();
     if (cleanDesc.isEmpty) return;
 
     final db = await _db.database;
+
+    // Check by uuid first if provided
+    if (uuid != null && uuid.isNotEmpty) {
+      final existingByUuid = await db.query(
+        'products',
+        where: 'uuid = ?',
+        whereArgs: [uuid],
+        limit: 1,
+      );
+      if (existingByUuid.isNotEmpty) {
+        await db.update(
+          'products',
+          {
+            'description': cleanDesc,
+            if (hsnCode.trim().isNotEmpty) 'hsn_code': hsnCode.trim(),
+            'unit': unit,
+            if (defaultRate > 0) 'default_rate': defaultRate,
+            'gst_rate': gstRate,
+            'active': active ? 1 : 0,
+          },
+          where: 'uuid = ?',
+          whereArgs: [uuid],
+        );
+        return;
+      }
+    }
+
     final existing = await db.query(
       'products',
       where: 'LOWER(description) = LOWER(?)',
@@ -59,7 +88,7 @@ class ProductRepository {
     );
 
     if (existing.isNotEmpty) {
-      final uuid = existing.first['uuid'] as String;
+      final existingUuid = existing.first['uuid'] as String;
       await db.update(
         'products',
         {
@@ -67,13 +96,13 @@ class ProductRepository {
           'unit': unit,
           if (defaultRate > 0) 'default_rate': defaultRate,
           'gst_rate': gstRate,
-          'active': 1,
+          'active': active ? 1 : 0,
         },
         where: 'uuid = ?',
-        whereArgs: [uuid],
+        whereArgs: [existingUuid],
       );
     } else {
-      final newUuid = 'prod-${DateTime.now().millisecondsSinceEpoch}';
+      final newUuid = uuid ?? 'prod-${DateTime.now().millisecondsSinceEpoch}';
       await db.insert(
         'products',
         {
@@ -83,10 +112,20 @@ class ProductRepository {
           'unit': unit,
           'default_rate': defaultRate,
           'gst_rate': gstRate,
-          'active': 1,
+          'active': active ? 1 : 0,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     }
+  }
+
+  Future<void> deleteProduct(String productUuid) async {
+    final db = await _db.database;
+    await db.update(
+      'products',
+      {'active': 0},
+      where: 'uuid = ?',
+      whereArgs: [productUuid],
+    );
   }
 }
