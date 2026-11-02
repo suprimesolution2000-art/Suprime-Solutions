@@ -39,6 +39,11 @@ class SyncService extends ChangeNotifier {
     if (lastSyncStr != null) {
       _lastSyncTime = DateTime.tryParse(lastSyncStr);
     }
+    // Auto-heal local customers from existing local bills if any exist
+    try {
+      await CustomerRepository().recoverCustomersFromInvoices();
+    } catch (_) {}
+
     await checkPendingQueue();
   }
 
@@ -52,7 +57,7 @@ class SyncService extends ChangeNotifier {
   }
 
   // Trigger synchronization
-  Future<bool> synchronize() async {
+  Future<bool> synchronize({bool forceFullSync = false}) async {
     _status = SyncStatus.syncing;
     _statusMessage = 'Syncing bills with cloud...';
     notifyListeners();
@@ -62,6 +67,11 @@ class SyncService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
 
       final deviceId = prefs.getString('device_id') ?? 'android_mobile_1';
+
+      // Auto-heal customers from local invoices
+      try {
+        await CustomerRepository().recoverCustomersFromInvoices();
+      } catch (_) {}
 
       // Self-healing check: Compare local invoices with cloud server
       try {
@@ -125,7 +135,10 @@ class SyncService extends ChangeNotifier {
       }).toList();
 
       // Collect all local customers to sync
-      final localCustomers = await db.query('customers', where: 'active = 1');
+      final localCustomers = await db.query(
+        'customers',
+        where: "active = 1 OR active IS NULL OR active = 'true'",
+      );
       final customersToPush = localCustomers.map((c) => {
         'uuid': c['uuid'],
         'name': c['name'],
@@ -165,7 +178,15 @@ class SyncService extends ChangeNotifier {
       }
 
       // 3. Pull updates from server
-      final pullRes = await ApiClient.instance.pullSync(_lastSyncTime?.toIso8601String());
+      // If local DB has 0 customers or forceFullSync requested, ALWAYS do full sync
+      final custCount = Sqflite.firstIntValue(
+        await db.rawQuery("SELECT COUNT(*) FROM customers WHERE (active = 1 OR active IS NULL OR active = 'true')"),
+      ) ?? 0;
+
+      final bool doFullPull = forceFullSync || custCount == 0 || _lastSyncTime == null;
+      final String? sinceParam = doFullPull ? null : _lastSyncTime?.toIso8601String();
+
+      final pullRes = await ApiClient.instance.pullSync(sinceParam);
       if (pullRes.statusCode == 200 && pullRes.data['success'] == true) {
         final data = pullRes.data['data'];
         final custRepo = CustomerRepository();

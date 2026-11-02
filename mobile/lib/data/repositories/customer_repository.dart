@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import '../database/app_database.dart';
 import '../models/customer_model.dart';
@@ -5,15 +6,42 @@ import '../models/customer_model.dart';
 class CustomerRepository {
   final AppDatabase _db = AppDatabase.instance;
 
+  // Auto-heal customers from local invoices
+  Future<int> recoverCustomersFromInvoices() async {
+    final db = await _db.database;
+    final invoices = await db.query('invoices');
+    int recovered = 0;
+    for (final invRow in invoices) {
+      try {
+        final custJson = invRow['customer_json'] as String?;
+        if (custJson != null && custJson.isNotEmpty) {
+          final custMap = jsonDecode(custJson);
+          final cust = CustomerModel.fromMap(Map<String, dynamic>.from(custMap));
+          if (cust.name.trim().isNotEmpty) {
+            await saveCustomer(cust);
+            recovered++;
+          }
+        }
+      } catch (_) {}
+    }
+    return recovered;
+  }
+
   Future<List<CustomerModel>> getAllCustomers({String? searchQuery}) async {
     final db = await _db.database;
     List<Map<String, dynamic>> results;
+
+    // Auto-heal if customers table is empty but local invoices exist
+    final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM customers')) ?? 0;
+    if (count == 0) {
+      await recoverCustomersFromInvoices();
+    }
 
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
       final query = '%${searchQuery.trim()}%';
       results = await db.rawQuery('''
         SELECT * FROM customers 
-        WHERE active = 1 AND (
+        WHERE (active = 1 OR active IS NULL OR active = 'true') AND (
           name LIKE ? OR 
           business_name LIKE ? OR 
           phone LIKE ? OR 
@@ -24,7 +52,7 @@ class CustomerRepository {
     } else {
       results = await db.query(
         'customers',
-        where: 'active = 1',
+        where: "active = 1 OR active IS NULL OR active = 'true'",
         orderBy: 'name ASC',
       );
     }

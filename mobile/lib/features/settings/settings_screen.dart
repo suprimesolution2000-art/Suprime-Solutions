@@ -257,11 +257,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           onPressed: sync.status == SyncStatus.syncing
                               ? null
                               : () async {
-                                  final ok = await SyncService.instance.synchronize();
+                                  final ok = await SyncService.instance.synchronize(forceFullSync: true);
                                   if (!mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text(ok ? 'Sync successful!' : 'Saved offline on device.'),
+                                      content: Text(ok ? 'Sync successful! All data up to date.' : 'Saved offline on device.'),
                                       backgroundColor: ok ? AppColors.paid : Colors.deepOrange,
                                     ),
                                   );

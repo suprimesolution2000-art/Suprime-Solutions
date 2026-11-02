@@ -86,7 +86,7 @@ class HomeScreen extends ConsumerWidget {
                 icon: Icon(icon, color: color),
                 tooltip: tip,
                 onPressed: () async {
-                  await SyncService.instance.synchronize();
+                  await SyncService.instance.synchronize(forceFullSync: true);
                   ref.read(dashboardProvider.notifier).refreshSummary();
                   ref.read(customerListProvider.notifier).fetchCustomers();
                   ref.read(invoiceListProvider.notifier).fetchInvoices();
@@ -106,7 +106,7 @@ class HomeScreen extends ConsumerWidget {
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh Figures',
             onPressed: () async {
-              await SyncService.instance.synchronize();
+              await SyncService.instance.synchronize(forceFullSync: true);
               await ref.read(dashboardProvider.notifier).refreshSummary();
               ref.read(customerListProvider.notifier).fetchCustomers();
               ref.read(invoiceListProvider.notifier).fetchInvoices();
@@ -116,7 +116,7 @@ class HomeScreen extends ConsumerWidget {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          await SyncService.instance.synchronize();
+          await SyncService.instance.synchronize(forceFullSync: true);
           await ref.read(dashboardProvider.notifier).refreshSummary();
           ref.read(customerListProvider.notifier).fetchCustomers();
           ref.read(invoiceListProvider.notifier).fetchInvoices();

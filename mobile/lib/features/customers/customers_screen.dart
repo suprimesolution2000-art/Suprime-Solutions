@@ -51,7 +51,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             icon: const Icon(Icons.refresh),
             tooltip: 'Sync & Refresh',
             onPressed: () async {
-              await SyncService.instance.synchronize();
+              await SyncService.instance.synchronize(forceFullSync: true);
               await notifier.fetchCustomers();
             },
           ),
@@ -90,7 +90,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 : customerState.customers.isEmpty
                     ? RefreshIndicator(
                         onRefresh: () async {
-                          await SyncService.instance.synchronize();
+                          await SyncService.instance.synchronize(forceFullSync: true);
                           await notifier.fetchCustomers();
                         },
                         child: SingleChildScrollView(
@@ -121,7 +121,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                       )
                     : RefreshIndicator(
                         onRefresh: () async {
-                          await SyncService.instance.synchronize();
+                          await SyncService.instance.synchronize(forceFullSync: true);
                           await notifier.fetchCustomers();
                         },
                         child: ListView.builder(

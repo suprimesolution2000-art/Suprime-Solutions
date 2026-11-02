@@ -57,7 +57,13 @@ class CustomerListNotifier extends StateNotifier<CustomerListState> {
   Future<void> fetchCustomers() async {
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
-      final list = await _repo.getAllCustomers(searchQuery: state.searchQuery);
+      var list = await _repo.getAllCustomers(searchQuery: state.searchQuery);
+      if (list.isEmpty && state.searchQuery.isEmpty) {
+        final recovered = await _repo.recoverCustomersFromInvoices();
+        if (recovered > 0) {
+          list = await _repo.getAllCustomers(searchQuery: state.searchQuery);
+        }
+      }
       state = state.copyWith(customers: list, isLoading: false);
     } catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: e.toString());

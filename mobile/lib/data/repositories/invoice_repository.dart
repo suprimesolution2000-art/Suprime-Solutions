@@ -294,7 +294,7 @@ class InvoiceRepository {
     ''');
 
     // Customer count
-    final custRes = await db.rawQuery('SELECT COUNT(*) as count FROM customers WHERE active = 1');
+    final custRes = await db.rawQuery("SELECT COUNT(*) as count FROM customers WHERE (active = 1 OR active IS NULL OR active = 'true')");
 
     return {
       'todaySales': (todayRes.first['total'] as num?)?.toDouble() ?? 0.0,

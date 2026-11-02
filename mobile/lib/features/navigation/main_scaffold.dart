@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../services/sync/sync_service.dart';
 import '../dashboard/home_screen.dart';
 import '../invoices/bills_screen.dart';
 import '../customers/customers_screen.dart';
@@ -27,6 +28,10 @@ class _MainScaffoldState extends State<MainScaffold> {
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    // Auto-sync in background whenever MainScaffold loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SyncService.instance.synchronize();
+    });
   }
 
   @override

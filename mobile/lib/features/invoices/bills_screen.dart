@@ -130,7 +130,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                     icon: const Icon(Icons.refresh),
                     tooltip: 'Sync & Refresh',
                     onPressed: () async {
-                      await SyncService.instance.synchronize();
+                      await SyncService.instance.synchronize(forceFullSync: true);
                       await notifier.fetchInvoices();
                     },
                   ),
@@ -189,7 +189,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                 : invoiceState.invoices.isEmpty
                     ? RefreshIndicator(
                         onRefresh: () async {
-                          await SyncService.instance.synchronize();
+                          await SyncService.instance.synchronize(forceFullSync: true);
                           await notifier.fetchInvoices();
                         },
                         child: SingleChildScrollView(
@@ -220,7 +220,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                       )
                     : RefreshIndicator(
                         onRefresh: () async {
-                          await SyncService.instance.synchronize();
+                          await SyncService.instance.synchronize(forceFullSync: true);
                           await notifier.fetchInvoices();
                         },
                         child: ListView.builder(
