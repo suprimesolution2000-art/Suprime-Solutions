@@ -89,9 +89,15 @@ exports.pushSync = async (req, res, next) => {
             updatedAt: new Date()
           });
         } else {
+          // A stale device must not reactivate a customer that was deleted elsewhere.
+          // Re-activation remains available through the explicit customer update API.
+          const updateData = { ...profileData, updatedAt: new Date() };
+          if (existingCust.active === false && cust.active !== false) {
+            updateData.active = false;
+          }
           await Customer.updateOne(
             { uuid: cust.uuid },
-            { $set: { ...profileData, updatedAt: new Date() } }
+            { $set: updateData }
           );
         }
         results.customersSynced++;
@@ -128,6 +134,11 @@ exports.pushSync = async (req, res, next) => {
             await existing.save();
             results.invoicesSynced++;
           }
+          continue;
+        }
+
+        // Ignore stale copies of an invoice that has already been cancelled/deleted.
+        if (existing && (existing.status === 'cancelled' || existing.active === false)) {
           continue;
         }
 
@@ -311,8 +322,13 @@ exports.pushSync = async (req, res, next) => {
       try {
         if (!prod.description || !prod.description.trim()) continue;
         const prodUuid = prod.uuid || require('uuid').v4();
+        const productFilter = { $or: [{ uuid: prodUuid }, { description: prod.description.trim() }] };
+        const existingProduct = await Product.findOne(productFilter);
+        const requestedActive = prod.active !== undefined
+          ? (prod.active === true || prod.active === 1 || prod.active === 'true' || prod.active === '1')
+          : true;
         await Product.findOneAndUpdate(
-          { $or: [{ uuid: prodUuid }, { description: prod.description.trim() }] },
+          productFilter,
           {
             $set: {
               uuid: prodUuid,
@@ -321,7 +337,8 @@ exports.pushSync = async (req, res, next) => {
               unit: prod.unit || 'PCS',
               defaultRate: Number(prod.defaultRate !== undefined ? prod.defaultRate : prod.default_rate) || 0,
               gstRate: Number(prod.gstRate !== undefined ? prod.gstRate : prod.gst_rate) || 18,
-              active: prod.active !== undefined ? (prod.active === true || prod.active === 1 || prod.active === 'true' || prod.active === '1') : true,
+              // Keep a deletion made on another device when this device sends a stale active copy.
+              active: existingProduct?.active === false ? false : requestedActive,
               updatedAt: new Date()
             }
           },
@@ -362,9 +379,9 @@ exports.pullSync = async (req, res, next) => {
 
     const isFullSync = !sinceDate;
 
-    // In full sync, return all active customers; in incremental sync, return all modified records (including deactivated)
+    // Full sync includes inactive records so clients can apply deletion tombstones.
     const custQuery = isFullSync
-      ? { active: true }
+      ? {}
       : {
           $or: [
             { updatedAt: { $gt: sinceDate } },
@@ -373,7 +390,7 @@ exports.pullSync = async (req, res, next) => {
         };
 
     const invQuery = isFullSync
-      ? { active: { $ne: false }, status: { $ne: 'cancelled' } }
+      ? {}
       : {
           $or: [
             { updatedAt: { $gt: sinceDate } },
@@ -382,9 +399,9 @@ exports.pullSync = async (req, res, next) => {
         };
     const payQuery = isFullSync ? {} : { updatedAt: { $gt: sinceDate } };
 
-    // In full sync, return all active products; in incremental sync, return all modified products (including deactivated)
+    // Full sync includes inactive products so clients can apply deletion tombstones.
     const prodQuery = isFullSync
-      ? { active: true }
+      ? {}
       : {
           $or: [
             { updatedAt: { $gt: sinceDate } },
