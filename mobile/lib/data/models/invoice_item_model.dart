@@ -56,6 +56,27 @@ class InvoiceItemModel {
     };
   }
 
+  Map<String, dynamic> toApiMap() {
+    return {
+      'sno': sno,
+      'description': description,
+      'hsnCode': hsnCode,
+      'quantity': quantity,
+      'unit': unit,
+      'rate': rate,
+      'discount': discount,
+      'taxableValue': taxableValue,
+      'gstRate': gstRate,
+      'cgstRate': cgstRate,
+      'cgstAmount': cgstAmount,
+      'sgstRate': sgstRate,
+      'sgstAmount': sgstAmount,
+      'igstRate': igstRate,
+      'igstAmount': igstAmount,
+      'totalAmount': totalAmount,
+    };
+  }
+
   factory InvoiceItemModel.fromMap(Map<String, dynamic> map) {
     return InvoiceItemModel(
       sno: (map['sno'] ?? 1) as int,

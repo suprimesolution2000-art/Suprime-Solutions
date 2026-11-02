@@ -96,15 +96,36 @@ exports.pushSync = async (req, res, next) => {
       try {
         const existing = await Invoice.findOne({ uuid: inv.uuid });
         if (!existing) {
+          // Normalize items (support both snake_case and camelCase from mobile)
+          const normalizedItems = (inv.items || []).map((itm, idx) => ({
+            sno: itm.sno || idx + 1,
+            description: itm.description || '',
+            hsnCode: itm.hsnCode || itm.hsn_code || '',
+            quantity: Number(itm.quantity) || 0,
+            unit: itm.unit || 'PCS',
+            rate: Number(itm.rate) || 0,
+            discount: Number(itm.discount) || 0,
+            taxableValue: Number(itm.taxableValue !== undefined ? itm.taxableValue : itm.taxable_value) || 0,
+            gstRate: Number(itm.gstRate !== undefined ? itm.gstRate : (itm.gst_rate !== undefined ? itm.gst_rate : 18.0)),
+            cgstRate: Number(itm.cgstRate !== undefined ? itm.cgstRate : itm.cgst_rate) || 0,
+            cgstAmount: Number(itm.cgstAmount !== undefined ? itm.cgstAmount : itm.cgst_amount) || 0,
+            sgstRate: Number(itm.sgstRate !== undefined ? itm.sgstRate : itm.sgst_rate) || 0,
+            sgstAmount: Number(itm.sgstAmount !== undefined ? itm.sgstAmount : itm.sgst_amount) || 0,
+            igstRate: Number(itm.igstRate !== undefined ? itm.igstRate : itm.igst_rate) || 0,
+            igstAmount: Number(itm.igstAmount !== undefined ? itm.igstAmount : itm.igst_amount) || 0,
+            totalAmount: Number(itm.totalAmount !== undefined ? itm.totalAmount : itm.total_amount) || 0,
+          }));
+
           // Validate calculations
           const financials = calculateInvoiceFinancials(
-            inv.items,
+            normalizedItems,
             inv.customer ? inv.customer.stateCode : '22',
             env.COMPANY.stateCode || '22'
           );
 
           await Invoice.create({
             ...inv,
+            items: financials.items,
             createdBy: inv.createdBy || (req.user ? req.user.name : 'Administrator'),
             netAmount: financials.netAmount,
             cgstTotal: financials.cgstTotal,

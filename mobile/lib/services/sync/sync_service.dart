@@ -104,7 +104,7 @@ class SyncService extends ChangeNotifier {
           'challanDate': inv.challanDate?.toIso8601String(),
           'customer': inv.customer.toMap(),
           'isInterState': inv.isInterState,
-          'items': inv.items.map((e) => e.toMap()).toList(),
+          'items': inv.items.map((e) => e.toApiMap()).toList(),
           'netAmount': inv.netAmount,
           'cgstTotal': inv.cgstTotal,
           'sgstTotal': inv.sgstTotal,

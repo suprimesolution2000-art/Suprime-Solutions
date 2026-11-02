@@ -78,7 +78,7 @@ function calculateInvoiceFinancials(items, customerStateCode = '22', businessSta
     const qty = Number(item.quantity) || 0;
     const rate = Number(item.rate) || 0;
     const discount = Number(item.discount) || 0;
-    const gstRate = Number(item.gstRate !== undefined ? item.gstRate : 18.0);
+    const gstRate = Number(item.gstRate !== undefined ? item.gstRate : (item.gst_rate !== undefined ? item.gst_rate : 18.0));
 
     const grossValue = Math.round(qty * rate * 100) / 100;
     const taxableValue = Math.max(0, Math.round((grossValue - discount) * 100) / 100);
@@ -107,7 +107,7 @@ function calculateInvoiceFinancials(items, customerStateCode = '22', businessSta
     return {
       sno: item.sno || idx + 1,
       description: item.description,
-      hsnCode: item.hsnCode || '',
+      hsnCode: item.hsnCode || item.hsn_code || '',
       quantity: qty,
       unit: item.unit || 'PCS',
       rate: rate,
