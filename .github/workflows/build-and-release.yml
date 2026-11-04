@@ -1,0 +1,102 @@
+name: Cloud Build & Auto-Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/build-and-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: ☕ Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: 🐦 Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: 🔑 Restore Android Keystore from Secret
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > mobile/android/app/suprime_solutions.jks
+          ls -l mobile/android/app/suprime_solutions.jks
+
+      - name: 🏷️ Extract Version from pubspec.yaml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version:' mobile/pubspec.yaml | sed 's/version: //' | tr -d '\r' | cut -d'+' -f1 | tr -d ' ')
+          BUILD_NUM=$(grep '^version:' mobile/pubspec.yaml | sed 's/version: //' | tr -d '\r' | cut -d'+' -f2 | tr -d ' ')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "BUILD_NUM=$BUILD_NUM" >> $GITHUB_ENV
+          echo "TAG_NAME=v$VERSION" >> $GITHUB_ENV
+          echo "Extracted App Version: $VERSION+$BUILD_NUM (Tag: v$VERSION)"
+
+      - name: 📦 Install Flutter Dependencies
+        run: |
+          cd mobile
+          flutter pub get
+
+      - name: 🧪 Run Flutter Unit Tests
+        run: |
+          cd mobile
+          flutter test
+
+      - name: 🔨 Build Release APK in Cloud
+        run: |
+          cd mobile
+          flutter build apk --release
+
+      - name: 📋 Prepare & Rename Release APK
+        run: |
+          APK_SRC="mobile/build/app/outputs/flutter-apk/app-release.apk"
+          APK_DEST="mobile/build/app/outputs/flutter-apk/Suprime_Solutions_${TAG_NAME}.apk"
+          cp "$APK_SRC" "$APK_DEST"
+          ls -lh "$APK_DEST"
+          echo "APK_PATH=$APK_DEST" >> $GITHUB_ENV
+
+      - name: 🚀 Publish GitHub Release & Upload APK
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          echo "Checking if release $TAG_NAME already exists..."
+          if gh release view "$TAG_NAME" --repo suprimesolution2000-art/Suprime-Solutions > /dev/null 2>&1; then
+            echo "Release $TAG_NAME exists. Uploading/updating asset..."
+            gh release upload "$TAG_NAME" "$APK_PATH" --clobber --repo suprimesolution2000-art/Suprime-Solutions
+          else
+            echo "Creating new release $TAG_NAME..."
+            gh release create "$TAG_NAME" "$APK_PATH" \
+              --title "Suprime Solutions $TAG_NAME (Automated Cloud Build)" \
+              --notes "## 🚀 Suprime Solutions Automated Cloud Build $TAG_NAME
+
+### 📦 Direct Download APK:
+Direct download for Android: **[Suprime_Solutions_${TAG_NAME}.apk](https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/${TAG_NAME}/Suprime_Solutions_${TAG_NAME}.apk)**
+
+---
+### 🛠️ Release Highlights:
+- Built automatically by GitHub Cloud CI/CD in ~2 minutes with zero laptop CPU overhead.
+- Dual-v2 signed with release key for direct in-app update.
+- Users running previous versions will automatically receive the update prompt inside the app." \
+              --repo suprimesolution2000-art/Suprime-Solutions
+          fi
+          echo "✅ Release $TAG_NAME published successfully!"
