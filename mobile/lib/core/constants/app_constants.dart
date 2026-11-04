@@ -1,5 +1,7 @@
 class AppConstants {
   static const String appName = 'Suprime Solutions';
+  static const String appVersion = '1.0.14';
+  static const int buildNumber = 14;
   static const String companyName = 'Suprime Solutions';
   static const String gstin = '22FWDPD2626D1Z7';
   static const String ePan = 'FWDPD2626D';

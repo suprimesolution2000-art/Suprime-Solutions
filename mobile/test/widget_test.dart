@@ -6,6 +6,7 @@ import 'package:mobile_billing/core/utils/currency_formatter.dart';
 import 'package:mobile_billing/data/models/invoice_model.dart';
 import 'package:mobile_billing/data/models/customer_model.dart';
 import 'package:mobile_billing/data/models/invoice_item_model.dart';
+import 'package:mobile_billing/services/updater/app_update_service.dart';
 
 void main() {
   test('Indian Currency & Words Utilities Test', () {
@@ -64,6 +65,16 @@ void main() {
     expect(edited.grandTotal, 500);
     expect(edited.balanceDue, 500);
     expect(edited.syncStatus, 'waiting_for_internet');
+  });
+
+  test('AppUpdateService.isNewerVersion semantic version comparisons', () {
+    expect(AppUpdateService.isNewerVersion('1.0.13', '1.0.14'), isTrue);
+    expect(AppUpdateService.isNewerVersion('1.0.13', 'v1.0.14'), isTrue);
+    expect(AppUpdateService.isNewerVersion('1.0.14', '1.0.14'), isFalse);
+    expect(AppUpdateService.isNewerVersion('1.0.14', 'v1.0.14'), isFalse);
+    expect(AppUpdateService.isNewerVersion('1.0.14', '1.0.13'), isFalse);
+    expect(AppUpdateService.isNewerVersion('1.0.14+14', 'v1.0.15+15'), isTrue);
+    expect(AppUpdateService.isNewerVersion('1.0.14', '2.0.0'), isTrue);
   });
 
   testWidgets('App Launches and displays Login Screen when unauthenticated', (WidgetTester tester) async {

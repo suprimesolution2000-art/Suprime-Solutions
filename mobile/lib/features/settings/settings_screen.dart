@@ -5,6 +5,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/sync/sync_service.dart';
+import '../../services/updater/app_update_service.dart';
 import '../../data/database/app_database.dart';
 import '../admin/staff_management_screen.dart';
 import '../products/products_screen.dart';
@@ -20,6 +21,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _nextNumberController = TextEditingController(text: '1');
   final _prefixController = TextEditingController(text: '');
+  bool _isCheckingUpdate = false;
 
   @override
   void initState() {
@@ -408,6 +410,63 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.grey.shade200),
+              ),
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.system_update_rounded, color: AppColors.primary),
+                        SizedBox(width: 8),
+                        Text(
+                          'App Updates',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildDetailRow('Current Version', 'v${AppConstants.appVersion} (Build ${AppConstants.buildNumber})'),
+                    _buildDetailRow('Updater Status', 'In-App Direct Auto-Updater Active'),
+                    const SizedBox(height: 14),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: _isCheckingUpdate
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.refresh_rounded, color: Colors.white),
+                      label: Text(
+                        _isCheckingUpdate ? 'Checking for updates...' : 'Check for Updates',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: _isCheckingUpdate
+                          ? null
+                          : () async {
+                              setState(() => _isCheckingUpdate = true);
+                              await AppUpdateService.instance.checkForUpdate(context: context, silent: false);
+                              if (mounted) setState(() => _isCheckingUpdate = false);
+                            },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
           ],
         ),
       ),
