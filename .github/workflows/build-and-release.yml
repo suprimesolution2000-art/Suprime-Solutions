@@ -2,13 +2,10 @@ name: Cloud Build & Auto-Release APK
 
 on:
   push:
-    tags:
-      - 'v*'
     branches:
       - main
-    paths:
-      - 'mobile/**'
-      - '.github/workflows/build-and-release.yml'
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
