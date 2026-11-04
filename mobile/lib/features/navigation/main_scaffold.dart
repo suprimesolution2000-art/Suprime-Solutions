@@ -31,7 +31,7 @@ class _MainScaffoldState extends State<MainScaffold> {
     _currentIndex = widget.initialIndex;
     // Auto-sync in background whenever MainScaffold loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      SyncService.instance.synchronize();
+      SyncService.instance.synchronize(forceFullSync: true);
       Future.delayed(const Duration(seconds: 3), () {
         if (mounted) {
           AppUpdateService.instance.checkForUpdate(context: context, silent: true);

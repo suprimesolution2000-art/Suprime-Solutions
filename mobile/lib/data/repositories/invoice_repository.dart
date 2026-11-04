@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 import '../database/app_database.dart';
 import '../models/invoice_model.dart';
 import 'customer_repository.dart';
+import '../../services/sync/sync_service.dart';
 
 class InvoiceRepository {
   final AppDatabase _db = AppDatabase.instance;
@@ -113,6 +115,7 @@ class InvoiceRepository {
     );
     try {
       await CustomerRepository().recalculateCustomerBalances(targetCustomerUuid: invoice.customer.uuid);
+      unawaited(SyncService.instance.synchronize(forceFullSync: false));
     } catch (_) {}
   }
 
@@ -130,6 +133,7 @@ class InvoiceRepository {
     );
     try {
       await CustomerRepository().recalculateCustomerBalances();
+      unawaited(SyncService.instance.synchronize(forceFullSync: false));
     } catch (_) {}
   }
 
@@ -143,6 +147,7 @@ class InvoiceRepository {
     );
     try {
       await CustomerRepository().recalculateCustomerBalances();
+      unawaited(SyncService.instance.synchronize(forceFullSync: false));
     } catch (_) {}
   }
 
@@ -179,6 +184,7 @@ class InvoiceRepository {
 
     try {
       await CustomerRepository().recalculateCustomerBalances(targetCustomerUuid: invoice.customer.uuid);
+      unawaited(SyncService.instance.synchronize(forceFullSync: false));
     } catch (_) {}
   }
 
@@ -233,6 +239,7 @@ class InvoiceRepository {
 
     try {
       await CustomerRepository().recalculateCustomerBalances();
+      unawaited(SyncService.instance.synchronize(forceFullSync: false));
     } catch (_) {}
   }
 

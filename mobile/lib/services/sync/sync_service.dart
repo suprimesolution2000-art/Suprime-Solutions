@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../data/database/app_database.dart';
@@ -18,7 +20,7 @@ enum SyncStatus {
   offline
 }
 
-class SyncService extends ChangeNotifier {
+class SyncService extends ChangeNotifier with WidgetsBindingObserver {
   static final SyncService instance = SyncService._init();
   SyncService._init();
 
@@ -34,18 +36,61 @@ class SyncService extends ChangeNotifier {
   DateTime? _lastSyncTime;
   DateTime? get lastSyncTime => _lastSyncTime;
 
+  bool _isSyncing = false;
+  Timer? _foregroundTimer;
+
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
     final lastSyncStr = prefs.getString('last_sync_time');
     if (lastSyncStr != null) {
       _lastSyncTime = DateTime.tryParse(lastSyncStr);
     }
+
+    // Register app lifecycle observer to sync on open, resume, and close
+    WidgetsBinding.instance.addObserver(this);
+
     // Auto-heal local customers from existing local bills if any exist
     try {
       await CustomerRepository().recoverCustomersFromInvoices();
     } catch (_) {}
 
     await checkPendingQueue();
+
+    // Start periodic background sync for active sessions (every 25 seconds)
+    _startForegroundTimer();
+
+    // Initial full sync on app startup
+    unawaited(synchronize(forceFullSync: true));
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('[SyncService] App resumed: Triggering immediate full refresh of bills, customers, products...');
+      _startForegroundTimer();
+      synchronize(forceFullSync: true);
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      debugPrint('[SyncService] App closing / backgrounding: Flushing pending bills to cloud...');
+      _stopForegroundTimer();
+      // Immediately push all local pending records before app is suspended/closed
+      synchronize(forceFullSync: false);
+    }
+  }
+
+  void _startForegroundTimer() {
+    _stopForegroundTimer();
+    _foregroundTimer = Timer.periodic(const Duration(seconds: 25), (timer) {
+      if (!_isSyncing) {
+        synchronize(forceFullSync: true);
+      }
+    });
+  }
+
+  void _stopForegroundTimer() {
+    _foregroundTimer?.cancel();
+    _foregroundTimer = null;
   }
 
   Future<void> checkPendingQueue() async {
@@ -57,8 +102,10 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Trigger synchronization
+  // Trigger synchronization across bills, customers, products, and payments
   Future<bool> synchronize({bool forceFullSync = false}) async {
+    if (_isSyncing) return false;
+    _isSyncing = true;
     _status = SyncStatus.syncing;
     _statusMessage = 'Syncing bills with cloud...';
     notifyListeners();
@@ -69,35 +116,7 @@ class SyncService extends ChangeNotifier {
 
       final deviceId = prefs.getString('device_id') ?? 'android_mobile_1';
 
-      // Auto-heal customers from local invoices
-      try {
-        await CustomerRepository().recoverCustomersFromInvoices();
-      } catch (_) {}
-
-      // Self-healing check: Compare local invoices with cloud server
-      try {
-        final checkRes = await ApiClient.instance.pullSync(null);
-        if (checkRes.statusCode == 200 && checkRes.data['success'] == true) {
-          final serverList = checkRes.data['data']['invoices'] as List? ?? [];
-          final serverUuids = serverList.map((i) => i['uuid']?.toString()).toSet();
-          final allLocal = await db.query('invoices');
-          for (final row in allLocal) {
-            final u = row['uuid']?.toString();
-            if (u != null && !serverUuids.contains(u)) {
-              await db.update(
-                'invoices',
-                {'sync_status': 'waiting_for_internet'},
-                where: 'uuid = ?',
-                whereArgs: [u],
-              );
-            }
-          }
-        }
-      } catch (_) {
-        // Continue with normal sync flow if pre-check fails
-      }
-
-      // 1. Collect pending invoices
+      // 1. Collect pending invoices created/edited on this device
       final pendingInvoicesData = await db.query(
         'invoices',
         where: "sync_status != 'synced'",
@@ -158,8 +177,11 @@ class SyncService extends ChangeNotifier {
         'active': c['active'] == 1 || c['active'] == true,
       }).toList();
 
-      // Collect local products to sync
-      final localProducts = await db.query('products');
+      // Collect products
+      final localProducts = await db.query(
+        'products',
+        where: "active = 1 OR active IS NULL OR active = 'true'",
+      );
       final productsToPush = localProducts.map((p) => {
         'uuid': p['uuid'],
         'description': p['description'],
@@ -170,7 +192,7 @@ class SyncService extends ChangeNotifier {
         'active': p['active'] == 1 || p['active'] == true,
       }).toList();
 
-      // Collect local payments to sync
+      // Collect payments
       final localPayments = await db.query('payments');
       final paymentsToPush = localPayments.map((p) => {
         'uuid': p['uuid'],
@@ -212,7 +234,7 @@ class SyncService extends ChangeNotifier {
         }
       }
 
-      // 2. Push to backend if any
+      // Step 1: Push to backend if any pending items
       if (invoicesToPush.isNotEmpty || customersToPush.isNotEmpty || productsToPush.isNotEmpty || paymentsToPush.isNotEmpty) {
         final pushRes = await ApiClient.instance.pushSync(
           deviceId: deviceId,
@@ -234,16 +256,8 @@ class SyncService extends ChangeNotifier {
         }
       }
 
-      // 3. Pull updates from server
-      // If local DB has 0 customers or forceFullSync requested, ALWAYS do full sync
-      final custCount = Sqflite.firstIntValue(
-        await db.rawQuery("SELECT COUNT(*) FROM customers WHERE (active = 1 OR active IS NULL OR active = 'true')"),
-      ) ?? 0;
-
-      final bool doFullPull = forceFullSync || custCount == 0 || _lastSyncTime == null;
-      final String? sinceParam = doFullPull ? null : _lastSyncTime?.toIso8601String();
-
-      final pullRes = await ApiClient.instance.pullSync(sinceParam);
+      // Step 2: Pull updates from server (always full pull on refresh/open/resume to prevent device clock skew)
+      final pullRes = await ApiClient.instance.pullSync(forceFullSync ? null : _lastSyncTime?.toIso8601String());
       if (pullRes.statusCode == 200 && pullRes.data['success'] == true) {
         final data = pullRes.data['data'];
         final custRepo = CustomerRepository();
@@ -252,7 +266,7 @@ class SyncService extends ChangeNotifier {
             .map((r) => r['key'] as String)
             .toSet();
 
-        // 3a. Save cloud customers to local SQLite (ignoring deleted customers)
+        // 2a. Save cloud customers
         final serverCustomers = data['customers'] as List? ?? [];
         for (final item in serverCustomers) {
           final custMap = Map<String, dynamic>.from(item);
@@ -269,7 +283,7 @@ class SyncService extends ChangeNotifier {
           }
         }
 
-        // 3b. Save cloud invoices (skipping deleted invoices and protecting unsynced local drafts)
+        // 2b. Save cloud invoices
         final serverInvoices = data['invoices'] as List? ?? [];
         for (final item in serverInvoices) {
           final invMap = Map<String, dynamic>.from(item);
@@ -277,7 +291,6 @@ class SyncService extends ChangeNotifier {
           if (activeTombstones.contains('deleted_invoice_${serverInv.uuid}') ||
               serverInv.status == 'cancelled' ||
               invMap['active'] == false) {
-            // Deleted or cancelled invoice: remove from local DB and clean up orphaned payments
             await db.delete('invoices', where: 'uuid = ?', whereArgs: [serverInv.uuid]);
             await db.delete('payments', where: 'invoice_id = ?', whereArgs: [serverInv.uuid]);
             continue;
@@ -298,21 +311,9 @@ class SyncService extends ChangeNotifier {
             serverInv.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
-          if (serverInv.customer.name.trim().isNotEmpty &&
-              !activeTombstones.contains('deleted_customer_${serverInv.customer.uuid}')) {
-            final existingCust = await db.query(
-              'customers',
-              where: 'uuid = ?',
-              whereArgs: [serverInv.customer.uuid],
-              limit: 1,
-            );
-            if (existingCust.isEmpty || (existingCust.first['active'] == 1 || existingCust.first['active'] == 'true')) {
-              await custRepo.saveCustomer(serverInv.customer);
-            }
-          }
         }
 
-        // 3c. Save cloud payments
+        // 2c. Save cloud payments
         final serverPayments = data['payments'] as List? ?? [];
         for (final item in serverPayments) {
           final payMap = Map<String, dynamic>.from(item);
@@ -326,7 +327,7 @@ class SyncService extends ChangeNotifier {
           }
         }
 
-        // 3d. Save products catalogue
+        // 2d. Save products catalogue
         final serverProducts = data['products'] as List? ?? [];
         final prodRepo = ProductRepository();
         for (final item in serverProducts) {
@@ -344,26 +345,40 @@ class SyncService extends ChangeNotifier {
           }
         }
 
-        // 3e. Auto-recalculate customer balances from all synced invoices
+        // 2e. Reconcile all customer balances from freshly synced invoices
         try {
           await custRepo.recalculateCustomerBalances();
         } catch (_) {}
+
+        final serverTime = pullRes.data['timestamp'] as String?;
+        if (serverTime != null) {
+          _lastSyncTime = DateTime.tryParse(serverTime) ?? DateTime.now();
+        } else {
+          _lastSyncTime = DateTime.now();
+        }
+        await prefs.setString('last_sync_time', _lastSyncTime!.toIso8601String());
       }
 
-      _lastSyncTime = DateTime.now();
-      await prefs.setString('last_sync_time', _lastSyncTime!.toIso8601String());
-
+      await checkPendingQueue();
       _status = SyncStatus.synced;
-      _statusMessage = 'Cloud sync successful';
-      _pendingCount = 0;
+      _statusMessage = 'Up to date';
       notifyListeners();
       return true;
     } catch (e) {
-      _status = SyncStatus.offline;
-      _statusMessage = 'Offline: Saved locally, waiting for internet';
-      await checkPendingQueue();
+      debugPrint('[SyncService] Sync error: $e');
+      _status = SyncStatus.failed;
+      _statusMessage = 'Sync failed. Will retry automatically.';
       notifyListeners();
       return false;
+    } finally {
+      _isSyncing = false;
     }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopForegroundTimer();
+    super.dispose();
   }
 }

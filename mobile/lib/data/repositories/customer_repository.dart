@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import '../database/app_database.dart';
 import '../models/customer_model.dart';
+import '../../services/sync/sync_service.dart';
 
 class CustomerRepository {
   final AppDatabase _db = AppDatabase.instance;
@@ -313,5 +315,9 @@ class CustomerRepository {
       where: 'uuid = ?',
       whereArgs: [customerUuid],
     );
+
+    try {
+      unawaited(SyncService.instance.synchronize(forceFullSync: false));
+    } catch (_) {}
   }
 }
