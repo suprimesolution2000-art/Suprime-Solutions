@@ -98,8 +98,8 @@ class AppUpdateService {
         debugPrint('[AppUpdateService] Backend version check error: $backendErr. Falling back to GitHub.');
       }
 
-      // 2. Fallback to GitHub Releases API directly
-      if (updateInfo == null) {
+      // 2. Check GitHub Releases directly if backend had no update or returned older version
+      if (updateInfo == null || !isNewerVersion(AppConstants.appVersion, updateInfo.version)) {
         try {
           final ghResponse = await _dio.get(
             'https://api.github.com/repos/suprimesolution2000-art/Suprime-Solutions/releases/latest',
@@ -121,7 +121,7 @@ class AppUpdateService {
             );
 
             if (apkAsset != null) {
-              updateInfo = AppUpdateInfo(
+              final ghInfo = AppUpdateInfo(
                 version: version,
                 tagName: tagName,
                 releaseName: data['name'] ?? 'Version $version',
@@ -130,6 +130,9 @@ class AppUpdateService {
                 apkSize: apkAsset['size'],
                 publishedAt: data['published_at'],
               );
+              if (isNewerVersion(AppConstants.appVersion, ghInfo.version)) {
+                updateInfo = ghInfo;
+              }
             }
           }
         } catch (ghErr) {
