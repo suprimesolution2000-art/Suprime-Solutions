@@ -37,6 +37,9 @@ class CustomerRepository {
         }
       } catch (_) {}
     }
+    if (recovered > 0) {
+      await recalculateCustomerBalances();
+    }
     return recovered;
   }
 
@@ -49,6 +52,11 @@ class CustomerRepository {
     if (count == 0) {
       await recoverCustomersFromInvoices();
     }
+
+    // Always recalculate customer balances from actual local invoices so due is never 0 when unpaid bills exist
+    try {
+      await recalculateCustomerBalances();
+    } catch (_) {}
 
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
       final query = '%${searchQuery.trim()}%';
@@ -113,6 +121,15 @@ class CustomerRepository {
         if (preserveInactive && (existingActive == 0 || existingActive == 'false')) {
           map['active'] = 0;
         }
+        // Preserve existing due balance if incoming customer object has 0.0
+        final existingDue = (existingByUuid.first['outstanding_balance'] as num?)?.toDouble() ?? 0.0;
+        final existingBilled = (existingByUuid.first['total_billed'] as num?)?.toDouble() ?? 0.0;
+        final existingPaid = (existingByUuid.first['total_paid'] as num?)?.toDouble() ?? 0.0;
+        if (customer.outstandingBalance == 0.0 && existingDue > 0.0) {
+          map['outstanding_balance'] = existingDue;
+          map['total_billed'] = existingBilled;
+          map['total_paid'] = existingPaid;
+        }
         await db.update(
           'customers',
           map,
@@ -138,6 +155,15 @@ class CustomerRepository {
         if (preserveInactive && (existingActive == 0 || existingActive == 'false')) {
           updatedMap['active'] = 0;
         }
+        // Preserve existing due balance if incoming customer object has 0.0
+        final existingDue = (existingByName.first['outstanding_balance'] as num?)?.toDouble() ?? 0.0;
+        final existingBilled = (existingByName.first['total_billed'] as num?)?.toDouble() ?? 0.0;
+        final existingPaid = (existingByName.first['total_paid'] as num?)?.toDouble() ?? 0.0;
+        if (customer.outstandingBalance == 0.0 && existingDue > 0.0) {
+          updatedMap['outstanding_balance'] = existingDue;
+          updatedMap['total_billed'] = existingBilled;
+          updatedMap['total_paid'] = existingPaid;
+        }
         await db.update(
           'customers',
           updatedMap,
@@ -160,6 +186,103 @@ class CustomerRepository {
       map,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  /// Dynamically computes and updates the true financial totals (totalBilled, totalPaid, outstandingBalance)
+  /// directly from local active invoices and payments.
+  Future<void> recalculateCustomerBalances({String? targetCustomerUuid}) async {
+    final db = await _db.database;
+
+    // Fetch all active invoices (excluding cancelled)
+    final invoices = await db.query(
+      'invoices',
+      columns: ['customer_json', 'grand_total', 'total_paid', 'balance_due', 'status'],
+      where: "status != 'cancelled'",
+    );
+
+    final Map<String, double> billedByUuid = {};
+    final Map<String, double> paidByUuid = {};
+    final Map<String, double> dueByUuid = {};
+
+    final Map<String, double> billedByPhone = {};
+    final Map<String, double> paidByPhone = {};
+    final Map<String, double> dueByPhone = {};
+
+    final Map<String, double> billedByName = {};
+    final Map<String, double> paidByName = {};
+    final Map<String, double> dueByName = {};
+
+    for (final inv in invoices) {
+      final rawCust = inv['customer_json'] as String?;
+      if (rawCust == null || rawCust.isEmpty) continue;
+      try {
+        final custMap = jsonDecode(rawCust);
+        final uuid = (custMap['uuid'] ?? '').toString().trim();
+        final phone = (custMap['phone'] ?? '').toString().trim();
+        final name = (custMap['name'] ?? '').toString().trim().toLowerCase();
+
+        final grandTotal = (inv['grand_total'] as num?)?.toDouble() ?? 0.0;
+        final totalPaid = (inv['total_paid'] as num?)?.toDouble() ?? 0.0;
+        final balanceDue = (inv['balance_due'] as num?)?.toDouble() ?? 0.0;
+
+        if (uuid.isNotEmpty) {
+          billedByUuid[uuid] = (billedByUuid[uuid] ?? 0.0) + grandTotal;
+          paidByUuid[uuid] = (paidByUuid[uuid] ?? 0.0) + totalPaid;
+          dueByUuid[uuid] = (dueByUuid[uuid] ?? 0.0) + balanceDue;
+        }
+        if (phone.isNotEmpty) {
+          billedByPhone[phone] = (billedByPhone[phone] ?? 0.0) + grandTotal;
+          paidByPhone[phone] = (paidByPhone[phone] ?? 0.0) + totalPaid;
+          dueByPhone[phone] = (dueByPhone[phone] ?? 0.0) + balanceDue;
+        }
+        if (name.isNotEmpty) {
+          billedByName[name] = (billedByName[name] ?? 0.0) + grandTotal;
+          paidByName[name] = (paidByName[name] ?? 0.0) + totalPaid;
+          dueByName[name] = (dueByName[name] ?? 0.0) + balanceDue;
+        }
+      } catch (_) {}
+    }
+
+    final customerRows = targetCustomerUuid != null
+        ? await db.query('customers', where: 'uuid = ?', whereArgs: [targetCustomerUuid])
+        : await db.query('customers');
+
+    final batch = db.batch();
+    for (final c in customerRows) {
+      final uuid = (c['uuid'] ?? '').toString().trim();
+      final phone = (c['phone'] ?? '').toString().trim();
+      final name = (c['name'] ?? '').toString().trim().toLowerCase();
+
+      double liveBilled = 0.0;
+      double livePaid = 0.0;
+      double liveDue = 0.0;
+
+      if (uuid.isNotEmpty && billedByUuid.containsKey(uuid)) {
+        liveBilled = billedByUuid[uuid] ?? 0.0;
+        livePaid = paidByUuid[uuid] ?? 0.0;
+        liveDue = dueByUuid[uuid] ?? 0.0;
+      } else if (phone.isNotEmpty && billedByPhone.containsKey(phone)) {
+        liveBilled = billedByPhone[phone] ?? 0.0;
+        livePaid = paidByPhone[phone] ?? 0.0;
+        liveDue = dueByPhone[phone] ?? 0.0;
+      } else if (name.isNotEmpty && billedByName.containsKey(name)) {
+        liveBilled = billedByName[name] ?? 0.0;
+        livePaid = paidByName[name] ?? 0.0;
+        liveDue = dueByName[name] ?? 0.0;
+      }
+
+      batch.update(
+        'customers',
+        {
+          'total_billed': liveBilled,
+          'total_paid': livePaid,
+          'outstanding_balance': liveDue.clamp(0.0, double.infinity),
+        },
+        where: 'uuid = ?',
+        whereArgs: [uuid],
+      );
+    }
+    await batch.commit(noResult: true);
   }
 
   Future<void> updateCustomerBalance(String customerUuid, double amountAdded, double paymentDeducted) async {

@@ -25,7 +25,7 @@ const getLatestRelease = async (req, res) => {
 
     if (response.ok) {
       const data = await response.json();
-      const tagName = data.tag_name || 'v1.0.14';
+      const tagName = data.tag_name || 'v1.0.15';
       const version = tagName.replace(/^v/, '');
       const apkAsset = (data.assets || []).find(a => a.name && a.name.endsWith('.apk'));
 
@@ -48,11 +48,11 @@ const getLatestRelease = async (req, res) => {
 
     // Fallback if GitHub rate-limited or unreachable
     const fallback = {
-      latestVersion: '1.0.14',
-      tagName: 'v1.0.14',
-      releaseName: 'Suprime Solutions v1.0.14',
-      releaseNotes: 'In-app auto-updater, multi-device delete anomaly fixes, and bill editing.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.14/Suprime_Solutions_v1.0.14.apk',
+      latestVersion: '1.0.15',
+      tagName: 'v1.0.15',
+      releaseName: 'Suprime Solutions v1.0.15',
+      releaseNotes: 'Fixed customer outstanding due balance display and live reconciliation.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.15/Suprime_Solutions_v1.0.15.apk',
       apkSize: null,
       publishedAt: new Date().toISOString()
     };
@@ -64,11 +64,11 @@ const getLatestRelease = async (req, res) => {
     console.error('Error fetching latest release:', err.message);
     return res.json({
       success: true,
-      latestVersion: '1.0.14',
-      tagName: 'v1.0.14',
-      releaseName: 'Suprime Solutions v1.0.14',
-      releaseNotes: 'In-app auto-updater, multi-device delete anomaly fixes, and bill editing.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.14/Suprime_Solutions_v1.0.14.apk',
+      latestVersion: '1.0.15',
+      tagName: 'v1.0.15',
+      releaseName: 'Suprime Solutions v1.0.15',
+      releaseNotes: 'Fixed customer outstanding due balance display and live reconciliation.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.15/Suprime_Solutions_v1.0.15.apk',
       apkSize: null,
       publishedAt: new Date().toISOString()
     });

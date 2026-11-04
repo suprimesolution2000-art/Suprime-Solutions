@@ -343,6 +343,11 @@ class SyncService extends ChangeNotifier {
             await prodRepo.saveProduct(serverProd);
           }
         }
+
+        // 3e. Auto-recalculate customer balances from all synced invoices
+        try {
+          await custRepo.recalculateCustomerBalances();
+        } catch (_) {}
       }
 
       _lastSyncTime = DateTime.now();

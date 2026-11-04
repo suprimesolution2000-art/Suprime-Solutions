@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import '../database/app_database.dart';
 import '../models/invoice_model.dart';
+import 'customer_repository.dart';
 
 class InvoiceRepository {
   final AppDatabase _db = AppDatabase.instance;
@@ -110,6 +111,9 @@ class InvoiceRepository {
       invoice.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    try {
+      await CustomerRepository().recalculateCustomerBalances(targetCustomerUuid: invoice.customer.uuid);
+    } catch (_) {}
   }
 
   Future<void> updatePaymentStatus(String invoiceUuid, double newTotalPaid, double newBalanceDue, String paymentStatus) async {
@@ -124,6 +128,9 @@ class InvoiceRepository {
       where: 'uuid = ?',
       whereArgs: [invoiceUuid],
     );
+    try {
+      await CustomerRepository().recalculateCustomerBalances();
+    } catch (_) {}
   }
 
   Future<void> cancelInvoice(String invoiceUuid) async {
@@ -134,6 +141,9 @@ class InvoiceRepository {
       where: 'uuid = ?',
       whereArgs: [invoiceUuid],
     );
+    try {
+      await CustomerRepository().recalculateCustomerBalances();
+    } catch (_) {}
   }
 
   Future<void> updateInvoice(
@@ -165,6 +175,10 @@ class InvoiceRepository {
           whereArgs: [invoice.customer.uuid],
         );
       }
+    } catch (_) {}
+
+    try {
+      await CustomerRepository().recalculateCustomerBalances(targetCustomerUuid: invoice.customer.uuid);
     } catch (_) {}
   }
 
@@ -216,6 +230,10 @@ class InvoiceRepository {
       where: 'uuid = ?',
       whereArgs: [invoiceUuid],
     );
+
+    try {
+      await CustomerRepository().recalculateCustomerBalances();
+    } catch (_) {}
   }
 
   // Determine Financial Year for a date

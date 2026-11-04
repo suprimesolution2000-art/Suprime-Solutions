@@ -25,13 +25,56 @@ exports.getCustomers = async (req, res, next) => {
 
     const skip = (safePage - 1) * safeLimit;
     const [customers, total] = await Promise.all([
-      Customer.find(query).sort({ name: 1 }).skip(skip).limit(safeLimit),
+      Customer.find(query).sort({ name: 1 }).skip(skip).limit(safeLimit).lean(),
       Customer.countDocuments(query)
     ]);
 
+    // Dynamically calculate live outstanding balances from non-cancelled invoices
+    const customerUuids = customers.map(c => c.uuid).filter(Boolean);
+    const aggregates = await Invoice.aggregate([
+      { 
+        $match: { 
+          'customer.uuid': { $in: customerUuids },
+          status: { $ne: 'cancelled' } 
+        } 
+      },
+      {
+        $group: {
+          _id: '$customer.uuid',
+          totalBilled: { $sum: '$grandTotal' },
+          totalPaid: { $sum: '$totalPaid' },
+          outstandingBalance: { $sum: '$balanceDue' }
+        }
+      }
+    ]);
+
+    const aggMap = new Map();
+    for (const agg of aggregates) {
+      if (agg._id) {
+        aggMap.set(agg._id, {
+          totalBilled: Math.round((agg.totalBilled || 0) * 100) / 100,
+          totalPaid: Math.round((agg.totalPaid || 0) * 100) / 100,
+          outstandingBalance: Math.max(0, Math.round((agg.outstandingBalance || 0) * 100) / 100)
+        });
+      }
+    }
+
+    const enrichedCustomers = customers.map(c => {
+      const agg = aggMap.get(c.uuid);
+      if (agg) {
+        return {
+          ...c,
+          totalBilled: agg.totalBilled,
+          totalPaid: agg.totalPaid,
+          outstandingBalance: agg.outstandingBalance
+        };
+      }
+      return c;
+    });
+
     res.json({
       success: true,
-      data: customers,
+      data: enrichedCustomers,
       pagination: {
         page: safePage,
         limit: safeLimit,

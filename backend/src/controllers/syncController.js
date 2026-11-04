@@ -416,11 +416,54 @@ exports.pullSync = async (req, res, next) => {
       Product.find(prodQuery).lean()
     ]);
 
+    // Calculate live dynamic balances for pulled customers
+    const customerUuids = customers.map(c => c.uuid).filter(Boolean);
+    const aggregates = await Invoice.aggregate([
+      { 
+        $match: { 
+          'customer.uuid': { $in: customerUuids },
+          status: { $ne: 'cancelled' } 
+        } 
+      },
+      {
+        $group: {
+          _id: '$customer.uuid',
+          totalBilled: { $sum: '$grandTotal' },
+          totalPaid: { $sum: '$totalPaid' },
+          outstandingBalance: { $sum: '$balanceDue' }
+        }
+      }
+    ]);
+
+    const aggMap = new Map();
+    for (const agg of aggregates) {
+      if (agg._id) {
+        aggMap.set(agg._id, {
+          totalBilled: Math.round((agg.totalBilled || 0) * 100) / 100,
+          totalPaid: Math.round((agg.totalPaid || 0) * 100) / 100,
+          outstandingBalance: Math.max(0, Math.round((agg.outstandingBalance || 0) * 100) / 100)
+        });
+      }
+    }
+
+    const enrichedCustomers = customers.map(c => {
+      const agg = aggMap.get(c.uuid);
+      if (agg) {
+        return {
+          ...c,
+          totalBilled: agg.totalBilled,
+          totalPaid: agg.totalPaid,
+          outstandingBalance: agg.outstandingBalance
+        };
+      }
+      return c;
+    });
+
     res.json({
       success: true,
       timestamp: new Date().toISOString(),
       data: {
-        customers,
+        customers: enrichedCustomers,
         invoices,
         payments,
         products
