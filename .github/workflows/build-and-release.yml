@@ -1,4 +1,4 @@
-name: Cloud Build & Auto-Release APK
+name: "Cloud Build and Auto-Release APK"
 
 on:
   push:
@@ -77,6 +77,19 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           echo "Checking if release $TAG_NAME already exists..."
+          cat << 'EOF' > release_notes.md
+          ## 🚀 Suprime Solutions Automated Cloud Build
+
+          ### 📦 Direct Download APK:
+          Direct download available in release assets.
+
+          ---
+          ### 🛠️ Release Highlights:
+          - Built automatically by GitHub Cloud CI/CD in ~2 minutes with zero laptop CPU overhead.
+          - Dual-v2 signed with release key for direct in-app update.
+          - Users running previous versions will automatically receive the update prompt inside the app.
+          EOF
+
           if gh release view "$TAG_NAME" --repo suprimesolution2000-art/Suprime-Solutions > /dev/null 2>&1; then
             echo "Release $TAG_NAME exists. Uploading/updating asset..."
             gh release upload "$TAG_NAME" "$APK_PATH" --clobber --repo suprimesolution2000-art/Suprime-Solutions
@@ -84,16 +97,7 @@ jobs:
             echo "Creating new release $TAG_NAME..."
             gh release create "$TAG_NAME" "$APK_PATH" \
               --title "Suprime Solutions $TAG_NAME (Automated Cloud Build)" \
-              --notes "## 🚀 Suprime Solutions Automated Cloud Build $TAG_NAME
-
-### 📦 Direct Download APK:
-Direct download for Android: **[Suprime_Solutions_${TAG_NAME}.apk](https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/${TAG_NAME}/Suprime_Solutions_${TAG_NAME}.apk)**
-
----
-### 🛠️ Release Highlights:
-- Built automatically by GitHub Cloud CI/CD in ~2 minutes with zero laptop CPU overhead.
-- Dual-v2 signed with release key for direct in-app update.
-- Users running previous versions will automatically receive the update prompt inside the app." \
+              --notes-file release_notes.md \
               --repo suprimesolution2000-art/Suprime-Solutions
           fi
           echo "✅ Release $TAG_NAME published successfully!"
