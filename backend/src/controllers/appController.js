@@ -16,11 +16,16 @@ const getLatestRelease = async (req, res) => {
     }
 
     // Try fetching from GitHub releases API
+    const headers = {
+      'User-Agent': 'Suprime-Solutions-Backend',
+      'Accept': 'application/vnd.github.v3+json'
+    };
+    if (process.env.GITHUB_TOKEN) {
+      headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+    }
+
     const response = await fetch('https://api.github.com/repos/suprimesolution2000-art/Suprime-Solutions/releases/latest', {
-      headers: {
-        'User-Agent': 'Suprime-Solutions-Backend',
-        'Accept': 'application/vnd.github.v3+json'
-      }
+      headers
     });
 
     if (response.ok) {
@@ -29,21 +34,23 @@ const getLatestRelease = async (req, res) => {
       const version = tagName.replace(/^v/, '');
       const apkAsset = (data.assets || []).find(a => a.name && a.name.endsWith('.apk'));
 
-      cachedRelease = {
-        latestVersion: version,
-        tagName: tagName,
-        releaseName: data.name || `Release ${tagName}`,
-        releaseNotes: data.body || 'New update available with performance improvements and bug fixes.',
-        downloadUrl: apkAsset ? apkAsset.browser_download_url : `https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/${tagName}/Suprime_Solutions_${tagName}.apk`,
-        apkSize: apkAsset ? apkAsset.size : null,
-        publishedAt: data.published_at || new Date().toISOString()
-      };
-      lastFetchTime = now;
+      if (apkAsset) {
+        cachedRelease = {
+          latestVersion: version,
+          tagName: tagName,
+          releaseName: data.name || `Release ${tagName}`,
+          releaseNotes: data.body || 'New update available with performance improvements and bug fixes.',
+          downloadUrl: apkAsset.browser_download_url,
+          apkSize: apkAsset.size,
+          publishedAt: data.published_at || new Date().toISOString()
+        };
+        lastFetchTime = now;
 
-      return res.json({
-        success: true,
-        ...cachedRelease
-      });
+        return res.json({
+          success: true,
+          ...cachedRelease
+        });
+      }
     }
 
     // Fallback if GitHub rate-limited or unreachable

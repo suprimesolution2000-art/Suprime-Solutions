@@ -106,9 +106,13 @@ class _UpdateDialogState extends State<UpdateDialog> {
       }
     } catch (e) {
       if (mounted) {
+        String msg = 'Download failed. Please check your connection and tap Retry.';
+        if (e.toString().contains('404')) {
+          msg = 'Update file was finalizing on the server. Please tap Retry now.';
+        }
         setState(() {
           _isDownloading = false;
-          _errorMessage = 'Download failed: $e';
+          _errorMessage = msg;
         });
       }
     }
