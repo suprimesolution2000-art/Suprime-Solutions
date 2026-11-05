@@ -90,16 +90,16 @@ jobs:
           - Users running previous versions will automatically receive the update prompt inside the app.
           EOF
 
-          if gh release view "$TAG_NAME" --repo suprimesolution2000-art/Suprime-Solutions > /dev/null 2>&1; then
-            echo "Release $TAG_NAME exists. Uploading/updating asset..."
-            gh release upload "$TAG_NAME" "$APK_PATH" --clobber --repo suprimesolution2000-art/Suprime-Solutions
-            gh release edit "$TAG_NAME" --latest --repo suprimesolution2000-art/Suprime-Solutions
-          else
-            echo "Creating new release $TAG_NAME..."
-            gh release create "$TAG_NAME" "$APK_PATH" \
+          if ! gh release view "$TAG_NAME" --repo suprimesolution2000-art/Suprime-Solutions > /dev/null 2>&1; then
+            echo "Creating release $TAG_NAME..."
+            gh release create "$TAG_NAME" \
               --title "Suprime Solutions $TAG_NAME (Automated Cloud Build)" \
               --notes-file release_notes.md \
               --latest \
               --repo suprimesolution2000-art/Suprime-Solutions
           fi
+
+          echo "Uploading/updating release APK asset..."
+          gh release upload "$TAG_NAME" "$APK_PATH" --clobber --repo suprimesolution2000-art/Suprime-Solutions
+          gh release edit "$TAG_NAME" --latest --repo suprimesolution2000-art/Suprime-Solutions
           echo "✅ Release $TAG_NAME published successfully!"
