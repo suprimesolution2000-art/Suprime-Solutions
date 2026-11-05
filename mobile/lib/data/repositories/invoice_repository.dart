@@ -115,7 +115,7 @@ class InvoiceRepository {
     );
     try {
       await CustomerRepository().recalculateCustomerBalances(targetCustomerUuid: invoice.customer.uuid);
-      unawaited(SyncService.instance.synchronize(forceFullSync: false));
+      await SyncService.instance.synchronize(forceFullSync: true);
     } catch (_) {}
   }
 
@@ -133,7 +133,7 @@ class InvoiceRepository {
     );
     try {
       await CustomerRepository().recalculateCustomerBalances();
-      unawaited(SyncService.instance.synchronize(forceFullSync: false));
+      await SyncService.instance.synchronize(forceFullSync: true);
     } catch (_) {}
   }
 
@@ -147,7 +147,7 @@ class InvoiceRepository {
     );
     try {
       await CustomerRepository().recalculateCustomerBalances();
-      unawaited(SyncService.instance.synchronize(forceFullSync: false));
+      await SyncService.instance.synchronize(forceFullSync: true);
     } catch (_) {}
   }
 
@@ -239,7 +239,7 @@ class InvoiceRepository {
 
     try {
       await CustomerRepository().recalculateCustomerBalances();
-      unawaited(SyncService.instance.synchronize(forceFullSync: false));
+      await SyncService.instance.synchronize(forceFullSync: true);
     } catch (_) {}
   }
 

@@ -118,7 +118,10 @@ exports.pushSync = async (req, res, next) => {
     // 2. Sync Invoices
     for (const inv of invoices) {
       try {
-        const existing = await Invoice.findOne({ uuid: inv.uuid });
+        let existing = await Invoice.findOne({ uuid: inv.uuid });
+        if (!existing && inv.invoiceNumber) {
+          existing = await Invoice.findOne({ invoiceNumber: inv.invoiceNumber });
+        }
 
         // If invoice is marked cancelled or inactive from mobile
         if (inv.status === 'cancelled' || inv.active === false) {
@@ -179,20 +182,49 @@ exports.pushSync = async (req, res, next) => {
         );
 
         if (!existing) {
-          await Invoice.create({
-            ...inv,
-            items: financials.items,
-            createdBy: inv.createdBy || (req.user ? req.user.name : 'Administrator'),
-            netAmount: financials.netAmount,
-            cgstTotal: financials.cgstTotal,
-            sgstTotal: financials.sgstTotal,
-            igstTotal: financials.igstTotal,
-            roundOff: financials.roundOff,
-            grandTotal: financials.grandTotal,
-            amountInWords: financials.amountInWords,
-            syncStatus: 'synced'
-          });
-          results.invoicesSynced++;
+          try {
+            await Invoice.create({
+              ...inv,
+              items: financials.items,
+              createdBy: inv.createdBy || (req.user ? req.user.name : 'Administrator'),
+              netAmount: financials.netAmount,
+              cgstTotal: financials.cgstTotal,
+              sgstTotal: financials.sgstTotal,
+              igstTotal: financials.igstTotal,
+              roundOff: financials.roundOff,
+              grandTotal: financials.grandTotal,
+              amountInWords: financials.amountInWords,
+              syncStatus: 'synced'
+            });
+            results.invoicesSynced++;
+          } catch (createErr) {
+            if (createErr.code === 11000 && inv.invoiceNumber) {
+              const collision = await Invoice.findOne({ invoiceNumber: inv.invoiceNumber });
+              if (collision) {
+                collision.uuid = inv.uuid;
+                collision.items = financials.items;
+                collision.netAmount = financials.netAmount;
+                collision.cgstTotal = financials.cgstTotal;
+                collision.sgstTotal = financials.sgstTotal;
+                collision.igstTotal = financials.igstTotal;
+                collision.roundOff = financials.roundOff;
+                collision.grandTotal = financials.grandTotal;
+                collision.amountInWords = financials.amountInWords;
+                collision.balanceDue = inv.balanceDue !== undefined ? inv.balanceDue : financials.grandTotal;
+                collision.paymentStatus = inv.paymentStatus || 'unpaid';
+                collision.status = inv.status || 'finalized';
+                collision.customer = { ...(collision.customer || {}), ...(inv.customer || {}) };
+                collision.syncStatus = 'synced';
+                collision.updatedAt = new Date();
+                await collision.save();
+                results.invoicesSynced++;
+              } else {
+                throw createErr;
+              }
+            } else {
+              throw createErr;
+            }
+          }
 
           // Auto-save/update customer in cloud database (preserve deactivated state if existing)
           if (inv.customer && inv.customer.name) {
@@ -398,12 +430,13 @@ exports.pullSync = async (req, res, next) => {
           ]
         };
 
+    // For invoices, ALWAYS return all active invoices to ensure 100% multi-device sync
     const invQuery = isFullSync
       ? {}
       : {
           $or: [
-            { updatedAt: { $gt: sinceDate } },
-            { updatedAt: { $exists: false } }
+            { status: { $ne: 'cancelled' } },
+            { updatedAt: { $gt: sinceDate } }
           ]
         };
     const payQuery = isFullSync ? {} : { updatedAt: { $gt: sinceDate } };

@@ -256,8 +256,8 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
         }
       }
 
-      // Step 2: Pull updates from server (always full pull on refresh/open/resume to prevent device clock skew)
-      final pullRes = await ApiClient.instance.pullSync(forceFullSync ? null : _lastSyncTime?.toIso8601String());
+      // Step 2: Always request full sync to eliminate device clock and timezone drift between devices
+      final pullRes = await ApiClient.instance.pullSync(null);
       if (pullRes.statusCode == 200 && pullRes.data['success'] == true) {
         final data = pullRes.data['data'];
         final custRepo = CustomerRepository();
@@ -285,9 +285,14 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
 
         // 2b. Save cloud invoices
         final serverInvoices = data['invoices'] as List? ?? [];
+        int maxServerSeq = 0;
         for (final item in serverInvoices) {
           final invMap = Map<String, dynamic>.from(item);
           final serverInv = InvoiceModel.fromMap(invMap);
+
+          final seq = serverInv.sequenceNumber;
+          if (seq > maxServerSeq) maxServerSeq = seq;
+
           if (activeTombstones.contains('deleted_invoice_${serverInv.uuid}') ||
               serverInv.status == 'cancelled' ||
               invMap['active'] == false) {
@@ -306,11 +311,31 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
             continue; // Protect local offline changes
           }
 
+          // Clean up any conflicting local row with same invoice_number but different uuid
+          await db.delete(
+            'invoices',
+            where: 'invoice_number = ? AND uuid != ?',
+            whereArgs: [serverInv.invoiceNumber, serverInv.uuid],
+          );
+
           await db.insert(
             'invoices',
             serverInv.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
+        }
+
+        // Keep local sequence counter aligned with cloud maximum
+        if (maxServerSeq > 0) {
+          final currentNextRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number']);
+          final currentNext = currentNextRes.isNotEmpty ? (int.tryParse(currentNextRes.first['value'] as String) ?? 1) : 1;
+          if (maxServerSeq + 1 > currentNext) {
+            await db.insert(
+              'app_settings',
+              {'key': 'next_usable_number', 'value': (maxServerSeq + 1).toString()},
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          }
         }
 
         // 2c. Save cloud payments

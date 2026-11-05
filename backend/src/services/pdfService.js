@@ -120,7 +120,16 @@ async function generateInvoicePdf(invoice) {
     const paise = Math.round((amountVal - rupees) * 100);
 
     drawCenteredText(item.sno || idx + 1, coords.table.columns.sno.centerPx, y, 14, true);
-    drawText(item.description || '', coords.table.columns.description.leftPx, y, 13, true);
+    const desc = item.description || '';
+    if (desc.length > 25) {
+      const splitIdx = desc.lastIndexOf(' ', 25);
+      const line1 = splitIdx !== -1 ? desc.substring(0, splitIdx) : desc.substring(0, 25);
+      const line2 = splitIdx !== -1 ? desc.substring(splitIdx + 1) : desc.substring(25);
+      drawText(line1, coords.table.columns.description.leftPx, y - 8, 10.5, true);
+      drawText(line2, coords.table.columns.description.leftPx, y + 10, 10.5, true);
+    } else {
+      drawText(desc, coords.table.columns.description.leftPx, y, 13, true);
+    }
     drawCenteredText(item.hsnCode || '', coords.table.columns.hsn.centerPx, y, 13, true);
     drawCenteredText(`${item.quantity} ${item.unit || 'PCS'}`, coords.table.columns.qty.centerPx, y, 13.5, true);
     drawRightText(Number(item.rate).toFixed(2), coords.table.columns.rate.rightPx, y, 13.5, true);

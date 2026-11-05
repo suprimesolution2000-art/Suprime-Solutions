@@ -72,12 +72,12 @@ const getLatestRelease = async (req, res) => {
 
     // Fallback if GitHub rate-limited and no cache yet
     const fallback = {
-      latestVersion: '1.0.17',
-      tagName: 'v1.0.17',
-      releaseName: 'Suprime Solutions v1.0.17',
-      releaseNotes: 'Fixed customer outstanding due balance display, automatic open/close multi-device sync, and live reconciliation.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.17/Suprime_Solutions_v1.0.17.apk',
-      apkSize: 38192654,
+      latestVersion: '1.0.18',
+      tagName: 'v1.0.18',
+      releaseName: 'Suprime Solutions v1.0.18',
+      releaseNotes: 'Fixed cross-device bill sync (Device A to Device B), 2-line product name wrapping in PDF bills, and collision-free sequence sync.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.18/Suprime_Solutions_v1.0.18.apk',
+      apkSize: 38193585,
       publishedAt: new Date().toISOString()
     };
     return res.json({
@@ -94,12 +94,12 @@ const getLatestRelease = async (req, res) => {
     }
     return res.json({
       success: true,
-      latestVersion: '1.0.17',
-      tagName: 'v1.0.17',
-      releaseName: 'Suprime Solutions v1.0.17',
-      releaseNotes: 'Fixed customer outstanding due balance display, automatic open/close multi-device sync, and live reconciliation.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.17/Suprime_Solutions_v1.0.17.apk',
-      apkSize: 38192654,
+      latestVersion: '1.0.18',
+      tagName: 'v1.0.18',
+      releaseName: 'Suprime Solutions v1.0.18',
+      releaseNotes: 'Fixed cross-device bill sync (Device A to Device B), 2-line product name wrapping in PDF bills, and collision-free sequence sync.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.18/Suprime_Solutions_v1.0.18.apk',
+      apkSize: 38193585,
       publishedAt: new Date().toISOString()
     });
   }

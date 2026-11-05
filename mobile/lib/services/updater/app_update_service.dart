@@ -116,7 +116,7 @@ class AppUpdateService {
             final version = tagName.replaceAll(RegExp(r'^v'), '');
             final assets = (data['assets'] as List?) ?? [];
             final apkAsset = assets.firstWhere(
-              (a) => (a['name'] ?? '').toString().endsWith('.apk'),
+              (a) => (a['name'] ?? '').toString().endsWith('.apk') && a['state'] == 'uploaded',
               orElse: () => null,
             );
 
