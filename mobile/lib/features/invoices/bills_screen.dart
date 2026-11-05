@@ -4,6 +4,8 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../providers/invoice_provider.dart';
+import '../../providers/customer_provider.dart';
+import '../../providers/dashboard_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/repositories/invoice_repository.dart';
@@ -315,6 +317,8 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
           ),
         );
         ref.read(invoiceListProvider.notifier).fetchInvoices();
+        ref.read(customerListProvider.notifier).fetchCustomers();
+        ref.read(dashboardProvider.notifier).refreshSummary();
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -391,6 +395,8 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
               ),
             ).then((_) {
               ref.read(invoiceListProvider.notifier).fetchInvoices();
+        ref.read(customerListProvider.notifier).fetchCustomers();
+        ref.read(dashboardProvider.notifier).refreshSummary();
             });
           }
         },
@@ -459,6 +465,8 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                           ),
                         ).then((_) {
                           ref.read(invoiceListProvider.notifier).fetchInvoices();
+        ref.read(customerListProvider.notifier).fetchCustomers();
+        ref.read(dashboardProvider.notifier).refreshSummary();
                         });
                       } else if (val == 'delete') {
                         _confirmDeleteInvoice(context, inv);

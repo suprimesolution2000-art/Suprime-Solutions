@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+import '../../core/constants/app_constants.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/repositories/customer_repository.dart';
 
@@ -119,22 +120,15 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
                     child: DropdownButtonFormField<String>(
                       initialValue: _selectedState,
                       decoration: const InputDecoration(labelText: 'State'),
-                      items: const [
-                        DropdownMenuItem(value: 'Chhattisgarh', child: Text('Chhattisgarh (22)')),
-                        DropdownMenuItem(value: 'Madhya Pradesh', child: Text('Madhya Pradesh (23)')),
-                        DropdownMenuItem(value: 'Odisha', child: Text('Odisha (21)')),
-                        DropdownMenuItem(value: 'Maharashtra', child: Text('Maharashtra (27)')),
-                        DropdownMenuItem(value: 'Jharkhand', child: Text('Jharkhand (20)')),
-                        DropdownMenuItem(value: 'Other State', child: Text('Other State')),
-                      ],
+                      items: AppConstants.indianStates.entries.map((e) {
+                        return DropdownMenuItem<String>(
+                          value: e.key,
+                          child: Text('${e.key} (${e.value})'),
+                        );
+                      }).toList(),
                       onChanged: (val) {
                         if (val != null) {
-                          String code = '22';
-                          if (val == 'Madhya Pradesh') code = '23';
-                          if (val == 'Odisha') code = '21';
-                          if (val == 'Maharashtra') code = '27';
-                          if (val == 'Jharkhand') code = '20';
-                          if (val == 'Other State') code = '99';
+                          final code = AppConstants.indianStates[val] ?? '22';
                           setState(() {
                             _selectedState = val;
                             _selectedStateCode = code;

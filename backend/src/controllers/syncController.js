@@ -95,14 +95,14 @@ exports.pushSync = async (req, res, next) => {
           if (existingCust.active === false && cust.active !== false) {
             updateData.active = false;
           }
-          if (cust.outstandingBalance && cust.outstandingBalance > 0) {
-            updateData.outstandingBalance = Math.max(existingCust.outstandingBalance || 0, cust.outstandingBalance);
+          if (cust.outstandingBalance !== undefined) {
+            updateData.outstandingBalance = Number(cust.outstandingBalance) || 0;
           }
-          if (cust.totalBilled && cust.totalBilled > 0) {
-            updateData.totalBilled = Math.max(existingCust.totalBilled || 0, cust.totalBilled);
+          if (cust.totalBilled !== undefined) {
+            updateData.totalBilled = Number(cust.totalBilled) || 0;
           }
-          if (cust.totalPaid && cust.totalPaid > 0) {
-            updateData.totalPaid = Math.max(existingCust.totalPaid || 0, cust.totalPaid);
+          if (cust.totalPaid !== undefined) {
+            updateData.totalPaid = Number(cust.totalPaid) || 0;
           }
           await Customer.updateOne(
             { uuid: cust.uuid },
@@ -126,9 +126,13 @@ exports.pushSync = async (req, res, next) => {
         // If invoice is marked cancelled or inactive from mobile
         if (inv.status === 'cancelled' || inv.active === false) {
           if (existing && existing.status !== 'cancelled') {
-            if (existing.customer && existing.customer.uuid) {
+            const custQuery = existing.customer && existing.customer.uuid
+              ? { $or: [{ uuid: existing.customer.uuid }, { name: existing.customer.name }] }
+              : (existing.customer?.name ? { name: existing.customer.name } : null);
+
+            if (custQuery) {
               await Customer.updateOne(
-                { uuid: existing.customer.uuid },
+                custQuery,
                 {
                   $inc: {
                     totalBilled: -existing.grandTotal,
@@ -137,6 +141,11 @@ exports.pushSync = async (req, res, next) => {
                   }
                 }
               );
+              const updatedCust = await Customer.findOne(custQuery);
+              if (updatedCust && Math.abs(updatedCust.outstandingBalance) < 0.01) {
+                updatedCust.outstandingBalance = 0;
+                await updatedCust.save();
+              }
             }
             await Payment.deleteMany({ invoiceId: existing.uuid });
             existing.status = 'cancelled';
@@ -493,9 +502,9 @@ exports.pullSync = async (req, res, next) => {
       if (agg) {
         return {
           ...c,
-          totalBilled: Math.max(c.totalBilled || 0, agg.totalBilled || 0),
-          totalPaid: Math.max(c.totalPaid || 0, agg.totalPaid || 0),
-          outstandingBalance: Math.max(c.outstandingBalance || 0, agg.outstandingBalance || 0)
+          totalBilled: agg.totalBilled,
+          totalPaid: agg.totalPaid,
+          outstandingBalance: agg.outstandingBalance
         };
       }
       return c;

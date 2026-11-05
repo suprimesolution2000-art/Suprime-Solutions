@@ -186,6 +186,7 @@ class HomeScreen extends ConsumerWidget {
                     MaterialPageRoute(builder: (_) => const CreateBillScreen()),
                   ).then((_) {
                     ref.read(dashboardProvider.notifier).refreshSummary();
+                    ref.read(customerListProvider.notifier).fetchCustomers();
                   });
                 },
               ),

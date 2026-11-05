@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_billing/main.dart';
+import 'package:mobile_billing/core/constants/app_constants.dart';
 import 'package:mobile_billing/core/utils/number_to_words.dart';
 import 'package:mobile_billing/core/utils/currency_formatter.dart';
 import 'package:mobile_billing/data/models/invoice_model.dart';
@@ -92,6 +93,14 @@ void main() {
     await notifier.resetForm();
     expect(notifier.state.items.isEmpty, isTrue);
     expect(notifier.state.customer.name.isEmpty, isTrue);
+  });
+
+  test('Indian States constant contains all 36 States/UTs with CG code 22', () {
+    expect(AppConstants.indianStates.length, 37);
+    expect(AppConstants.indianStates['Chhattisgarh'], '22');
+    expect(AppConstants.indianStates['Madhya Pradesh'], '23');
+    expect(AppConstants.indianStates['Maharashtra'], '27');
+    expect(AppConstants.indianStates.keys.first, 'Chhattisgarh');
   });
 
   testWidgets('App Launches and displays Login Screen when unauthenticated', (WidgetTester tester) async {

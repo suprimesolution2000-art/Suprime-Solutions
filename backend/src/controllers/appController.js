@@ -72,12 +72,12 @@ const getLatestRelease = async (req, res) => {
 
     // Fallback if GitHub rate-limited and no cache yet
     const fallback = {
-      latestVersion: '1.0.19',
-      tagName: 'v1.0.19',
-      releaseName: 'Suprime Solutions v1.0.19',
-      releaseNotes: 'Restored original full text size in PDF bills while wrapping long product descriptions across multiple lines.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.19/Suprime_Solutions_v1.0.19.apk',
-      apkSize: 38194711,
+      latestVersion: '1.0.20',
+      tagName: 'v1.0.20',
+      releaseName: 'Suprime Solutions v1.0.20',
+      releaseNotes: 'Fixed customer due balance recalculation on bill deletion, 1-tap autocomplete, compulsory fields validation, bill confirmation dialog, and full list of Indian states.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.20/Suprime_Solutions_v1.0.20.apk',
+      apkSize: 38196433,
       publishedAt: new Date().toISOString()
     };
     return res.json({
@@ -94,12 +94,12 @@ const getLatestRelease = async (req, res) => {
     }
     return res.json({
       success: true,
-      latestVersion: '1.0.19',
-      tagName: 'v1.0.19',
-      releaseName: 'Suprime Solutions v1.0.19',
-      releaseNotes: 'Restored original full text size in PDF bills while wrapping long product descriptions across multiple lines.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.19/Suprime_Solutions_v1.0.19.apk',
-      apkSize: 38194711,
+      latestVersion: '1.0.20',
+      tagName: 'v1.0.20',
+      releaseName: 'Suprime Solutions v1.0.20',
+      releaseNotes: 'Fixed customer due balance recalculation on bill deletion, 1-tap autocomplete, compulsory fields validation, bill confirmation dialog, and full list of Indian states.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.20/Suprime_Solutions_v1.0.20.apk',
+      apkSize: 38196433,
       publishedAt: new Date().toISOString()
     });
   }

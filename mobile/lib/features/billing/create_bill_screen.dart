@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../providers/billing_provider.dart';
@@ -27,8 +28,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   final _invoiceNumberController = TextEditingController();
   final _poController = TextEditingController();
   final _challanController = TextEditingController();
+  TextEditingController? _customerAutocompleteController;
 
   String _selectedState = 'Chhattisgarh';
+  int _formVersion = 0;
 
   List<CustomerModel> _recentCustomers = [];
   bool _showPoDetails = false;
@@ -61,6 +64,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
       _challanController.clear();
       _selectedState = 'Chhattisgarh';
       _showPoDetails = false;
+      _formVersion++;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await ref.read(billingProvider.notifier).resetForm();
         if (mounted) {
@@ -95,13 +99,16 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   }
 
   void _onCustomerSelected(CustomerModel c) {
+    _customerAutocompleteController?.text = c.name;
     _customerNameController.text = c.name;
     _phoneController.text = c.phone;
     _gstinController.text = c.gstin;
     _addressController.text = c.address;
-    setState(() {
-      _selectedState = c.state;
-    });
+    if (c.state.isNotEmpty) {
+      setState(() {
+        _selectedState = c.state;
+      });
+    }
 
     ref.read(billingProvider.notifier).setCustomer(c);
   }
@@ -134,6 +141,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
               tooltip: 'Clear Form',
               onPressed: () async {
                 await billingNotifier.resetForm();
+                _customerAutocompleteController?.clear();
                 _customerNameController.clear();
                 _phoneController.clear();
                 _gstinController.clear();
@@ -141,6 +149,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 _invoiceNumberController.clear();
                 _poController.clear();
                 _challanController.clear();
+                setState(() {
+                  _formVersion++;
+                  _selectedState = 'Chhattisgarh';
+                });
                 if (context.mounted) {
                   final num = ref.read(billingProvider).invoiceNumber;
                   if (num.isNotEmpty) {
@@ -178,7 +190,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
                     // Customer Name with autocomplete
                     Autocomplete<CustomerModel>(
-                      key: ValueKey('cust_ac_${billState.customer.uuid}'),
+                      key: ValueKey('cust_ac_$_formVersion'),
                       initialValue: TextEditingValue(text: widget.invoiceToEdit?.customer.name ?? ''),
                       displayStringForOption: (c) => c.name,
                       optionsBuilder: (textEditingValue) {
@@ -191,6 +203,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                       },
                       onSelected: _onCustomerSelected,
                       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                        _customerAutocompleteController = controller;
                         return TextField(
                           controller: controller,
                           focusNode: focusNode,
@@ -231,7 +244,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                             controller: _gstinController,
                             textCapitalization: TextCapitalization.characters,
                             decoration: const InputDecoration(
-                              labelText: 'GSTIN (Optional)',
+                              labelText: 'GSTIN *',
                               hintText: 'e.g. 22AAAAA0000A1Z5',
                             ),
                             onChanged: (val) {
@@ -247,7 +260,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                     TextField(
                       controller: _addressController,
                       decoration: const InputDecoration(
-                        labelText: 'Address & City',
+                        labelText: 'Address & City *',
                         hintText: 'e.g. Industrial Area, Bilaspur',
                         prefixIcon: Icon(Icons.location_on_outlined),
                       ),
@@ -263,27 +276,19 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                         Expanded(
                           flex: 3,
                           child: DropdownButtonFormField<String>(
-                            initialValue: _selectedState,
+                            value: AppConstants.indianStates.containsKey(_selectedState) ? _selectedState : 'Chhattisgarh',
                             decoration: const InputDecoration(
-                              labelText: 'State (Place of Supply)',
+                              labelText: 'State (Place of Supply) *',
                             ),
-                            items: const [
-                              DropdownMenuItem(value: 'Chhattisgarh', child: Text('Chhattisgarh (22)')),
-                              DropdownMenuItem(value: 'Madhya Pradesh', child: Text('Madhya Pradesh (23)')),
-                              DropdownMenuItem(value: 'Odisha', child: Text('Odisha (21)')),
-                              DropdownMenuItem(value: 'Maharashtra', child: Text('Maharashtra (27)')),
-                              DropdownMenuItem(value: 'Jharkhand', child: Text('Jharkhand (20)')),
-                              DropdownMenuItem(value: 'Other State', child: Text('Other State (IGST)')),
-                            ],
+                            items: AppConstants.indianStates.entries.map((e) {
+                              return DropdownMenuItem<String>(
+                                value: e.key,
+                                child: Text('${e.key} (${e.value})'),
+                              );
+                            }).toList(),
                             onChanged: (val) {
                               if (val != null) {
-                                String code = '22';
-                                if (val == 'Madhya Pradesh') code = '23';
-                                if (val == 'Odisha') code = '21';
-                                if (val == 'Maharashtra') code = '27';
-                                if (val == 'Jharkhand') code = '20';
-                                if (val == 'Other State') code = '99';
-
+                                final code = AppConstants.indianStates[val] ?? '22';
                                 setState(() {
                                   _selectedState = val;
                                 });
@@ -623,52 +628,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
               ),
               onPressed: billState.isSaving
                   ? null
-                  : () async {
-                      if (widget.invoiceToEdit != null) {
-                        final updated = await billingNotifier.updateExistingInvoice();
-                        if (!context.mounted) return;
-                        if (updated != null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Bill ${updated.invoiceNumber} updated successfully!'),
-                              backgroundColor: Colors.green.shade700,
-                            ),
-                          );
-                          Navigator.pop(context, true);
-                        } else {
-                          final currentError = ref.read(billingProvider).errorMessage;
-                          if (currentError != null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(currentError),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      } else {
-                        final invoice = await billingNotifier.saveAndIssueInvoice();
-                        if (!context.mounted) return;
-                        if (invoice != null) {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => InvoiceDetailScreen(invoice: invoice),
-                            ),
-                          );
-                        } else {
-                          final currentError = ref.read(billingProvider).errorMessage;
-                          if (currentError != null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(currentError),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      }
-                    },
+                  : () => _handleSaveInvoice(isEdit: widget.invoiceToEdit != null),
               child: billState.isSaving
                   ? const CircularProgressIndicator(color: Colors.white)
                   : Text(
@@ -680,6 +640,216 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _handleSaveInvoice({required bool isEdit}) async {
+    final billState = ref.read(billingProvider);
+    final billingNotifier = ref.read(billingProvider.notifier);
+
+    // 1. Validate Customer Name (Compulsory)
+    final custName = _customerNameController.text.trim().isNotEmpty
+        ? _customerNameController.text.trim()
+        : billState.customer.name.trim();
+    if (custName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Customer name is compulsory to generate bill.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // 2. Validate GSTIN (Compulsory)
+    final gstin = _gstinController.text.trim().isNotEmpty
+        ? _gstinController.text.trim()
+        : billState.customer.gstin.trim();
+    if (gstin.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('GSTIN number is compulsory to generate bill.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // 3. Validate Address (Compulsory)
+    final address = _addressController.text.trim().isNotEmpty
+        ? _addressController.text.trim()
+        : billState.customer.address.trim();
+    if (address.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Address is compulsory to generate bill.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // 4. Validate Items (Compulsory)
+    if (billState.items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please add at least one item to generate bill.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Synchronize customer details before opening confirmation dialog
+    final selectedCode = AppConstants.indianStates[_selectedState] ?? '22';
+    billingNotifier.updateCustomerDetails(
+      name: custName,
+      gstin: gstin,
+      address: address,
+      phone: _phoneController.text.trim(),
+      stateName: _selectedState,
+      stateCode: selectedCode,
+    );
+
+    final invNum = _invoiceNumberController.text.trim().isNotEmpty
+        ? _invoiceNumberController.text.trim()
+        : billState.invoiceNumber;
+    final invDateStr = DateFormatter.format(billState.invoiceDate);
+
+    // 5. Ask confirmation about bill number and bill date
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.verified_outlined, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Text(isEdit ? 'Confirm Bill Update' : 'Confirm Bill Generation'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Please verify the bill details before saving:',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceLight,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  children: [
+                    _buildDialogRow('Bill Number:', invNum, isHighlight: true, isBold: true),
+                    const Divider(height: 16),
+                    _buildDialogRow('Bill Date:', invDateStr, isHighlight: true, isBold: true),
+                    const Divider(height: 16),
+                    _buildDialogRow('Customer:', custName),
+                    const Divider(height: 16),
+                    _buildDialogRow('GSTIN:', gstin),
+                    const Divider(height: 16),
+                    _buildDialogRow('Place of Supply:', '$_selectedState ($selectedCode)'),
+                    const Divider(height: 16),
+                    _buildDialogRow('Total Items:', '${billState.items.length}'),
+                    const Divider(height: 16),
+                    _buildDialogRow('Grand Total:', CurrencyFormatter.format(billState.grandTotal), isBold: true, isHighlight: true),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Edit / Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(isEdit ? 'Confirm & Update' : 'Confirm & Generate'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // 6. Proceed to save
+    if (isEdit) {
+      final updated = await billingNotifier.updateExistingInvoice();
+      if (!mounted) return;
+      if (updated != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Bill ${updated.invoiceNumber} updated successfully!'),
+            backgroundColor: Colors.green.shade700,
+          ),
+        );
+        Navigator.pop(context, true);
+      } else {
+        final currentError = ref.read(billingProvider).errorMessage;
+        if (currentError != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(currentError),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } else {
+      final invoice = await billingNotifier.saveAndIssueInvoice();
+      if (!mounted) return;
+      if (invoice != null) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => InvoiceDetailScreen(invoice: invoice),
+          ),
+        );
+      } else {
+        final currentError = ref.read(billingProvider).errorMessage;
+        if (currentError != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(currentError),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Widget _buildDialogRow(String label, String value, {bool isHighlight = false, bool isBold = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isBold || isHighlight ? FontWeight.bold : FontWeight.w500,
+              color: isHighlight ? AppColors.primary : AppColors.textPrimary,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

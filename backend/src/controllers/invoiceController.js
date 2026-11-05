@@ -499,17 +499,28 @@ exports.deleteInvoice = async (req, res, next) => {
     }
 
     // Adjust customer ledger balance only if invoice was not already cancelled
-    if (invoice.status !== 'cancelled' && invoice.customer && invoice.customer.uuid) {
-      await Customer.updateOne(
-        { uuid: invoice.customer.uuid },
-        {
-          $inc: {
-            totalBilled: -invoice.grandTotal,
-            outstandingBalance: -invoice.balanceDue,
-            totalPaid: -(invoice.totalPaid || 0)
+    if (invoice.status !== 'cancelled' && invoice.customer) {
+      const custQuery = invoice.customer.uuid
+        ? { $or: [{ uuid: invoice.customer.uuid }, { name: invoice.customer.name }] }
+        : (invoice.customer.name ? { name: invoice.customer.name } : null);
+
+      if (custQuery) {
+        await Customer.updateOne(
+          custQuery,
+          {
+            $inc: {
+              totalBilled: -invoice.grandTotal,
+              outstandingBalance: -invoice.balanceDue,
+              totalPaid: -(invoice.totalPaid || 0)
+            }
           }
+        );
+        const updatedCust = await Customer.findOne(custQuery);
+        if (updatedCust && Math.abs(updatedCust.outstandingBalance) < 0.01) {
+          updatedCust.outstandingBalance = 0;
+          await updatedCust.save();
         }
-      );
+      }
     }
 
     // Remove any associated payments

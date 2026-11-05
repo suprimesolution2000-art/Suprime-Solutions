@@ -194,8 +194,18 @@ class InvoiceRepository {
     if (inv != null && inv.status != 'cancelled') {
       // Revert customer outstanding balance and payments
       try {
-        final custRows = await db.query('customers', where: 'uuid = ?', whereArgs: [inv.customer.uuid], limit: 1);
+        List<Map<String, dynamic>> custRows = [];
+        if (inv.customer.uuid.isNotEmpty) {
+          custRows = await db.query('customers', where: 'uuid = ?', whereArgs: [inv.customer.uuid], limit: 1);
+        }
+        if (custRows.isEmpty && inv.customer.phone.isNotEmpty) {
+          custRows = await db.query('customers', where: 'phone = ?', whereArgs: [inv.customer.phone], limit: 1);
+        }
+        if (custRows.isEmpty && inv.customer.name.trim().isNotEmpty) {
+          custRows = await db.query('customers', where: 'LOWER(name) = ?', whereArgs: [inv.customer.name.trim().toLowerCase()], limit: 1);
+        }
         if (custRows.isNotEmpty) {
+          final matchedCustUuid = custRows.first['uuid'] as String;
           final currentBilled = (custRows.first['total_billed'] as num?)?.toDouble() ?? 0.0;
           final currentPaid = (custRows.first['total_paid'] as num?)?.toDouble() ?? 0.0;
           final currentDue = (custRows.first['outstanding_balance'] as num?)?.toDouble() ?? 0.0;
@@ -207,7 +217,7 @@ class InvoiceRepository {
               'outstanding_balance': (currentDue - inv.balanceDue).clamp(0.0, double.infinity),
             },
             where: 'uuid = ?',
-            whereArgs: [inv.customer.uuid],
+            whereArgs: [matchedCustUuid],
           );
         }
       } catch (_) {}
