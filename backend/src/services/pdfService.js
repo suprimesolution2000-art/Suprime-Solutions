@@ -125,8 +125,8 @@ async function generateInvoicePdf(invoice) {
       const splitIdx = desc.lastIndexOf(' ', 25);
       const line1 = splitIdx !== -1 ? desc.substring(0, splitIdx) : desc.substring(0, 25);
       const line2 = splitIdx !== -1 ? desc.substring(splitIdx + 1) : desc.substring(25);
-      drawText(line1, coords.table.columns.description.leftPx, y - 8, 10.5, true);
-      drawText(line2, coords.table.columns.description.leftPx, y + 10, 10.5, true);
+      drawText(line1, coords.table.columns.description.leftPx, y - 10, 13, true);
+      drawText(line2, coords.table.columns.description.leftPx, y + 12, 13, true);
     } else {
       drawText(desc, coords.table.columns.description.leftPx, y, 13, true);
     }

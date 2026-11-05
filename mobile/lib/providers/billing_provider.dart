@@ -387,6 +387,9 @@ class BillingNotifier extends StateNotifier<BillingState> {
       // 6. Trigger background sync attempt
       SyncService.instance.synchronize();
 
+      // Automatically reset form for the next bill so stale products/customer are cleared
+      await resetForm();
+
       state = state.copyWith(
         isSaving: false,
         lastSavedInvoice: invoice,
@@ -528,7 +531,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
     }
   }
 
-  void resetForm() {
+  Future<void> resetForm() async {
     state = BillingState(
       customer: CustomerModel(
         uuid: const Uuid().v4(),
@@ -538,8 +541,9 @@ class BillingNotifier extends StateNotifier<BillingState> {
         stateCode: AppConstants.stateCode,
       ),
       invoiceDate: DateTime.now(),
+      items: const [],
     );
-    loadNextInvoiceNumber();
+    await loadNextInvoiceNumber();
   }
 }
 

@@ -52,11 +52,22 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
         ref.read(billingProvider.notifier).initForEdit(inv);
       });
     } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(billingProvider.notifier).resetForm();
-        final num = ref.read(billingProvider).invoiceNumber;
-        if (num.isNotEmpty) {
-          _invoiceNumberController.text = num;
+      _customerNameController.clear();
+      _phoneController.clear();
+      _gstinController.clear();
+      _addressController.clear();
+      _invoiceNumberController.clear();
+      _poController.clear();
+      _challanController.clear();
+      _selectedState = 'Chhattisgarh';
+      _showPoDetails = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await ref.read(billingProvider.notifier).resetForm();
+        if (mounted) {
+          final num = ref.read(billingProvider).invoiceNumber;
+          if (num.isNotEmpty) {
+            _invoiceNumberController.text = num;
+          }
         }
       });
     }
@@ -101,10 +112,17 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
     final billingNotifier = ref.read(billingProvider.notifier);
 
     ref.listen<BillingState>(billingProvider, (prev, next) {
-      if (_invoiceNumberController.text.isEmpty && next.invoiceNumber.isNotEmpty) {
-        _invoiceNumberController.text = next.invoiceNumber;
+      if (widget.invoiceToEdit == null) {
+        if (next.invoiceNumber.isNotEmpty &&
+            (_invoiceNumberController.text.isEmpty || prev?.invoiceNumber != next.invoiceNumber)) {
+          _invoiceNumberController.text = next.invoiceNumber;
+        }
       }
     });
+
+    if (widget.invoiceToEdit == null && _invoiceNumberController.text.isEmpty && billState.invoiceNumber.isNotEmpty) {
+      _invoiceNumberController.text = billState.invoiceNumber;
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -114,8 +132,8 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'Clear Form',
-              onPressed: () {
-                billingNotifier.resetForm();
+              onPressed: () async {
+                await billingNotifier.resetForm();
                 _customerNameController.clear();
                 _phoneController.clear();
                 _gstinController.clear();
@@ -123,6 +141,12 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 _invoiceNumberController.clear();
                 _poController.clear();
                 _challanController.clear();
+                if (context.mounted) {
+                  final num = ref.read(billingProvider).invoiceNumber;
+                  if (num.isNotEmpty) {
+                    _invoiceNumberController.text = num;
+                  }
+                }
               },
             ),
         ],
@@ -154,6 +178,8 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
                     // Customer Name with autocomplete
                     Autocomplete<CustomerModel>(
+                      key: ValueKey('cust_ac_${billState.customer.uuid}'),
+                      initialValue: TextEditingValue(text: widget.invoiceToEdit?.customer.name ?? ''),
                       displayStringForOption: (c) => c.name,
                       optionsBuilder: (textEditingValue) {
                         if (textEditingValue.text.isEmpty) {
@@ -165,13 +191,13 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                       },
                       onSelected: _onCustomerSelected,
                       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                        controller.addListener(() {
-                          _customerNameController.text = controller.text;
-                          billingNotifier.updateCustomerDetails(name: controller.text);
-                        });
                         return TextField(
                           controller: controller,
                           focusNode: focusNode,
+                          onChanged: (val) {
+                            _customerNameController.text = val;
+                            billingNotifier.updateCustomerDetails(name: val);
+                          },
                           decoration: const InputDecoration(
                             labelText: 'Customer / Party Name *',
                             hintText: 'e.g. Jindal Steel / Sharma Hardware',

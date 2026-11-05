@@ -237,7 +237,7 @@ class PdfInvoiceService {
                       // Description (Col: 66.5 - 211.0)
                       pw.Positioned(
                         left: 68.0,
-                        top: (itm.description.length > 25) ? (y - 2.5) : y,
+                        top: (itm.description.length > 22) ? (y - 3.5) : y,
                         child: pw.SizedBox(
                           width: 142.0,
                           child: pw.Align(
@@ -249,10 +249,7 @@ class PdfInvoiceService {
                               overflow: pw.TextOverflow.clip,
                               style: pw.TextStyle(
                                 font: fontBold,
-                                fontSize: itm.description.length > 38
-                                    ? 7.8
-                                    : (itm.description.length > 25 ? 8.5 : 10.5),
-                                lineSpacing: 1.0,
+                                fontSize: 10.5,
                                 color: PdfColors.black,
                               ),
                             ),

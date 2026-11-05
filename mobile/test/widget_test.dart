@@ -7,6 +7,7 @@ import 'package:mobile_billing/data/models/invoice_model.dart';
 import 'package:mobile_billing/data/models/customer_model.dart';
 import 'package:mobile_billing/data/models/invoice_item_model.dart';
 import 'package:mobile_billing/services/updater/app_update_service.dart';
+import 'package:mobile_billing/providers/billing_provider.dart';
 
 void main() {
   test('Indian Currency & Words Utilities Test', () {
@@ -75,6 +76,22 @@ void main() {
     expect(AppUpdateService.isNewerVersion('1.0.14', '1.0.13'), isFalse);
     expect(AppUpdateService.isNewerVersion('1.0.14+14', 'v1.0.15+15'), isTrue);
     expect(AppUpdateService.isNewerVersion('1.0.14', '2.0.0'), isTrue);
+  });
+
+  test('BillingNotifier resetForm clears items and resets customer', () async {
+    final notifier = BillingNotifier();
+    notifier.addItem(
+      description: 'Spiral Wound Gasket 2"',
+      hsnCode: '8484',
+      quantity: 5,
+      unit: 'NOS',
+      rate: 350,
+    );
+    expect(notifier.state.items.length, 1);
+
+    await notifier.resetForm();
+    expect(notifier.state.items.isEmpty, isTrue);
+    expect(notifier.state.customer.name.isEmpty, isTrue);
   });
 
   testWidgets('App Launches and displays Login Screen when unauthenticated', (WidgetTester tester) async {
