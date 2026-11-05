@@ -255,9 +255,13 @@ class CustomerRepository {
       final phone = (c['phone'] ?? '').toString().trim();
       final name = (c['name'] ?? '').toString().trim().toLowerCase();
 
-      double liveBilled = 0.0;
-      double livePaid = 0.0;
-      double liveDue = 0.0;
+      final existingDue = (c['outstanding_balance'] as num?)?.toDouble() ?? 0.0;
+      final existingBilled = (c['total_billed'] as num?)?.toDouble() ?? 0.0;
+      final existingPaid = (c['total_paid'] as num?)?.toDouble() ?? 0.0;
+
+      double? liveBilled;
+      double? livePaid;
+      double? liveDue;
 
       if (uuid.isNotEmpty && billedByUuid.containsKey(uuid)) {
         liveBilled = billedByUuid[uuid] ?? 0.0;
@@ -273,12 +277,25 @@ class CustomerRepository {
         liveDue = dueByName[name] ?? 0.0;
       }
 
+      // If no matching invoices exist on this device, PRESERVE EXISTING BALANCES!
+      // NEVER overwrite customer balances to 0 when invoices are not present locally.
+      if (liveDue == null) {
+        continue;
+      }
+
+      final nonNullBilled = liveBilled ?? 0.0;
+      final nonNullPaid = livePaid ?? 0.0;
+
+      final finalBilled = nonNullBilled > existingBilled ? nonNullBilled : existingBilled;
+      final finalPaid = nonNullPaid > existingPaid ? nonNullPaid : existingPaid;
+      final finalDue = liveDue > existingDue ? liveDue : (existingDue > 0 ? existingDue : liveDue);
+
       batch.update(
         'customers',
         {
-          'total_billed': liveBilled,
-          'total_paid': livePaid,
-          'outstanding_balance': liveDue.clamp(0.0, double.infinity),
+          'total_billed': finalBilled,
+          'total_paid': finalPaid,
+          'outstanding_balance': finalDue.clamp(0.0, double.infinity),
         },
         where: 'uuid = ?',
         whereArgs: [uuid],

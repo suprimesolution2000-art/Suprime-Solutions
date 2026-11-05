@@ -95,6 +95,15 @@ exports.pushSync = async (req, res, next) => {
           if (existingCust.active === false && cust.active !== false) {
             updateData.active = false;
           }
+          if (cust.outstandingBalance && cust.outstandingBalance > 0) {
+            updateData.outstandingBalance = Math.max(existingCust.outstandingBalance || 0, cust.outstandingBalance);
+          }
+          if (cust.totalBilled && cust.totalBilled > 0) {
+            updateData.totalBilled = Math.max(existingCust.totalBilled || 0, cust.totalBilled);
+          }
+          if (cust.totalPaid && cust.totalPaid > 0) {
+            updateData.totalPaid = Math.max(existingCust.totalPaid || 0, cust.totalPaid);
+          }
           await Customer.updateOne(
             { uuid: cust.uuid },
             { $set: updateData }
@@ -451,9 +460,9 @@ exports.pullSync = async (req, res, next) => {
       if (agg) {
         return {
           ...c,
-          totalBilled: agg.totalBilled,
-          totalPaid: agg.totalPaid,
-          outstandingBalance: agg.outstandingBalance
+          totalBilled: Math.max(c.totalBilled || 0, agg.totalBilled || 0),
+          totalPaid: Math.max(c.totalPaid || 0, agg.totalPaid || 0),
+          outstandingBalance: Math.max(c.outstandingBalance || 0, agg.outstandingBalance || 0)
         };
       }
       return c;

@@ -64,9 +64,9 @@ exports.getCustomers = async (req, res, next) => {
       if (agg) {
         return {
           ...c,
-          totalBilled: agg.totalBilled,
-          totalPaid: agg.totalPaid,
-          outstandingBalance: agg.outstandingBalance
+          totalBilled: Math.max(c.totalBilled || 0, agg.totalBilled || 0),
+          totalPaid: Math.max(c.totalPaid || 0, agg.totalPaid || 0),
+          outstandingBalance: Math.max(c.outstandingBalance || 0, agg.outstandingBalance || 0)
         };
       }
       return c;

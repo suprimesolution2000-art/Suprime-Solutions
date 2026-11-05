@@ -72,12 +72,12 @@ const getLatestRelease = async (req, res) => {
 
     // Fallback if GitHub rate-limited and no cache yet
     const fallback = {
-      latestVersion: '1.0.16',
-      tagName: 'v1.0.16',
-      releaseName: 'Suprime Solutions v1.0.16',
-      releaseNotes: 'Multi-device automatic synchronization on app open, resume, close, and periodic background refresh.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.16/Suprime_Solutions_v1.0.16.apk',
-      apkSize: 38192316,
+      latestVersion: '1.0.17',
+      tagName: 'v1.0.17',
+      releaseName: 'Suprime Solutions v1.0.17',
+      releaseNotes: 'Fixed customer outstanding due balance display, automatic open/close multi-device sync, and live reconciliation.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.17/Suprime_Solutions_v1.0.17.apk',
+      apkSize: 38192654,
       publishedAt: new Date().toISOString()
     };
     return res.json({
@@ -94,12 +94,12 @@ const getLatestRelease = async (req, res) => {
     }
     return res.json({
       success: true,
-      latestVersion: '1.0.16',
-      tagName: 'v1.0.16',
-      releaseName: 'Suprime Solutions v1.0.16',
-      releaseNotes: 'Multi-device automatic synchronization on app open, resume, close, and periodic background refresh.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.16/Suprime_Solutions_v1.0.16.apk',
-      apkSize: 38192316,
+      latestVersion: '1.0.17',
+      tagName: 'v1.0.17',
+      releaseName: 'Suprime Solutions v1.0.17',
+      releaseNotes: 'Fixed customer outstanding due balance display, automatic open/close multi-device sync, and live reconciliation.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.17/Suprime_Solutions_v1.0.17.apk',
+      apkSize: 38192654,
       publishedAt: new Date().toISOString()
     });
   }
