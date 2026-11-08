@@ -72,11 +72,11 @@ const getLatestRelease = async (req, res) => {
 
     // Fallback if GitHub rate-limited and no cache yet
     const fallback = {
-      latestVersion: '1.0.25',
-      tagName: 'v1.0.25',
-      releaseName: 'Suprime Solutions v1.0.25',
-      releaseNotes: 'Fixed cloud upload timeout on Wi-Fi/Render cold starts, added auto-retry and 0.0.0.0 host binding, ensured reliable sync of all offline bills to MongoDB Atlas.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.25/Suprime_Solutions_v1.0.25.apk',
+      latestVersion: '1.0.26',
+      tagName: 'v1.0.26',
+      releaseName: 'Suprime Solutions v1.0.26',
+      releaseNotes: 'Updated Temporary Bill layout with latest sleek design, CUSTOMER NAME and DATE fields, and clean header.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.26/Suprime_Solutions_v1.0.26.apk',
       apkSize: 39500000,
       publishedAt: new Date().toISOString()
     };
@@ -94,11 +94,11 @@ const getLatestRelease = async (req, res) => {
     }
     return res.json({
       success: true,
-      latestVersion: '1.0.25',
-      tagName: 'v1.0.25',
-      releaseName: 'Suprime Solutions v1.0.25',
-      releaseNotes: 'Fixed cloud upload timeout on Wi-Fi/Render cold starts, added auto-retry and 0.0.0.0 host binding, ensured reliable sync of all offline bills to MongoDB Atlas.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.25/Suprime_Solutions_v1.0.25.apk',
+      latestVersion: '1.0.26',
+      tagName: 'v1.0.26',
+      releaseName: 'Suprime Solutions v1.0.26',
+      releaseNotes: 'Updated Temporary Bill layout with latest sleek design, CUSTOMER NAME and DATE fields, and clean header.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.26/Suprime_Solutions_v1.0.26.apk',
       apkSize: 39500000,
       publishedAt: new Date().toISOString()
     });
