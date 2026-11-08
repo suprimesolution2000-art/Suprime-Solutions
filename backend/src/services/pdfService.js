@@ -4,9 +4,11 @@ const path = require('path');
 
 const TEMPLATE_PATH = path.join(__dirname, '../../../assets/invoice-template/master_invoice.pdf');
 const COORDS_PATH = path.join(__dirname, '../../../assets/invoice-template/overlay_coordinates.json');
+const TEMP_TEMPLATE_PATH = path.join(__dirname, '../../../assets/invoice-template/temporary_bill_template.pdf');
 
 let cachedTemplateBytes = null;
 let cachedCoords = null;
+let cachedTempTemplateBytes = null;
 
 function loadTemplateData() {
   if (!cachedTemplateBytes) {
@@ -18,11 +20,134 @@ function loadTemplateData() {
   return { templateBytes: cachedTemplateBytes, coords: cachedCoords };
 }
 
+function loadTempTemplateData() {
+  if (!cachedTempTemplateBytes) {
+    cachedTempTemplateBytes = fs.readFileSync(TEMP_TEMPLATE_PATH);
+  }
+  return cachedTempTemplateBytes;
+}
+
+/**
+ * Generate Temporary Bill PDF buffer using the wood-themed template
+ * @param {Object} invoice
+ */
+async function generateTemporaryBillPdf(invoice) {
+  const templateBytes = loadTempTemplateData();
+  const pdfDoc = await PDFDocument.load(templateBytes);
+  const page = pdfDoc.getPages()[0];
+  const { height } = page.getSize();
+
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  function toPdfY(topY) {
+    return height - topY;
+  }
+
+  // Matching Theme Colors
+  const espressoColor = rgb(0.165, 0.086, 0.039); // #2A160A deep rich espresso
+  const goldCreamColor = rgb(0.98, 0.93, 0.82);   // #FAF0D1 warm golden cream
+
+  const cust = invoice.customer || {};
+  const custName = (cust.name || cust.businessName || 'Customer').toUpperCase();
+  const custAddr = (cust.address || '').trim();
+
+  // Billed To
+  if (custAddr) {
+    page.drawText(custName, {
+      x: 58.0,
+      y: toPdfY(221.0),
+      size: 11.5,
+      font: fontBold,
+      color: espressoColor,
+    });
+    page.drawText(custAddr, {
+      x: 58.0,
+      y: toPdfY(236.0),
+      size: 9.5,
+      font: font,
+      color: espressoColor,
+    });
+  } else {
+    page.drawText(custName, {
+      x: 58.0,
+      y: toPdfY(228.0),
+      size: 12.0,
+      font: fontBold,
+      color: espressoColor,
+    });
+  }
+
+  // Bill Date & Bill No
+  const formattedDate = invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString('en-GB') : '';
+  page.drawText(`Bill No: ${invoice.invoiceNumber || ''}`, {
+    x: 385.5,
+    y: toPdfY(221.0),
+    size: 11.0,
+    font: fontBold,
+    color: espressoColor,
+  });
+  page.drawText(`Date: ${formattedDate}`, {
+    x: 385.5,
+    y: toPdfY(236.0),
+    size: 10.5,
+    font: fontBold,
+    color: espressoColor,
+  });
+
+  // Table items (Up to 16 rows)
+  const items = Array.isArray(invoice.items) ? invoice.items.slice(0, 16) : [];
+  items.forEach((itm, idx) => {
+    const yTop = 337.5 + (idx * 24.62);
+
+    let displayDesc = itm.description || '';
+    if (itm.quantity && itm.rate) {
+      displayDesc += ` (${itm.quantity} ${itm.unit || 'PCS'} @ ${Number(itm.rate).toFixed(2)})`;
+    }
+
+    if (displayDesc.length > 55) {
+      displayDesc = displayDesc.substring(0, 52) + '...';
+    }
+
+    page.drawText(displayDesc, {
+      x: 86.0,
+      y: toPdfY(yTop),
+      size: 10.0,
+      font: font,
+      color: espressoColor,
+    });
+
+    const amt = Number(itm.totalAmount || (itm.quantity * itm.rate) || 0).toFixed(2);
+    const amtWidth = fontBold.widthOfTextAtSize(amt, 10.5);
+    page.drawText(amt, {
+      x: 538.0 - amtWidth,
+      y: toPdfY(yTop),
+      size: 10.5,
+      font: fontBold,
+      color: espressoColor,
+    });
+  });
+
+  // Grand Total
+  const totalStr = Number(invoice.grandTotal || 0).toFixed(2);
+  const totWidth = fontBold.widthOfTextAtSize(totalStr, 14.5);
+  page.drawText(totalStr, {
+    x: 535.0 - totWidth,
+    y: toPdfY(762.0),
+    size: 14.5,
+    font: fontBold,
+    color: goldCreamColor,
+  });
+
+  const pdfBytes = await pdfDoc.save();
+  return Buffer.from(pdfBytes);
+}
+
 /**
  * Generate PDF buffer for an invoice overlaid on the original scanned template
  * @param {Object} invoice
  */
-async function generateInvoicePdf(invoice) {
+async function generateGstInvoicePdf(invoice) {
   const { templateBytes, coords } = loadTemplateData();
 
   const pdfDoc = await PDFDocument.load(templateBytes);
@@ -202,6 +327,15 @@ async function generateInvoicePdf(invoice) {
   return Buffer.from(pdfBytes);
 }
 
+async function generateInvoicePdf(invoice) {
+  if (invoice && invoice.invoiceType === 'temporary') {
+    return generateTemporaryBillPdf(invoice);
+  }
+  return generateGstInvoicePdf(invoice);
+}
+
 module.exports = {
-  generateInvoicePdf
+  generateInvoicePdf,
+  generateGstInvoicePdf,
+  generateTemporaryBillPdf
 };

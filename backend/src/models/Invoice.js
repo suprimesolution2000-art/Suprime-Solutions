@@ -146,6 +146,12 @@ const invoiceSchema = new mongoose.Schema({
     enum: ['synced', 'local_only', 'conflict'],
     default: 'synced'
   },
+  invoiceType: {
+    type: String,
+    enum: ['gst', 'temporary'],
+    default: 'gst',
+    index: true
+  },
   active: {
     type: Boolean,
     default: true,

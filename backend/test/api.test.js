@@ -48,4 +48,34 @@ describe('Backend Services & PDF Overlay Tests', () => {
     const header = pdfBuffer.slice(0, 5).toString('utf8');
     assert.strictEqual(header, '%PDF-');
   });
+
+  it('should generate a Temporary Bill PDF buffer when invoiceType is temporary', async () => {
+    const mockTempInvoice = {
+      invoiceNumber: 'TB/26-27/001',
+      invoiceType: 'temporary',
+      invoiceDate: new Date('2026-11-08'),
+      customer: {
+        name: 'SHARMA HARDWARE',
+        address: 'Main Market, Bilaspur',
+      },
+      items: [
+        {
+          sno: 1,
+          description: 'Industrial Hose Pipe 20m',
+          quantity: 2,
+          unit: 'ROLL',
+          rate: 1500.00,
+          totalAmount: 3000.00
+        }
+      ],
+      grandTotal: 3000.00
+    };
+
+    const pdfBuffer = await generateInvoicePdf(mockTempInvoice);
+    assert.ok(pdfBuffer instanceof Buffer);
+    assert.ok(pdfBuffer.length > 50000, 'Temporary bill PDF buffer should be substantial');
+
+    const header = pdfBuffer.slice(0, 5).toString('utf8');
+    assert.strictEqual(header, '%PDF-');
+  });
 });

@@ -7,14 +7,210 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../data/models/invoice_model.dart';
 import '../../core/utils/date_formatter.dart';
+import '../../core/utils/currency_formatter.dart';
 
 class PdfInvoiceService {
   // Calibrated exact dimensions matching the vector invoice template
   static const double masterWidth = 492.0;
   static const double masterHeight = 602.0;
 
+  /// Main entry point: Generates either GST Tax Invoice or Temporary Bill depending on invoiceType
+  static Future<Uint8List> generateInvoicePdfBytes(InvoiceModel invoice, {String? overrideType}) async {
+    final type = overrideType ?? invoice.invoiceType;
+    if (type == 'temporary') {
+      return generateTemporaryBillPdfBytes(invoice);
+    }
+    return generateGstInvoicePdfBytes(invoice);
+  }
+
+  /// Generate Temporary Bill PDF bytes matching the wooden plank template
+  static Future<Uint8List> generateTemporaryBillPdfBytes(InvoiceModel invoice) async {
+    final pdf = pw.Document();
+
+    final templateImageBytes = await rootBundle.load('assets/invoice-template/temporary_bill_template_300dpi.jpg');
+    final templateImage = pw.MemoryImage(templateImageBytes.buffer.asUint8List());
+
+    final fontBold = await PdfGoogleFonts.robotoBold();
+    final fontRegular = await PdfGoogleFonts.robotoRegular();
+    final fontMedium = await PdfGoogleFonts.robotoMedium();
+
+    // Theme Colors
+    const espressoColor = PdfColor.fromInt(0xFF2A160A);
+    const goldCreamColor = PdfColor.fromInt(0xFFFAF0D1);
+
+    String custName = invoice.customer.name.trim().toUpperCase();
+    if (custName.isEmpty) custName = 'CUSTOMER';
+
+    String custDetails = invoice.customer.address.trim();
+    if (custDetails.isEmpty && invoice.customer.phone.isNotEmpty) {
+      custDetails = 'Phone: ${invoice.customer.phone}';
+    } else if (invoice.customer.phone.isNotEmpty) {
+      custDetails += ' | Ph: ${invoice.customer.phone}';
+    }
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: const PdfPageFormat(595.28, 841.89, marginAll: 0),
+        build: (pw.Context context) {
+          return pw.Stack(
+            children: [
+              // 1. Full-bleed background template
+              pw.Positioned(
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+                child: pw.Image(templateImage, fit: pw.BoxFit.fill),
+              ),
+
+              // 2. BILLED TO Box
+              if (custDetails.isNotEmpty) ...[
+                pw.Positioned(
+                  left: 58.0,
+                  top: 212.0,
+                  child: pw.SizedBox(
+                    width: 275.0,
+                    child: pw.Text(
+                      custName,
+                      maxLines: 1,
+                      overflow: pw.TextOverflow.clip,
+                      style: pw.TextStyle(font: fontBold, fontSize: 11.5, color: espressoColor),
+                    ),
+                  ),
+                ),
+                pw.Positioned(
+                  left: 58.0,
+                  top: 226.5,
+                  child: pw.SizedBox(
+                    width: 275.0,
+                    child: pw.Text(
+                      custDetails,
+                      maxLines: 1,
+                      overflow: pw.TextOverflow.clip,
+                      style: pw.TextStyle(font: fontRegular, fontSize: 9.5, color: espressoColor),
+                    ),
+                  ),
+                ),
+              ] else ...[
+                pw.Positioned(
+                  left: 58.0,
+                  top: 218.0,
+                  child: pw.SizedBox(
+                    width: 275.0,
+                    child: pw.Text(
+                      custName,
+                      maxLines: 1,
+                      overflow: pw.TextOverflow.clip,
+                      style: pw.TextStyle(font: fontBold, fontSize: 12.5, color: espressoColor),
+                    ),
+                  ),
+                ),
+              ],
+
+              // 3. BILL DATE Box
+              pw.Positioned(
+                left: 385.5,
+                top: 212.0,
+                child: pw.SizedBox(
+                  width: 155.0,
+                  child: pw.Text(
+                    'Bill No: ${invoice.invoiceNumber}',
+                    maxLines: 1,
+                    overflow: pw.TextOverflow.clip,
+                    style: pw.TextStyle(font: fontBold, fontSize: 11.0, color: espressoColor),
+                  ),
+                ),
+              ),
+              pw.Positioned(
+                left: 385.5,
+                top: 226.5,
+                child: pw.SizedBox(
+                  width: 155.0,
+                  child: pw.Text(
+                    'Date: ${DateFormatter.format(invoice.invoiceDate)}',
+                    style: pw.TextStyle(font: fontBold, fontSize: 10.5, color: espressoColor),
+                  ),
+                ),
+              ),
+
+              // 4. Items Table (Up to 16 items)
+              ...List.generate(
+                invoice.items.length > 16 ? 16 : invoice.items.length,
+                (idx) {
+                  final itm = invoice.items[idx];
+                  final rowTop = 328.0 + (idx * 24.62);
+
+                  String displayDesc = itm.description;
+                  if (itm.quantity > 0 && itm.rate > 0) {
+                    final qtyStr = itm.quantity % 1 == 0 ? itm.quantity.toInt().toString() : itm.quantity.toString();
+                    displayDesc += ' ($qtyStr ${itm.unit} @ ₹${CurrencyFormatter.formatWithoutSymbol(itm.rate)})';
+                  }
+
+                  final amtStr = CurrencyFormatter.formatWithoutSymbol(itm.totalAmount);
+
+                  return pw.Stack(
+                    children: [
+                      // Product Description
+                      pw.Positioned(
+                        left: 86.0,
+                        top: rowTop - 1.5,
+                        child: pw.SizedBox(
+                          width: 338.0,
+                          child: pw.Text(
+                            displayDesc,
+                            maxLines: 2,
+                            softWrap: true,
+                            overflow: pw.TextOverflow.clip,
+                            style: pw.TextStyle(font: fontMedium, fontSize: 10.0, color: espressoColor),
+                          ),
+                        ),
+                      ),
+                      // Amount
+                      pw.Positioned(
+                        left: 435.0,
+                        top: rowTop,
+                        child: pw.SizedBox(
+                          width: 103.0,
+                          child: pw.Align(
+                            alignment: pw.Alignment.centerRight,
+                            child: pw.Text(
+                              amtStr,
+                              style: pw.TextStyle(font: fontBold, fontSize: 10.5, color: espressoColor),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+
+              // 5. TOTAL AMOUNT Box
+              pw.Positioned(
+                left: 442.0,
+                top: 746.0,
+                child: pw.SizedBox(
+                  width: 93.0,
+                  child: pw.Align(
+                    alignment: pw.Alignment.centerRight,
+                    child: pw.Text(
+                      CurrencyFormatter.formatWithoutSymbol(invoice.grandTotal),
+                      style: pw.TextStyle(font: fontBold, fontSize: 14.5, color: goldCreamColor),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
   /// Generate high-precision PDF document bytes matching the authentic paper invoice
-  static Future<Uint8List> generateInvoicePdfBytes(InvoiceModel invoice) async {
+  static Future<Uint8List> generateGstInvoicePdfBytes(InvoiceModel invoice) async {
     final pdf = pw.Document();
 
     // Load master 300 DPI high-definition scanned template image from assets

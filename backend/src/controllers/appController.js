@@ -72,12 +72,12 @@ const getLatestRelease = async (req, res) => {
 
     // Fallback if GitHub rate-limited and no cache yet
     const fallback = {
-      latestVersion: '1.0.20',
-      tagName: 'v1.0.20',
-      releaseName: 'Suprime Solutions v1.0.20',
-      releaseNotes: 'Fixed customer due balance recalculation on bill deletion, 1-tap autocomplete, compulsory fields validation, bill confirmation dialog, and full list of Indian states.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.20/Suprime_Solutions_v1.0.20.apk',
-      apkSize: 38196433,
+      latestVersion: '1.0.21',
+      tagName: 'v1.0.21',
+      releaseName: 'Suprime Solutions v1.0.21',
+      releaseNotes: 'Added choice between GST Bill and Temporary Bill upon generation, wood-themed temporary bill template with theme-matched text colors, format toggling, and sync support.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.21/Suprime_Solutions_v1.0.21.apk',
+      apkSize: 39500000,
       publishedAt: new Date().toISOString()
     };
     return res.json({
@@ -94,12 +94,12 @@ const getLatestRelease = async (req, res) => {
     }
     return res.json({
       success: true,
-      latestVersion: '1.0.20',
-      tagName: 'v1.0.20',
-      releaseName: 'Suprime Solutions v1.0.20',
-      releaseNotes: 'Fixed customer due balance recalculation on bill deletion, 1-tap autocomplete, compulsory fields validation, bill confirmation dialog, and full list of Indian states.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.20/Suprime_Solutions_v1.0.20.apk',
-      apkSize: 38196433,
+      latestVersion: '1.0.21',
+      tagName: 'v1.0.21',
+      releaseName: 'Suprime Solutions v1.0.21',
+      releaseNotes: 'Added choice between GST Bill and Temporary Bill upon generation, wood-themed temporary bill template with theme-matched text colors, format toggling, and sync support.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.21/Suprime_Solutions_v1.0.21.apk',
+      apkSize: 39500000,
       publishedAt: new Date().toISOString()
     });
   }

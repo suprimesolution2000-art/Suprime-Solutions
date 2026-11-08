@@ -13,9 +13,20 @@ class CurrencyFormatter {
     decimalDigits: 0,
   );
 
+  static final NumberFormat _withoutSymbolFormatter = NumberFormat.currency(
+    locale: 'en_IN',
+    symbol: '',
+    decimalDigits: 2,
+  );
+
   static String format(double? amount) {
     if (amount == null) return '₹0.00';
     return _formatter.format(amount);
+  }
+
+  static String formatWithoutSymbol(double? amount) {
+    if (amount == null) return '0.00';
+    return _withoutSymbolFormatter.format(amount).trim();
   }
 
   static String formatCompact(double? amount) {

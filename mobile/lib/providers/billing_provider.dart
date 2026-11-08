@@ -302,7 +302,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
     state = state.copyWith(items: updated);
   }
 
-  Future<InvoiceModel?> saveAndIssueInvoice() async {
+  Future<InvoiceModel?> saveAndIssueInvoice({String invoiceType = 'gst'}) async {
     if (state.customer.name.trim().isEmpty) {
       state = state.copyWith(errorMessage: 'Please enter customer name');
       return null;
@@ -365,6 +365,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
         balanceDue: state.grandTotal,
         createdBy: loggedInName,
         syncStatus: 'waiting_for_internet',
+        invoiceType: invoiceType,
       );
 
       // 4. Save to local SQLite
@@ -418,7 +419,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
     );
   }
 
-  Future<InvoiceModel?> updateExistingInvoice() async {
+  Future<InvoiceModel?> updateExistingInvoice({String? invoiceType}) async {
     if (state.originalInvoice == null || state.editingInvoiceUuid == null) {
       return null;
     }
@@ -463,6 +464,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
         paymentStatus: newPaymentStatus,
         balanceDue: newBalanceDue,
         syncStatus: 'waiting_for_internet',
+        invoiceType: invoiceType ?? orig.invoiceType,
       );
 
       // 1. Update SQLite

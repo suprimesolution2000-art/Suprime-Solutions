@@ -429,12 +429,35 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                         Flexible(
                           child: Text(
                             inv.invoiceNumber,
-                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.primary),
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                              color: inv.invoiceType == 'temporary' ? const Color(0xFF8B5A2B) : AppColors.primary,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: inv.invoiceType == 'temporary' ? const Color(0xFFFAF0E6) : Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: inv.invoiceType == 'temporary' ? const Color(0xFFD8BD91) : Colors.blue.shade200,
+                            ),
+                          ),
+                          child: Text(
+                            inv.invoiceType == 'temporary' ? 'TEMP' : 'GST',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: inv.invoiceType == 'temporary' ? const Color(0xFF8B5A2B) : Colors.blue.shade800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(

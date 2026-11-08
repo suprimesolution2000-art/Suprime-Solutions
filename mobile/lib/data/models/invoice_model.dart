@@ -30,6 +30,7 @@ class InvoiceModel {
   final String deviceId;
   final String createdBy;
   final String syncStatus; // 'synced', 'waiting_for_internet', 'syncing', 'failed'
+  final String invoiceType; // 'gst', 'temporary'
 
   InvoiceModel({
     required this.uuid,
@@ -59,6 +60,7 @@ class InvoiceModel {
     this.deviceId = '',
     this.createdBy = 'Admin',
     this.syncStatus = 'synced',
+    this.invoiceType = 'gst',
   });
 
   Map<String, dynamic> toMap() {
@@ -90,6 +92,7 @@ class InvoiceModel {
       'device_id': deviceId,
       'created_by': createdBy,
       'sync_status': syncStatus,
+      'invoice_type': invoiceType,
     };
   }
 
@@ -139,6 +142,7 @@ class InvoiceModel {
       deviceId: map['device_id'] ?? map['deviceId'] ?? '',
       createdBy: map['created_by'] ?? map['createdBy'] ?? 'Admin',
       syncStatus: map['sync_status'] ?? map['syncStatus'] ?? 'synced',
+      invoiceType: map['invoice_type'] ?? map['invoiceType'] ?? 'gst',
     );
   }
 
@@ -170,6 +174,7 @@ class InvoiceModel {
     String? deviceId,
     String? createdBy,
     String? syncStatus,
+    String? invoiceType,
   }) {
     return InvoiceModel(
       uuid: uuid ?? this.uuid,
@@ -199,6 +204,7 @@ class InvoiceModel {
       deviceId: deviceId ?? this.deviceId,
       createdBy: createdBy ?? this.createdBy,
       syncStatus: syncStatus ?? this.syncStatus,
+      invoiceType: invoiceType ?? this.invoiceType,
     );
   }
 }

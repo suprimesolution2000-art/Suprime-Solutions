@@ -22,11 +22,13 @@ class InvoiceDetailScreen extends ConsumerStatefulWidget {
 
 class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
   late InvoiceModel _currentInvoice;
+  late String _previewType;
 
   @override
   void initState() {
     super.initState();
     _currentInvoice = widget.invoice;
+    _previewType = widget.invoice.invoiceType;
   }
 
   Future<void> _refreshInvoice() async {
@@ -34,6 +36,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
     if (updated != null && mounted) {
       setState(() {
         _currentInvoice = updated;
+        _previewType = updated.invoiceType;
       });
     }
   }
@@ -118,17 +121,51 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_currentInvoice.invoiceNumber),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(child: Text(_currentInvoice.invoiceNumber, overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: _previewType == 'temporary' ? const Color(0xFF8B5A2B) : AppColors.primary,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                _previewType == 'temporary' ? 'TEMP' : 'GST',
+                style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
         actions: [
+          IconButton(
+            icon: Icon(_previewType == 'temporary' ? Icons.receipt_long : Icons.history_edu),
+            tooltip: _previewType == 'temporary' ? 'Switch to GST Bill View' : 'Switch to Temporary Bill View',
+            onPressed: () {
+              setState(() {
+                _previewType = _previewType == 'temporary' ? 'gst' : 'temporary';
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(_previewType == 'temporary'
+                      ? 'Displaying Temporary Bill (Wood Theme)'
+                      : 'Displaying GST Tax Invoice'),
+                  duration: const Duration(seconds: 1),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.share),
             tooltip: 'Share on WhatsApp',
-            onPressed: () => PdfInvoiceService.shareInvoicePdf(_currentInvoice),
+            onPressed: () => PdfInvoiceService.shareInvoicePdf(_currentInvoice.copyWith(invoiceType: _previewType)),
           ),
           IconButton(
             icon: const Icon(Icons.print),
             tooltip: 'Print Invoice',
-            onPressed: () => PdfInvoiceService.printInvoice(_currentInvoice),
+            onPressed: () => PdfInvoiceService.printInvoice(_currentInvoice.copyWith(invoiceType: _previewType)),
           ),
           if (_currentInvoice.status != 'cancelled')
             IconButton(
@@ -220,7 +257,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
           // Interactive PDF View of the Original Invoice Overlay
           Expanded(
             child: PdfPreview(
-              build: (format) => PdfInvoiceService.generateInvoicePdfBytes(_currentInvoice),
+              build: (format) => PdfInvoiceService.generateInvoicePdfBytes(_currentInvoice, overrideType: _previewType),
               pdfFileName: PdfInvoiceService.getPdfFileName(_currentInvoice),
               canChangeOrientation: false,
               canChangePageFormat: false,
@@ -251,7 +288,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                       'WhatsApp Share',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
-                    onPressed: () => PdfInvoiceService.shareInvoicePdf(_currentInvoice),
+                    onPressed: () => PdfInvoiceService.shareInvoicePdf(_currentInvoice.copyWith(invoiceType: _previewType)),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -268,7 +305,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                       'Print Bill',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
-                    onPressed: () => PdfInvoiceService.printInvoice(_currentInvoice),
+                    onPressed: () => PdfInvoiceService.printInvoice(_currentInvoice.copyWith(invoiceType: _previewType)),
                   ),
                 ),
               ],

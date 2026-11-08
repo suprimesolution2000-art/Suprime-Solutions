@@ -103,6 +103,30 @@ void main() {
     expect(AppConstants.indianStates.keys.first, 'Chhattisgarh');
   });
 
+  test('InvoiceModel supports invoiceType (gst and temporary) and Currency formatting', () {
+    final inv = InvoiceModel(
+      uuid: 'inv-temp',
+      invoiceNumber: 'TB/26-27/001',
+      sequenceNumber: 1,
+      financialYear: '26-27',
+      invoiceDate: DateTime(2026, 11, 8),
+      customer: CustomerModel(uuid: 'c1', name: 'Sharma Hardware', phone: ''),
+      items: [],
+      netAmount: 1000,
+      grandTotal: 1000,
+      amountInWords: 'Rupees One Thousand Only',
+      balanceDue: 1000,
+      invoiceType: 'temporary',
+    );
+    expect(inv.invoiceType, 'temporary');
+    expect(inv.toMap()['invoice_type'], 'temporary');
+
+    final copied = inv.copyWith(invoiceType: 'gst');
+    expect(copied.invoiceType, 'gst');
+
+    expect(CurrencyFormatter.formatWithoutSymbol(12150.00), '12,150.00');
+  });
+
   testWidgets('App Launches and displays Login Screen when unauthenticated', (WidgetTester tester) async {
     await tester.pumpWidget(
       const ProviderScope(

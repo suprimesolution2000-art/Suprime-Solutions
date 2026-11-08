@@ -17,11 +17,23 @@ class AppDatabase {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    return await openDatabase(
+    final db = await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          try {
+            await db.execute("ALTER TABLE invoices ADD COLUMN invoice_type TEXT DEFAULT 'gst'");
+          } catch (_) {}
+        }
+      },
     );
+    // Safe idempotent migration check
+    try {
+      await db.execute("ALTER TABLE invoices ADD COLUMN invoice_type TEXT DEFAULT 'gst'");
+    } catch (_) {}
+    return db;
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -88,7 +100,8 @@ class AppDatabase {
         balance_due REAL NOT NULL,
         device_id TEXT,
         created_by TEXT,
-        sync_status TEXT DEFAULT 'synced'
+        sync_status TEXT DEFAULT 'synced',
+        invoice_type TEXT DEFAULT 'gst'
       )
     ''');
 
