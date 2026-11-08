@@ -23,6 +23,7 @@ exports.getInvoices = async (req, res, next) => {
       minAmount,
       maxAmount,
       customerId,
+      invoiceType,
       isInterState,
       sortBy = 'invoiceDate',
       sortOrder = 'desc',
@@ -73,6 +74,15 @@ exports.getInvoices = async (req, res, next) => {
     // 5. Customer Filter
     if (customerId) {
       query['customer.uuid'] = customerId;
+    }
+
+    // 6. Invoice Type Filter (GST vs Temporary)
+    if (invoiceType) {
+      if (invoiceType === 'temporary') {
+        query.invoiceType = 'temporary';
+      } else if (invoiceType === 'gst') {
+        query.invoiceType = { $ne: 'temporary' };
+      }
     }
 
     if (isInterState !== undefined) {
@@ -148,22 +158,30 @@ exports.createInvoice = async (req, res, next) => {
 
     const customerStateCode = customer.stateCode || '22';
     const businessStateCode = env.COMPANY.stateCode || '22';
+    const isTemporary = req.body.invoiceType === 'temporary';
 
     // 1. Calculate & Validate all financials server-side
-    const financials = calculateInvoiceFinancials(items, customerStateCode, businessStateCode);
+    const financials = calculateInvoiceFinancials(items, customerStateCode, businessStateCode, isTemporary);
 
     // 2. Sequential Invoice Numbering
     let invoiceNumber = clientInvoiceNumber || req.body.invoiceNumber;
     let sequenceNumber = clientSequenceNumber || req.body.sequenceNumber;
     const fy = getFinancialYear(invoiceDate);
 
-    if (!invoiceNumber) {
-      const allocated = await allocateInvoiceNumber(invoiceDate);
-      invoiceNumber = allocated.invoiceNumber;
-      sequenceNumber = allocated.sequenceNumber;
-    } else if (!sequenceNumber) {
-      const parsedSeq = parseInt((invoiceNumber.match(/\d+/) || [])[0], 10);
-      sequenceNumber = isNaN(parsedSeq) ? 1 : parsedSeq;
+    if (isTemporary) {
+      if (!invoiceNumber) {
+        invoiceNumber = `TEMP-${Date.now()}`;
+      }
+      sequenceNumber = sequenceNumber || 0;
+    } else {
+      if (!invoiceNumber) {
+        const allocated = await allocateInvoiceNumber(invoiceDate);
+        invoiceNumber = allocated.invoiceNumber;
+        sequenceNumber = allocated.sequenceNumber;
+      } else if (!sequenceNumber) {
+        const parsedSeq = parseInt((invoiceNumber.match(/\d+/) || [])[0], 10);
+        sequenceNumber = isNaN(parsedSeq) ? 1 : parsedSeq;
+      }
     }
 
     const uuid = req.body.uuid || uuidv4();
@@ -183,9 +201,11 @@ exports.createInvoice = async (req, res, next) => {
 
       if (existingCustomer) {
         customerUuid = existingCustomer.uuid;
-        existingCustomer.totalBilled = (existingCustomer.totalBilled || 0) + financials.grandTotal;
-        existingCustomer.outstandingBalance = (existingCustomer.outstandingBalance || 0) + financials.grandTotal;
-        await existingCustomer.save();
+        if (!isTemporary) {
+          existingCustomer.totalBilled = (existingCustomer.totalBilled || 0) + financials.grandTotal;
+          existingCustomer.outstandingBalance = (existingCustomer.outstandingBalance || 0) + financials.grandTotal;
+          await existingCustomer.save();
+        }
       } else {
         customerUuid = uuidv4();
         await Customer.create({
@@ -198,11 +218,11 @@ exports.createInvoice = async (req, res, next) => {
           city: customer.city || 'Bilaspur',
           state: customer.state || 'Chhattisgarh',
           stateCode: customer.stateCode || '22',
-          totalBilled: financials.grandTotal,
-          outstandingBalance: financials.grandTotal
+          totalBilled: isTemporary ? 0 : financials.grandTotal,
+          outstandingBalance: isTemporary ? 0 : financials.grandTotal
         });
       }
-    } else {
+    } else if (!isTemporary) {
       await Customer.updateOne(
         { uuid: customerUuid },
         {
@@ -379,17 +399,19 @@ exports.updateInvoice = async (req, res, next) => {
     const updatedCustomer = customer || invoice.customer;
     const customerStateCode = updatedCustomer.stateCode || '22';
     const businessStateCode = env.COMPANY.stateCode || '22';
+    const effectiveInvoiceType = invoiceType !== undefined ? invoiceType : (invoice.invoiceType || 'gst');
+    const isTemporary = effectiveInvoiceType === 'temporary';
 
     // Recalculate financials
     const itemsToCalculate = items || invoice.items;
-    const financials = calculateInvoiceFinancials(itemsToCalculate, customerStateCode, businessStateCode);
+    const financials = calculateInvoiceFinancials(itemsToCalculate, customerStateCode, businessStateCode, isTemporary);
 
     const deltaGrandTotal = Math.round((financials.grandTotal - invoice.grandTotal) * 100) / 100;
     const newBalanceDue = Math.max(0, Math.round((financials.grandTotal - (invoice.totalPaid || 0)) * 100) / 100);
     const deltaBalanceDue = Math.round((newBalanceDue - invoice.balanceDue) * 100) / 100;
 
     // Adjust customer ledger for financial differences
-    if (invoice.customer && invoice.customer.uuid) {
+    if (invoice.customer && invoice.customer.uuid && invoice.invoiceType !== 'temporary') {
       await Customer.updateOne(
         { uuid: invoice.customer.uuid },
         {
@@ -498,8 +520,8 @@ exports.deleteInvoice = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Invoice not found.' });
     }
 
-    // Adjust customer ledger balance only if invoice was not already cancelled
-    if (invoice.status !== 'cancelled' && invoice.customer) {
+    // Adjust customer ledger balance only if invoice was not already cancelled and is not temporary
+    if (invoice.status !== 'cancelled' && invoice.customer && invoice.invoiceType !== 'temporary') {
       const custQuery = invoice.customer.uuid
         ? { $or: [{ uuid: invoice.customer.uuid }, { name: invoice.customer.name }] }
         : (invoice.customer.name ? { name: invoice.customer.name } : null);

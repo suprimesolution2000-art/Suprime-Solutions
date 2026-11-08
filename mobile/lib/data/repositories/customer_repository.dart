@@ -195,11 +195,11 @@ class CustomerRepository {
   Future<void> recalculateCustomerBalances({String? targetCustomerUuid}) async {
     final db = await _db.database;
 
-    // Fetch all active invoices (excluding cancelled)
+    // Fetch all active invoices (excluding cancelled and temporary bills)
     final invoices = await db.query(
       'invoices',
       columns: ['customer_json', 'grand_total', 'total_paid', 'balance_due', 'status'],
-      where: "status != 'cancelled'",
+      where: "status != 'cancelled' AND (invoice_type IS NULL OR invoice_type != 'temporary')",
     );
 
     final Map<String, double> billedByUuid = {};
@@ -246,7 +246,7 @@ class CustomerRepository {
     }
 
     final totalLocalInvoices = Sqflite.firstIntValue(
-      await db.rawQuery("SELECT COUNT(*) FROM invoices WHERE status != 'cancelled'"),
+      await db.rawQuery("SELECT COUNT(*) FROM invoices WHERE status != 'cancelled' AND (invoice_type IS NULL OR invoice_type != 'temporary')"),
     ) ?? 0;
 
     final customerRows = targetCustomerUuid != null

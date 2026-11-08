@@ -9,26 +9,29 @@ exports.getDashboardSummary = async (req, res, next) => {
 
     const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-    // 1. Today's sales
+    // 1. Today's sales (Excludes cancelled and temporary bills)
     const todayInvoices = await Invoice.find({
       invoiceDate: { $gte: today },
-      status: { $ne: 'cancelled' }
+      status: { $ne: 'cancelled' },
+      invoiceType: { $ne: 'temporary' }
     });
     const todaySales = todayInvoices.reduce((acc, inv) => acc + (inv.grandTotal || 0), 0);
     const todayInvoiceCount = todayInvoices.length;
 
-    // 2. Month's sales
+    // 2. Month's sales (Excludes cancelled and temporary bills)
     const monthInvoices = await Invoice.find({
       invoiceDate: { $gte: firstDayOfMonth },
-      status: { $ne: 'cancelled' }
+      status: { $ne: 'cancelled' },
+      invoiceType: { $ne: 'temporary' }
     });
     const monthlySales = monthInvoices.reduce((acc, inv) => acc + (inv.grandTotal || 0), 0);
     const monthlyInvoiceCount = monthInvoices.length;
 
-    // 3. Pending payments (all outstanding balance across non-cancelled invoices)
+    // 3. Pending payments (all outstanding balance across non-cancelled, non-temporary invoices)
     const unpaidInvoices = await Invoice.find({
       status: { $ne: 'cancelled' },
-      paymentStatus: { $in: ['unpaid', 'partially_paid', 'overdue'] }
+      paymentStatus: { $in: ['unpaid', 'partially_paid', 'overdue'] },
+      invoiceType: { $ne: 'temporary' }
     });
     const pendingPayments = unpaidInvoices.reduce((acc, inv) => acc + (inv.balanceDue || 0), 0);
 
@@ -55,7 +58,7 @@ exports.getDashboardSummary = async (req, res, next) => {
 exports.getSalesReport = async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;
-    const query = { status: { $ne: 'cancelled' } };
+    const query = { status: { $ne: 'cancelled' }, invoiceType: { $ne: 'temporary' } };
 
     if (startDate || endDate) {
       query.invoiceDate = {};

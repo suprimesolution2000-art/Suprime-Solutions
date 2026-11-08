@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert');
-const { generateInvoicePdf } = require('../src/services/pdfService');
+const { generateInvoicePdf, generateGstSalesRegisterPdf } = require('../src/services/pdfService');
 
 describe('Backend Services & PDF Overlay Tests', () => {
   it('should generate an invoice PDF buffer from sample data using the master template', async () => {
@@ -74,6 +74,38 @@ describe('Backend Services & PDF Overlay Tests', () => {
     const pdfBuffer = await generateInvoicePdf(mockTempInvoice);
     assert.ok(pdfBuffer instanceof Buffer);
     assert.ok(pdfBuffer.length > 50000, 'Temporary bill PDF buffer should be substantial');
+
+    const header = pdfBuffer.slice(0, 5).toString('utf8');
+    assert.strictEqual(header, '%PDF-');
+  });
+
+  it('should generate an Excel-Style GST Sales Register PDF for CA export', async () => {
+    const mockInvoices = [
+      {
+        invoiceNumber: '89',
+        invoiceDate: new Date('2026-10-31'),
+        customer: { name: 'Bajrang Automobile', gstin: '22AAIFB9432H1ZL' },
+        netAmount: 5520,
+        cgstTotal: 496.8,
+        sgstTotal: 496.8,
+        igstTotal: 0,
+        grandTotal: 6514
+      },
+      {
+        invoiceNumber: '98',
+        invoiceDate: new Date('2026-11-05'),
+        customer: { name: 'Bhagyodaya Sales And services', gstin: '27BNRPS507F1ZC' },
+        netAmount: 29220,
+        cgstTotal: 2629.8,
+        sgstTotal: 2629.8,
+        igstTotal: 0,
+        grandTotal: 34480
+      }
+    ];
+
+    const pdfBuffer = await generateGstSalesRegisterPdf(mockInvoices, new Date('2026-10-01'), new Date('2026-11-08'));
+    assert.ok(pdfBuffer instanceof Buffer);
+    assert.ok(pdfBuffer.length > 1000, 'Sales register PDF buffer should have valid size');
 
     const header = pdfBuffer.slice(0, 5).toString('utf8');
     assert.strictEqual(header, '%PDF-');

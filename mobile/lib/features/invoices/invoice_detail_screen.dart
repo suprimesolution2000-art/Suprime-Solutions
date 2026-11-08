@@ -124,7 +124,12 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Flexible(child: Text(_currentInvoice.invoiceNumber, overflow: TextOverflow.ellipsis)),
+            Flexible(
+              child: Text(
+                _currentInvoice.invoiceType == 'temporary' ? 'Temporary Bill' : _currentInvoice.invoiceNumber,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

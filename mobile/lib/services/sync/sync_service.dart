@@ -151,6 +151,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
           'balanceDue': inv.balanceDue,
           'deviceId': deviceId,
           'createdBy': inv.createdBy.isNotEmpty ? inv.createdBy : 'Administrator',
+          'invoiceType': inv.invoiceType,
         };
       }).toList();
 

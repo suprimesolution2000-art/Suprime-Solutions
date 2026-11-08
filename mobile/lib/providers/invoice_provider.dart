@@ -9,6 +9,7 @@ class InvoiceListState {
   final bool isLoading;
   final String searchQuery;
   final String filterChip; // 'all', 'paid', 'unpaid', 'partial', 'overdue'
+  final String invoiceType; // 'gst' or 'temporary'
   final DateTime? startDate;
   final DateTime? endDate;
   final String? errorMessage;
@@ -18,6 +19,7 @@ class InvoiceListState {
     this.isLoading = false,
     this.searchQuery = '',
     this.filterChip = 'all',
+    this.invoiceType = 'gst',
     this.startDate,
     this.endDate,
     this.errorMessage,
@@ -28,6 +30,7 @@ class InvoiceListState {
     bool? isLoading,
     String? searchQuery,
     String? filterChip,
+    String? invoiceType,
     DateTime? startDate,
     DateTime? endDate,
     String? errorMessage,
@@ -37,6 +40,7 @@ class InvoiceListState {
       isLoading: isLoading ?? this.isLoading,
       searchQuery: searchQuery ?? this.searchQuery,
       filterChip: filterChip ?? this.filterChip,
+      invoiceType: invoiceType ?? this.invoiceType,
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
       errorMessage: errorMessage,
@@ -72,6 +76,7 @@ class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
       final list = await _repo.getInvoices(
         searchQuery: state.searchQuery,
         paymentFilter: state.filterChip,
+        invoiceType: state.invoiceType,
         startDate: state.startDate,
         endDate: state.endDate,
       );
@@ -79,6 +84,12 @@ class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
     } catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: e.toString());
     }
+  }
+
+  void setInvoiceType(String type) {
+    if (state.invoiceType == type) return;
+    state = state.copyWith(invoiceType: type);
+    fetchInvoices();
   }
 
   void setSearchQuery(String query) {

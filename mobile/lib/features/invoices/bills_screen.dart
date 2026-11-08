@@ -125,6 +125,11 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                 title: const Text('All Invoices & Bills'),
                 actions: [
                   IconButton(
+                    icon: const Icon(Icons.assessment_outlined),
+                    tooltip: 'CA & Audit Reports',
+                    onPressed: () => _showCaReportsDialog(context),
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.date_range),
                     tooltip: 'Filter by Date',
                     onPressed: () => _showDateRangePicker(context, notifier),
@@ -141,13 +146,136 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
               ),
         body: Column(
         children: [
+          // 0. Section Switcher: GST Tax Bills vs Temporary Bills
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Container(
+              height: 46,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(9),
+                      onTap: () {
+                        if (invoiceState.invoiceType != 'gst') {
+                          setState(() => _selectedUuids.clear());
+                          notifier.setInvoiceType('gst');
+                        }
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: invoiceState.invoiceType == 'gst'
+                              ? AppColors.primary
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(9),
+                          boxShadow: invoiceState.invoiceType == 'gst'
+                              ? [
+                                  BoxShadow(
+                                    color: AppColors.primary.withValues(alpha: 0.25),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        alignment: Alignment.center,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.receipt_long,
+                              size: 18,
+                              color: invoiceState.invoiceType == 'gst'
+                                  ? Colors.white
+                                  : AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'GST Tax Bills',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: invoiceState.invoiceType == 'gst'
+                                    ? Colors.white
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(9),
+                      onTap: () {
+                        if (invoiceState.invoiceType != 'temporary') {
+                          setState(() => _selectedUuids.clear());
+                          notifier.setInvoiceType('temporary');
+                        }
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: invoiceState.invoiceType == 'temporary'
+                              ? const Color(0xFF8B5A2B)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(9),
+                          boxShadow: invoiceState.invoiceType == 'temporary'
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0xFF8B5A2B).withValues(alpha: 0.25),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        alignment: Alignment.center,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.description_outlined,
+                              size: 18,
+                              color: invoiceState.invoiceType == 'temporary'
+                                  ? Colors.white
+                                  : AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Temporary Bills',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: invoiceState.invoiceType == 'temporary'
+                                    ? Colors.white
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
           // 1. One Prominent Universal Search Bar
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search bill, customer, phone number…',
+                hintText: invoiceState.invoiceType == 'temporary'
+                    ? 'Search temporary bill, customer, phone…'
+                    : 'Search bill, customer, phone number…',
                 prefixIcon: const Icon(Icons.search, color: AppColors.primary),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
@@ -203,12 +331,18 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(Icons.receipt_long_outlined, size: 64, color: AppColors.textMuted),
+                                Icon(
+                                  invoiceState.invoiceType == 'temporary'
+                                      ? Icons.description_outlined
+                                      : Icons.receipt_long_outlined,
+                                  size: 64,
+                                  color: AppColors.textMuted,
+                                ),
                                 const SizedBox(height: 12),
                                 Text(
                                   _searchController.text.isNotEmpty
-                                      ? 'No bills found matching "${_searchController.text}"'
-                                      : 'No bills found in this filter',
+                                      ? 'No ${invoiceState.invoiceType == "temporary" ? "temporary bills" : "GST bills"} found matching "${_searchController.text}"'
+                                      : 'No ${invoiceState.invoiceType == "temporary" ? "temporary bills" : "GST bills"} found in this filter',
                                   style: const TextStyle(fontSize: 16, color: AppColors.textSecondary),
                                 ),
                                 const SizedBox(height: 8),
@@ -428,7 +562,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                       children: [
                         Flexible(
                           child: Text(
-                            inv.invoiceNumber,
+                            inv.invoiceType == 'temporary' ? 'Temporary Bill' : inv.invoiceNumber,
                             style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.bold,
@@ -646,6 +780,375 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
               ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  void _showCaReportsDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        DateTime fromDate = DateTime(DateTime.now().year, DateTime.now().month, 1);
+        DateTime toDate = DateTime.now();
+        bool isGenerating = false;
+        String statusText = '';
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Title Header
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryContainer,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.assessment, color: AppColors.primary, size: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'CA & Audit GST Export',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              'Official GST Tax Invoices only (No temporary bills)',
+                              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24),
+
+                  // Quick Date Preset Chips
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        ActionChip(
+                          label: const Text('This Month'),
+                          onPressed: () {
+                            final now = DateTime.now();
+                            setModalState(() {
+                              fromDate = DateTime(now.year, now.month, 1);
+                              toDate = now;
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        ActionChip(
+                          label: const Text('Last Month'),
+                          onPressed: () {
+                            final now = DateTime.now();
+                            final lastMonth = DateTime(now.year, now.month - 1, 1);
+                            final lastDay = DateTime(now.year, now.month, 0);
+                            setModalState(() {
+                              fromDate = lastMonth;
+                              toDate = lastDay;
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        ActionChip(
+                          label: const Text('This Financial Year'),
+                          onPressed: () {
+                            final now = DateTime.now();
+                            final fyStart = now.month >= 4 ? DateTime(now.year, 4, 1) : DateTime(now.year - 1, 4, 1);
+                            setModalState(() {
+                              fromDate = fyStart;
+                              toDate = now;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Date Range Picker Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: fromDate,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2035),
+                            );
+                            if (picked != null) {
+                              setModalState(() => fromDate = picked);
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(10),
+                              color: Colors.grey.shade50,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('From Date', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.calendar_today, size: 14, color: AppColors.primary),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      DateFormatter.format(fromDate),
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: Icon(Icons.arrow_forward, size: 16, color: Colors.grey),
+                      ),
+                      Expanded(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: toDate,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2035),
+                            );
+                            if (picked != null) {
+                              setModalState(() => toDate = picked);
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(10),
+                              color: Colors.grey.shade50,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('To Date', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.calendar_today, size: 14, color: AppColors.primary),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      DateFormatter.format(toDate),
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  if (statusText.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        statusText,
+                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+
+                  if (isGenerating)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: Column(
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 12),
+                            Text('Generating CA PDF Document...', style: TextStyle(fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    )
+                  else ...[
+                    // Option 1: Combined Full Bills PDF
+                    Card(
+                      elevation: 1,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: Colors.blue.shade200),
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () async {
+                          setModalState(() {
+                            isGenerating = true;
+                            statusText = '';
+                          });
+                          try {
+                            final invoices = await InvoiceRepository().getGstInvoicesForDateRange(fromDate, toDate);
+                            if (invoices.isEmpty) {
+                              setModalState(() {
+                                isGenerating = false;
+                                statusText = 'No GST invoices found in selected date range.';
+                              });
+                              return;
+                            }
+                            await PdfInvoiceService.shareCombinedBillsPdf(invoices, fromDate, toDate);
+                            if (context.mounted) Navigator.pop(context);
+                          } catch (e) {
+                            setModalState(() {
+                              isGenerating = false;
+                              statusText = 'Error generating combined bills: $e';
+                            });
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.picture_as_pdf, color: AppColors.primary, size: 28),
+                              ),
+                              const SizedBox(width: 14),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Combined Bills (Single PDF)',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      '1 multi-page PDF of all full GST bills sequentially date-wise',
+                                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right, color: Colors.grey),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Option 2: Excel-Style GST Statement PDF
+                    Card(
+                      elevation: 1,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: Colors.green.shade200),
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () async {
+                          setModalState(() {
+                            isGenerating = true;
+                            statusText = '';
+                          });
+                          try {
+                            final invoices = await InvoiceRepository().getGstInvoicesForDateRange(fromDate, toDate);
+                            if (invoices.isEmpty) {
+                              setModalState(() {
+                                isGenerating = false;
+                                statusText = 'No GST invoices found in selected date range.';
+                              });
+                              return;
+                            }
+                            await PdfInvoiceService.shareGstSalesRegisterPdf(invoices, fromDate, toDate);
+                            if (context.mounted) Navigator.pop(context);
+                          } catch (e) {
+                            setModalState(() {
+                              isGenerating = false;
+                              statusText = 'Error generating GST statement: $e';
+                            });
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.table_chart, color: Color(0xFF15803D), size: 28),
+                              ),
+                              const SizedBox(width: 14),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Excel-Style Sales Statement',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      'Tabular statement with Taxable, CGST, SGST, IGST & Totals',
+                                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right, color: Colors.grey),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
         );
       },
     );

@@ -60,6 +60,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
       _showPoDetails = inv.poNumber.isNotEmpty || inv.challanNumber.isNotEmpty;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.read(billingProvider.notifier).initForEdit(inv);
+        ref.read(billingProvider.notifier).setInvoiceType(_currentBillType);
       });
     } else {
       _customerNameController.clear();
@@ -75,6 +76,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await ref.read(billingProvider.notifier).resetForm();
         if (mounted) {
+          ref.read(billingProvider.notifier).setInvoiceType(_currentBillType);
           final num = ref.read(billingProvider).invoiceNumber;
           if (num.isNotEmpty) {
             _invoiceNumberController.text = num;
@@ -192,7 +194,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 children: [
                   Expanded(
                     child: InkWell(
-                      onTap: () => setState(() => _currentBillType = 'gst'),
+                      onTap: () {
+                        setState(() => _currentBillType = 'gst');
+                        ref.read(billingProvider.notifier).setInvoiceType('gst');
+                      },
                       borderRadius: BorderRadius.circular(10),
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
@@ -225,7 +230,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                   const SizedBox(width: 4),
                   Expanded(
                     child: InkWell(
-                      onTap: () => setState(() => _currentBillType = 'temporary'),
+                      onTap: () {
+                        setState(() => _currentBillType = 'temporary');
+                        ref.read(billingProvider.notifier).setInvoiceType('temporary');
+                      },
                       borderRadius: BorderRadius.circular(10),
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
@@ -436,60 +444,69 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Invoice Details',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    Text(
+                      _currentBillType == 'temporary' ? 'Bill Date' : 'Invoice Details',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                     ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _invoiceNumberController,
-                            decoration: const InputDecoration(
-                              labelText: 'Invoice Number',
-                              hintText: 'e.g. 1, 2, 3',
-                              prefixIcon: Icon(Icons.tag),
+                        if (_currentBillType != 'temporary') ...[
+                          Expanded(
+                            child: TextField(
+                              controller: _invoiceNumberController,
+                              decoration: const InputDecoration(
+                                labelText: 'Invoice Number',
+                                hintText: 'e.g. 1, 2, 3',
+                                prefixIcon: Icon(Icons.tag),
+                              ),
+                              onChanged: (val) {
+                                billingNotifier.setCustomInvoiceNumber(val);
+                              },
                             ),
-                            onChanged: (val) {
-                              billingNotifier.setCustomInvoiceNumber(val);
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 52),
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                            ),
+                            icon: const Icon(Icons.calendar_today, size: 16),
+                            label: Text(
+                              _currentBillType == 'temporary'
+                                  ? 'Bill Date: ${DateFormatter.format(billState.invoiceDate)}'
+                                  : DateFormatter.format(billState.invoiceDate),
+                            ),
+                            onPressed: () async {
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: billState.invoiceDate,
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2030),
+                              );
+                              if (picked != null) {
+                                billingNotifier.setInvoiceDate(picked);
+                              }
                             },
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(130, 52),
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                          ),
-                          icon: const Icon(Icons.calendar_today, size: 16),
-                          label: Text(DateFormatter.format(billState.invoiceDate)),
-                          onPressed: () async {
-                            final picked = await showDatePicker(
-                              context: context,
-                              initialDate: billState.invoiceDate,
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime(2030),
-                            );
-                            if (picked != null) {
-                              billingNotifier.setInvoiceDate(picked);
-                            }
-                          },
-                        ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-
-                    TextButton.icon(
-                      style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                      icon: Icon(_showPoDetails ? Icons.expand_less : Icons.expand_more),
-                      label: Text(_showPoDetails ? 'Hide P.O. / Challan fields' : '+ Add P.O. Number / Challan Number'),
-                      onPressed: () {
-                        setState(() {
-                          _showPoDetails = !_showPoDetails;
-                        });
-                      },
-                    ),
+                    if (_currentBillType != 'temporary') ...[
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                        icon: Icon(_showPoDetails ? Icons.expand_less : Icons.expand_more),
+                        label: Text(_showPoDetails ? 'Hide P.O. / Challan fields' : '+ Add P.O. Number / Challan Number'),
+                        onPressed: () {
+                          setState(() {
+                            _showPoDetails = !_showPoDetails;
+                          });
+                        },
+                      ),
+                    ],
 
                     if (_showPoDetails) ...[
                       const SizedBox(height: 8),
@@ -543,10 +560,11 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                           icon: const Icon(Icons.add, size: 20),
                           label: const Text('Add Item', style: TextStyle(fontSize: 15)),
                           onPressed: () {
-                            if (billState.items.length >= 11) {
+                            final maxItems = _currentBillType == 'temporary' ? 16 : 11;
+                            if (billState.items.length >= maxItems) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Maximum 11 items allowed per invoice for single-page paper template.'),
+                                SnackBar(
+                                  content: Text('Maximum $maxItems items allowed per bill.'),
                                   backgroundColor: Colors.orange,
                                 ),
                               );
@@ -555,6 +573,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                             showDialog(
                               context: context,
                               builder: (_) => AddItemDialog(
+                                isTemporary: _currentBillType == 'temporary',
                                 onAdd: ({
                                   required description,
                                   required hsnCode,
@@ -659,43 +678,70 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
             // 4. Live Automatic Calculation Summary
             Card(
               margin: EdgeInsets.zero,
-              color: AppColors.surfaceLight,
+              color: _currentBillType == 'temporary' ? const Color(0xFFFAF5EE) : AppColors.surfaceLight,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    _buildCalcRow('Taxable Net Amount', CurrencyFormatter.format(billState.netAmount)),
-                    if (!billState.isInterState) ...[
-                      _buildCalcRow('Add CGST', CurrencyFormatter.format(billState.cgstTotal)),
-                      _buildCalcRow('Add SGST', CurrencyFormatter.format(billState.sgstTotal)),
-                    ] else ...[
-                      _buildCalcRow('Add IGST', CurrencyFormatter.format(billState.igstTotal)),
-                    ],
-                    if (billState.roundOff != 0.0)
-                      _buildCalcRow('Round Off', (billState.roundOff > 0 ? '+₹' : '-₹') + billState.roundOff.abs().toStringAsFixed(2)),
-                    const Divider(thickness: 1.5),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'GRAND TOTAL',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                CurrencyFormatter.format(billState.grandTotal),
-                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.primary),
+                    if (_currentBillType == 'temporary') ...[
+                      _buildCalcRow('Total Items', '${billState.items.length} items'),
+                      const Divider(thickness: 1.5),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'TOTAL AMOUNT',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF8B5A2B)),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  CurrencyFormatter.format(billState.grandTotal),
+                                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF8B5A2B)),
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                        ],
+                      ),
+                    ] else ...[
+                      _buildCalcRow('Taxable Net Amount', CurrencyFormatter.format(billState.netAmount)),
+                      if (!billState.isInterState) ...[
+                        _buildCalcRow('Add CGST', CurrencyFormatter.format(billState.cgstTotal)),
+                        _buildCalcRow('Add SGST', CurrencyFormatter.format(billState.sgstTotal)),
+                      ] else ...[
+                        _buildCalcRow('Add IGST', CurrencyFormatter.format(billState.igstTotal)),
                       ],
-                    ),
+                      if (billState.roundOff != 0.0)
+                        _buildCalcRow('Round Off', (billState.roundOff > 0 ? '+₹' : '-₹') + billState.roundOff.abs().toStringAsFixed(2)),
+                      const Divider(thickness: 1.5),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'GRAND TOTAL',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  CurrencyFormatter.format(billState.grandTotal),
+                                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 6),
                     Align(
                       alignment: Alignment.centerLeft,
@@ -856,8 +902,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 child: Column(
                   children: [
                     _buildDialogRow('Format:', isTemporary ? 'Temporary Bill' : 'GST Tax Invoice', isBold: true, highlightColor: primaryThemeColor),
-                    const Divider(height: 16),
-                    _buildDialogRow('Bill Number:', invNum, isHighlight: true, isBold: true, highlightColor: primaryThemeColor),
+                    if (!isTemporary) ...[
+                      const Divider(height: 16),
+                      _buildDialogRow('Bill Number:', invNum, isHighlight: true, isBold: true, highlightColor: primaryThemeColor),
+                    ],
                     const Divider(height: 16),
                     _buildDialogRow('Bill Date:', invDateStr, isHighlight: true, isBold: true, highlightColor: primaryThemeColor),
                     const Divider(height: 16),

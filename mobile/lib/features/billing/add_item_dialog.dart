@@ -6,6 +6,7 @@ import '../../data/repositories/product_repository.dart';
 import '../../data/models/product_model.dart';
 
 class AddItemDialog extends StatefulWidget {
+  final bool isTemporary;
   final Function({
     required String description,
     required String hsnCode,
@@ -16,7 +17,11 @@ class AddItemDialog extends StatefulWidget {
     required double gstRate,
   }) onAdd;
 
-  const AddItemDialog({super.key, required this.onAdd});
+  const AddItemDialog({
+    super.key,
+    required this.onAdd,
+    this.isTemporary = false,
+  });
 
   @override
   State<AddItemDialog> createState() => _AddItemDialogState();
@@ -57,6 +62,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
     final r = double.tryParse(_rateController.text) ?? 0.0;
     final d = double.tryParse(_discountController.text) ?? 0.0;
     final taxable = (q * r) - d;
+    if (widget.isTemporary) return taxable;
     final tax = taxable * (_selectedGstRate / 100);
     return taxable + tax;
   }
@@ -156,21 +162,23 @@ class _AddItemDialogState extends State<AddItemDialog> {
               // HSN & Unit Row
               Row(
                 children: [
-                  Expanded(
-                    flex: 3,
-                    child: TextField(
-                      controller: _hsnController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'HSN / SAC Code',
-                        hintText: 'e.g. 8484',
-                        helperText: 'Saved for future bills',
+                  if (!widget.isTemporary) ...[
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        controller: _hsnController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'HSN / SAC Code',
+                          hintText: 'e.g. 8484',
+                          helperText: 'Saved for future bills',
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
+                    const SizedBox(width: 12),
+                  ],
                   Expanded(
-                    flex: 2,
+                    flex: widget.isTemporary ? 1 : 2,
                     child: DropdownButtonFormField<String>(
                       initialValue: _selectedUnit,
                       decoration: const InputDecoration(
@@ -229,21 +237,23 @@ class _AddItemDialogState extends State<AddItemDialog> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<double>(
-                      initialValue: _selectedGstRate,
-                      decoration: const InputDecoration(
-                        labelText: 'GST Rate *',
+                  if (!widget.isTemporary) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<double>(
+                        initialValue: _selectedGstRate,
+                        decoration: const InputDecoration(
+                          labelText: 'GST Rate *',
+                        ),
+                        items: AppConstants.gstRates.map((r) {
+                          return DropdownMenuItem(value: r, child: Text('${r.toInt()}%'));
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) setState(() => _selectedGstRate = val);
+                        },
                       ),
-                      items: AppConstants.gstRates.map((r) {
-                        return DropdownMenuItem(value: r, child: Text('${r.toInt()}%'));
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) setState(() => _selectedGstRate = val);
-                      },
                     ),
-                  ),
+                  ],
                 ],
               ),
               const SizedBox(height: 16),
@@ -259,7 +269,10 @@ class _AddItemDialogState extends State<AddItemDialog> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Item Total (Incl. GST):', style: TextStyle(fontWeight: FontWeight.w600)),
+                    Text(
+                      widget.isTemporary ? 'Item Total:' : 'Item Total (Incl. GST):',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
                     Text(
                       CurrencyFormatter.format(_itemTotal),
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary),
@@ -308,16 +321,19 @@ class _AddItemDialogState extends State<AddItemDialog> {
                     return;
                   }
 
-                  final hsn = _hsnController.text.trim();
+                  final hsn = widget.isTemporary ? '' : _hsnController.text.trim();
+                  final effectiveGst = widget.isTemporary ? 0.0 : _selectedGstRate;
 
                   // Save product & HSN code in catalogue for all future bills
-                  ProductRepository().saveOrUpdateProduct(
-                    description: desc,
-                    hsnCode: hsn,
-                    unit: _selectedUnit,
-                    defaultRate: rate,
-                    gstRate: _selectedGstRate,
-                  );
+                  if (!widget.isTemporary) {
+                    ProductRepository().saveOrUpdateProduct(
+                      description: desc,
+                      hsnCode: hsn,
+                      unit: _selectedUnit,
+                      defaultRate: rate,
+                      gstRate: effectiveGst,
+                    );
+                  }
 
                   widget.onAdd(
                     description: desc,
@@ -326,7 +342,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
                     unit: _selectedUnit,
                     rate: rate,
                     discount: discount,
-                    gstRate: _selectedGstRate,
+                    gstRate: effectiveGst,
                   );
 
                   Navigator.pop(context);

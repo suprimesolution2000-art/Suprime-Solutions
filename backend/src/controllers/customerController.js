@@ -35,7 +35,8 @@ exports.getCustomers = async (req, res, next) => {
       { 
         $match: { 
           'customer.uuid': { $in: customerUuids },
-          status: { $ne: 'cancelled' } 
+          status: { $ne: 'cancelled' },
+          invoiceType: { $ne: 'temporary' }
         } 
       },
       {
@@ -125,7 +126,9 @@ exports.getCustomerLedger = async (req, res, next) => {
       }).sort({ paymentDate: -1 })
     ]);
 
-    const totalBilled = invoices.reduce((acc, inv) => acc + (inv.grandTotal || 0), 0);
+    const totalBilled = invoices
+      .filter(inv => inv.invoiceType !== 'temporary')
+      .reduce((acc, inv) => acc + (inv.grandTotal || 0), 0);
     const totalPaid = payments.reduce((acc, p) => acc + (p.amount || 0), 0);
     const outstandingBalance = Math.round((totalBilled - totalPaid) * 100) / 100;
 

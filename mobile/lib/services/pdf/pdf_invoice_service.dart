@@ -41,13 +41,6 @@ class PdfInvoiceService {
     String custName = invoice.customer.name.trim().toUpperCase();
     if (custName.isEmpty) custName = 'CUSTOMER';
 
-    String custDetails = invoice.customer.address.trim();
-    if (custDetails.isEmpty && invoice.customer.phone.isNotEmpty) {
-      custDetails = 'Phone: ${invoice.customer.phone}';
-    } else if (invoice.customer.phone.isNotEmpty) {
-      custDetails += ' | Ph: ${invoice.customer.phone}';
-    }
-
     pdf.addPage(
       pw.Page(
         pageFormat: const PdfPageFormat(595.28, 841.89, marginAll: 0),
@@ -63,119 +56,104 @@ class PdfInvoiceService {
                 child: pw.Image(templateImage, fit: pw.BoxFit.fill),
               ),
 
-              // 2. BILLED TO Box
-              if (custDetails.isNotEmpty) ...[
-                pw.Positioned(
-                  left: 58.0,
-                  top: 212.0,
-                  child: pw.SizedBox(
-                    width: 275.0,
-                    child: pw.Text(
-                      custName,
-                      maxLines: 1,
-                      overflow: pw.TextOverflow.clip,
-                      style: pw.TextStyle(font: fontBold, fontSize: 11.5, color: espressoColor),
-                    ),
-                  ),
-                ),
-                pw.Positioned(
-                  left: 58.0,
-                  top: 226.5,
-                  child: pw.SizedBox(
-                    width: 275.0,
-                    child: pw.Text(
-                      custDetails,
-                      maxLines: 1,
-                      overflow: pw.TextOverflow.clip,
-                      style: pw.TextStyle(font: fontRegular, fontSize: 9.5, color: espressoColor),
-                    ),
-                  ),
-                ),
-              ] else ...[
-                pw.Positioned(
-                  left: 58.0,
-                  top: 218.0,
-                  child: pw.SizedBox(
-                    width: 275.0,
-                    child: pw.Text(
-                      custName,
-                      maxLines: 1,
-                      overflow: pw.TextOverflow.clip,
-                      style: pw.TextStyle(font: fontBold, fontSize: 12.5, color: espressoColor),
-                    ),
-                  ),
-                ),
-              ],
-
-              // 3. BILL DATE Box
+              // 2. BILLED TO Box (Only Customer Name, positioned directly above the line)
               pw.Positioned(
-                left: 385.5,
-                top: 212.0,
+                left: 58.0,
+                top: 224.0,
                 child: pw.SizedBox(
-                  width: 155.0,
+                  width: 275.0,
                   child: pw.Text(
-                    'Bill No: ${invoice.invoiceNumber}',
+                    custName,
                     maxLines: 1,
                     overflow: pw.TextOverflow.clip,
-                    style: pw.TextStyle(font: fontBold, fontSize: 11.0, color: espressoColor),
-                  ),
-                ),
-              ),
-              pw.Positioned(
-                left: 385.5,
-                top: 226.5,
-                child: pw.SizedBox(
-                  width: 155.0,
-                  child: pw.Text(
-                    'Date: ${DateFormatter.format(invoice.invoiceDate)}',
-                    style: pw.TextStyle(font: fontBold, fontSize: 10.5, color: espressoColor),
+                    style: pw.TextStyle(font: fontBold, fontSize: 12.0, color: espressoColor),
                   ),
                 ),
               ),
 
-              // 4. Items Table (Up to 16 items)
+              // 3. BILL DATE Box (ONLY DATE, NO "Date:" prefix, positioned directly above the line)
+              pw.Positioned(
+                left: 385.5,
+                top: 224.0,
+                child: pw.SizedBox(
+                  width: 155.0,
+                  child: pw.Text(
+                    DateFormatter.format(invoice.invoiceDate),
+                    style: pw.TextStyle(font: fontBold, fontSize: 12.0, color: espressoColor),
+                  ),
+                ),
+              ),
+
+              // 4. Items Table (5 columns: NO., PRODUCT, QTY., RATE, TOTAL)
               ...List.generate(
                 invoice.items.length > 16 ? 16 : invoice.items.length,
                 (idx) {
                   final itm = invoice.items[idx];
                   final rowTop = 328.0 + (idx * 24.62);
 
-                  String displayDesc = itm.description;
-                  if (itm.quantity > 0 && itm.rate > 0) {
-                    final qtyStr = itm.quantity % 1 == 0 ? itm.quantity.toInt().toString() : itm.quantity.toString();
-                    displayDesc += ' ($qtyStr ${itm.unit} @ ₹${CurrencyFormatter.formatWithoutSymbol(itm.rate)})';
-                  }
-
-                  final amtStr = CurrencyFormatter.formatWithoutSymbol(itm.totalAmount);
+                  final qtyStr = itm.quantity > 0
+                      ? (itm.quantity % 1 == 0 ? itm.quantity.toInt().toString() : itm.quantity.toString()) + (itm.unit.isNotEmpty ? ' ${itm.unit}' : '')
+                      : '';
+                  final rateStr = itm.rate > 0 ? CurrencyFormatter.formatWithoutSymbol(itm.rate) : '';
+                  final totalStr = CurrencyFormatter.formatWithoutSymbol(itm.totalAmount);
 
                   return pw.Stack(
                     children: [
                       // Product Description
                       pw.Positioned(
                         left: 86.0,
-                        top: rowTop - 1.5,
+                        top: rowTop - 1.0,
                         child: pw.SizedBox(
-                          width: 338.0,
+                          width: 190.0,
                           child: pw.Text(
-                            displayDesc,
+                            itm.description,
                             maxLines: 2,
                             softWrap: true,
                             overflow: pw.TextOverflow.clip,
-                            style: pw.TextStyle(font: fontMedium, fontSize: 10.0, color: espressoColor),
+                            style: pw.TextStyle(font: fontMedium, fontSize: 9.5, color: espressoColor),
                           ),
                         ),
                       ),
-                      // Amount
+                      // QTY.
                       pw.Positioned(
-                        left: 435.0,
+                        left: 282.0,
                         top: rowTop,
                         child: pw.SizedBox(
-                          width: 103.0,
+                          width: 70.0,
+                          child: pw.Center(
+                            child: pw.Text(
+                              qtyStr,
+                              style: pw.TextStyle(font: fontMedium, fontSize: 9.5, color: espressoColor),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // RATE (Rs.)
+                      pw.Positioned(
+                        left: 357.0,
+                        top: rowTop,
+                        child: pw.SizedBox(
+                          width: 88.0,
                           child: pw.Align(
                             alignment: pw.Alignment.centerRight,
                             child: pw.Text(
-                              amtStr,
-                              style: pw.TextStyle(font: fontBold, fontSize: 10.5, color: espressoColor),
+                              rateStr,
+                              style: pw.TextStyle(font: fontMedium, fontSize: 9.5, color: espressoColor),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // TOTAL (Rs.)
+                      pw.Positioned(
+                        left: 452.0,
+                        top: rowTop,
+                        child: pw.SizedBox(
+                          width: 94.0,
+                          child: pw.Align(
+                            alignment: pw.Alignment.centerRight,
+                            child: pw.Text(
+                              totalStr,
+                              style: pw.TextStyle(font: fontBold, fontSize: 10.0, color: espressoColor),
                             ),
                           ),
                         ),
@@ -208,17 +186,252 @@ class PdfInvoiceService {
 
     return pdf.save();
   }
-
-  /// Generate high-precision PDF document bytes matching the authentic paper invoice
   static Future<Uint8List> generateGstInvoicePdfBytes(InvoiceModel invoice) async {
     final pdf = pw.Document();
-
-    // Load master 300 DPI high-definition scanned template image from assets
     final templateImageBytes = await rootBundle.load('assets/invoice-template/template_hq_300dpi.jpg');
     final templateImage = pw.MemoryImage(templateImageBytes.buffer.asUint8List());
-
     final fontBold = await PdfGoogleFonts.robotoBold();
 
+    pdf.addPage(buildGstInvoicePage(invoice, templateImage, fontBold));
+    return pdf.save();
+  }
+
+  /// Feature 1: Generate 1 single combined PDF containing all GST Tax Invoices in sequential date order
+  static Future<Uint8List> generateCombinedGstBillsPdf(List<InvoiceModel> invoices) async {
+    final pdf = pw.Document();
+    final templateImageBytes = await rootBundle.load('assets/invoice-template/template_hq_300dpi.jpg');
+    final templateImage = pw.MemoryImage(templateImageBytes.buffer.asUint8List());
+    final fontBold = await PdfGoogleFonts.robotoBold();
+
+    // Sort chronologically ascending
+    final sorted = List<InvoiceModel>.from(invoices)
+      ..sort((a, b) {
+        final cmp = a.invoiceDate.compareTo(b.invoiceDate);
+        if (cmp != 0) return cmp;
+        return a.sequenceNumber.compareTo(b.sequenceNumber);
+      });
+
+    for (final inv in sorted) {
+      pdf.addPage(buildGstInvoicePage(inv, templateImage, fontBold));
+    }
+
+    return pdf.save();
+  }
+
+  /// Feature 2: Generate an Excel-Style GSTR-1 Sales Register PDF for CA / Audit filing
+  static Future<Uint8List> generateGstSalesRegisterPdf(
+    List<InvoiceModel> invoices,
+    DateTime fromDate,
+    DateTime toDate,
+  ) async {
+    final pdf = pw.Document();
+    final fontBold = await PdfGoogleFonts.robotoBold();
+    final fontRegular = await PdfGoogleFonts.robotoRegular();
+
+    // Sort chronologically ascending
+    final sorted = List<InvoiceModel>.from(invoices)
+      ..sort((a, b) {
+        final cmp = a.invoiceDate.compareTo(b.invoiceDate);
+        if (cmp != 0) return cmp;
+        return a.sequenceNumber.compareTo(b.sequenceNumber);
+      });
+
+    final double sumTaxable = sorted.fold(0.0, (acc, i) => acc + i.netAmount);
+    final double sumCgst = sorted.fold(0.0, (acc, i) => acc + i.cgstTotal);
+    final double sumSgst = sorted.fold(0.0, (acc, i) => acc + i.sgstTotal);
+    final double sumIgst = sorted.fold(0.0, (acc, i) => acc + i.igstTotal);
+    final double sumTotal = sorted.fold(0.0, (acc, i) => acc + i.grandTotal);
+
+    final List<List<String>> tableData = [];
+    for (var i = 0; i < sorted.length; i++) {
+      final inv = sorted[i];
+      final gstin = inv.customer.gstin.trim().isNotEmpty ? inv.customer.gstin.trim().toUpperCase() : 'Unregistered';
+      tableData.add([
+        (i + 1).toString(),
+        inv.invoiceNumber,
+        DateFormatter.format(inv.invoiceDate),
+        inv.customer.name.trim(),
+        gstin,
+        CurrencyFormatter.formatWithoutSymbol(inv.netAmount),
+        CurrencyFormatter.formatWithoutSymbol(inv.cgstTotal),
+        CurrencyFormatter.formatWithoutSymbol(inv.sgstTotal),
+        CurrencyFormatter.formatWithoutSymbol(inv.igstTotal),
+        CurrencyFormatter.formatWithoutSymbol(inv.grandTotal),
+      ]);
+    }
+
+    // Grand Total summary row
+    tableData.add([
+      'TOTAL',
+      '(${sorted.length} Bills)',
+      '',
+      '',
+      '',
+      CurrencyFormatter.formatWithoutSymbol(sumTaxable),
+      CurrencyFormatter.formatWithoutSymbol(sumCgst),
+      CurrencyFormatter.formatWithoutSymbol(sumSgst),
+      CurrencyFormatter.formatWithoutSymbol(sumIgst),
+      CurrencyFormatter.formatWithoutSymbol(sumTotal),
+    ]);
+
+    // Wooden & Parchment palette matching Temporary Bill theme
+    const darkWood = PdfColor.fromInt(0xFF2E1A0C);
+    const mediumWood = PdfColor.fromInt(0xFF5A321A);
+    const amberGold = PdfColor.fromInt(0xFFF0D488);
+    const antiqueGold = PdfColor.fromInt(0xFFD9B25F);
+    const creamText = PdfColor.fromInt(0xFFF8EFDC);
+    const parchmentBg = PdfColor.fromInt(0xFFFBF8F1);
+    const zebraBg = PdfColor.fromInt(0xFFF3EADC);
+    const gridBorder = PdfColor.fromInt(0xFFC7B397);
+    const darkText = PdfColor.fromInt(0xFF2A170B);
+    const woodNumber = PdfColor.fromInt(0xFF6B4226);
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageTheme: pw.PageTheme(
+          pageFormat: const PdfPageFormat(841.89, 595.28, marginAll: 22),
+          buildBackground: (context) => pw.FullPage(
+            ignoreMargins: true,
+            child: pw.Container(color: parchmentBg),
+          ),
+        ),
+        header: (context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                color: darkWood,
+                border: pw.Border.all(color: antiqueGold, width: 1.5),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('SUPRIME SOLUTIONS', style: pw.TextStyle(font: fontBold, fontSize: 15, color: amberGold)),
+                      pw.SizedBox(height: 2),
+                      pw.Text('Industrial Gaskets, Hydraulics & Industrial Supplies', style: pw.TextStyle(font: fontRegular, fontSize: 8.5, color: antiqueGold)),
+                      pw.Text('Mahalaxmi Bole, Beside Yashoda Dairy, Tikrapara, Bilaspur (C.G.) 495001  |  Ph: 9981365878', style: pw.TextStyle(font: fontRegular, fontSize: 8.0, color: creamText)),
+                      pw.Text('Company GSTIN: 22FWDPD2626D1Z7  |  State: Chhattisgarh (Code 22)', style: pw.TextStyle(font: fontBold, fontSize: 8.5, color: amberGold)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('GST SALES REGISTER (FOR CA / AUDIT)', style: pw.TextStyle(font: fontBold, fontSize: 13, color: amberGold)),
+                      pw.SizedBox(height: 3),
+                      pw.Text('Period: ${DateFormatter.format(fromDate)}  to  ${DateFormatter.format(toDate)}', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: antiqueGold)),
+                      pw.Text('Total Tax Invoices: ${sorted.length} (Excludes Temporary Bills)', style: pw.TextStyle(font: fontRegular, fontSize: 8.5, color: creamText)),
+                      pw.Text('Generated On: ${DateFormatter.format(DateTime.now())}', style: pw.TextStyle(font: fontRegular, fontSize: 8.0, color: antiqueGold)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 8),
+          ],
+        ),
+        footer: (context) => pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('* Official GSTR-1 Verified Sales Register generated by Suprime Solutions for CA/Audit filing.', style: pw.TextStyle(font: fontRegular, fontSize: 7.5, color: mediumWood)),
+            pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: pw.TextStyle(font: fontRegular, fontSize: 7.5, color: mediumWood)),
+          ],
+        ),
+        build: (context) => [
+          pw.TableHelper.fromTextArray(
+            headers: [
+              'S.NO.',
+              'INVOICE NO.',
+              'DATE',
+              'PARTY NAME',
+              'PARTY GSTIN',
+              'TAXABLE (Rs.)',
+              'CGST (Rs.)',
+              'SGST (Rs.)',
+              'IGST (Rs.)',
+              'TOTAL (Rs.)',
+            ],
+            data: tableData,
+            headerStyle: pw.TextStyle(font: fontBold, fontSize: 8.0, color: amberGold),
+            headerDecoration: const pw.BoxDecoration(color: mediumWood),
+            headerAlignment: pw.Alignment.center,
+            cellStyle: pw.TextStyle(font: fontRegular, fontSize: 8.0, color: darkText),
+            cellAlignments: {
+              0: pw.Alignment.center,
+              1: pw.Alignment.center,
+              2: pw.Alignment.center,
+              3: pw.Alignment.centerLeft,
+              4: pw.Alignment.center,
+              5: pw.Alignment.centerRight,
+              6: pw.Alignment.centerRight,
+              7: pw.Alignment.centerRight,
+              8: pw.Alignment.centerRight,
+              9: pw.Alignment.centerRight,
+            },
+            columnWidths: {
+              0: const pw.FixedColumnWidth(30),
+              1: const pw.FixedColumnWidth(66),
+              2: const pw.FixedColumnWidth(62),
+              3: const pw.FlexColumnWidth(3.2),
+              4: const pw.FixedColumnWidth(105),
+              5: const pw.FixedColumnWidth(78),
+              6: const pw.FixedColumnWidth(62),
+              7: const pw.FixedColumnWidth(62),
+              8: const pw.FixedColumnWidth(52),
+              9: const pw.FixedColumnWidth(82),
+            },
+            rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
+            oddRowDecoration: const pw.BoxDecoration(color: zebraBg),
+            cellDecoration: (col, data, rowNum) {
+              if (rowNum == tableData.length) {
+                return const pw.BoxDecoration(color: darkWood);
+              }
+              final isOdd = (rowNum - 1) % 2 != 0;
+              return isOdd ? const pw.BoxDecoration(color: zebraBg) : const pw.BoxDecoration(color: PdfColors.white);
+            },
+            textStyleBuilder: (col, data, rowNum) {
+              if (rowNum == tableData.length) {
+                return pw.TextStyle(font: fontBold, fontSize: 8.5, color: amberGold);
+              }
+              if (col == 0) {
+                return pw.TextStyle(font: fontBold, fontSize: 8.0, color: woodNumber);
+              }
+              if (col == 1 || col == 9) {
+                return pw.TextStyle(font: fontBold, fontSize: 8.0, color: darkWood);
+              }
+              return null;
+            },
+            border: pw.TableBorder.all(color: gridBorder, width: 0.6),
+          ),
+        ],
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  static Future<void> shareCombinedBillsPdf(List<InvoiceModel> invoices, DateTime from, DateTime to) async {
+    final bytes = await generateCombinedGstBillsPdf(invoices);
+    final fromStr = DateFormatter.format(from).replaceAll('/', '-');
+    final toStr = DateFormatter.format(to).replaceAll('/', '-');
+    final filename = 'Suprime_Solutions_Combined_Bills_${fromStr}_to_${toStr}.pdf';
+    await Printing.sharePdf(bytes: bytes, filename: filename);
+  }
+
+  static Future<void> shareGstSalesRegisterPdf(List<InvoiceModel> invoices, DateTime from, DateTime to) async {
+    final bytes = await generateGstSalesRegisterPdf(invoices, from, to);
+    final fromStr = DateFormatter.format(from).replaceAll('/', '-');
+    final toStr = DateFormatter.format(to).replaceAll('/', '-');
+    final filename = 'Suprime_Solutions_GST_Sales_Register_${fromStr}_to_${toStr}.pdf';
+    await Printing.sharePdf(bytes: bytes, filename: filename);
+  }
+
+  /// Builds a single full-bleed GST Invoice page on the authentic background template
+  static pw.Page buildGstInvoicePage(InvoiceModel invoice, pw.MemoryImage templateImage, pw.Font fontBold) {
     // Prepare address lines
     String addr1 = invoice.customer.address.trim();
     String addr2 = '';
@@ -247,8 +460,7 @@ class PdfInvoiceService {
                 ? 8.5
                 : (wordsLen > 36 ? 9.0 : 9.5)));
 
-    pdf.addPage(
-      pw.Page(
+    return pw.Page(
         pageFormat: const PdfPageFormat(masterWidth, masterHeight, marginAll: 0),
         build: (pw.Context context) {
           return pw.Stack(
@@ -622,10 +834,7 @@ class PdfInvoiceService {
             ],
           );
         },
-      ),
-    );
-
-    return pdf.save();
+      );
   }
 
   static List<pw.Widget> _buildRupeesPaiseRow(double val, double y, pw.Font font, {double fontSize = 11.0}) {

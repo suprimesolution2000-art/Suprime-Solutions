@@ -12,6 +12,7 @@ class InvoiceRepository {
   Future<List<InvoiceModel>> getInvoices({
     String? searchQuery,
     String? paymentFilter, // 'paid', 'unpaid', 'partially_paid', 'overdue'
+    String? invoiceType, // 'gst' or 'temporary'
     DateTime? startDate,
     DateTime? endDate,
     double? minAmount,
@@ -41,7 +42,16 @@ class InvoiceRepository {
       whereArgs.addAll([term, term, term, term, term]);
     }
 
-    // 2. Payment status filter
+    // 2. Invoice Type filter (GST vs Temporary)
+    if (invoiceType != null && invoiceType.isNotEmpty) {
+      if (invoiceType == 'temporary') {
+        whereClauses.add("invoice_type = 'temporary'");
+      } else if (invoiceType == 'gst') {
+        whereClauses.add("(invoice_type IS NULL OR invoice_type != 'temporary')");
+      }
+    }
+
+    // 3. Payment status filter
     if (paymentFilter != null && paymentFilter.isNotEmpty && paymentFilter.toLowerCase() != 'all') {
       if (paymentFilter.toLowerCase() == 'partial') {
         whereClauses.add('payment_status = ?');
@@ -104,6 +114,22 @@ class InvoiceRepository {
     );
     if (results.isEmpty) return null;
     return InvoiceModel.fromMap(results.first);
+  }
+
+  /// Get all active GST Tax Invoices for a date range in chronological ascending order (Excludes temporary bills)
+  Future<List<InvoiceModel>> getGstInvoicesForDateRange(DateTime from, DateTime to) async {
+    final db = await _db.database;
+    final start = DateTime(from.year, from.month, from.day).toIso8601String();
+    final end = DateTime(to.year, to.month, to.day, 23, 59, 59).toIso8601String();
+
+    final results = await db.query(
+      'invoices',
+      where: "status != 'cancelled' AND (invoice_type IS NULL OR invoice_type != 'temporary') AND invoice_date >= ? AND invoice_date <= ?",
+      whereArgs: [start, end],
+      orderBy: 'invoice_date ASC, sequence_number ASC',
+    );
+
+    return results.map((m) => InvoiceModel.fromMap(m)).toList();
   }
 
   Future<void> saveInvoice(InvoiceModel invoice) async {
@@ -191,7 +217,7 @@ class InvoiceRepository {
   Future<void> deleteInvoice(String invoiceUuid) async {
     final db = await _db.database;
     final inv = await getInvoiceByUuid(invoiceUuid);
-    if (inv != null && inv.status != 'cancelled') {
+    if (inv != null && inv.status != 'cancelled' && inv.invoiceType != 'temporary') {
       // Revert customer outstanding balance and payments
       try {
         List<Map<String, dynamic>> custRows = [];
@@ -353,6 +379,19 @@ class InvoiceRepository {
     };
   }
 
+  /// Allocate a dedicated identifier for Temporary Bill without consuming or affecting
+  /// the official GST sequential invoice numbers.
+  Future<Map<String, dynamic>> allocateTemporaryInvoiceNumber(DateTime date) async {
+    final fy = getFinancialYear(date);
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final tempId = 'TEMP-$timestamp';
+    return {
+      'invoiceNumber': tempId,
+      'sequenceNumber': 0,
+      'financialYear': fy,
+    };
+  }
+
   // Summary figures for Home Dashboard
   Future<Map<String, dynamic>> getDashboardSummary() async {
     final db = await _db.database;
@@ -360,25 +399,25 @@ class InvoiceRepository {
     final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
     final monthStart = DateTime(now.year, now.month, 1).toIso8601String();
 
-    // Today's sales
+    // Today's sales (Excludes cancelled & temporary bills)
     final todayRes = await db.rawQuery('''
       SELECT SUM(grand_total) as total, COUNT(*) as count 
       FROM invoices 
-      WHERE invoice_date >= ? AND status != 'cancelled'
+      WHERE invoice_date >= ? AND status != 'cancelled' AND (invoice_type IS NULL OR invoice_type != 'temporary')
     ''', [todayStart]);
 
-    // Month's sales
+    // Month's sales (Excludes cancelled & temporary bills)
     final monthRes = await db.rawQuery('''
       SELECT SUM(grand_total) as total, COUNT(*) as count 
       FROM invoices 
-      WHERE invoice_date >= ? AND status != 'cancelled'
+      WHERE invoice_date >= ? AND status != 'cancelled' AND (invoice_type IS NULL OR invoice_type != 'temporary')
     ''', [monthStart]);
 
-    // Pending payments
+    // Pending payments (Excludes cancelled & temporary bills)
     final pendingRes = await db.rawQuery('''
       SELECT SUM(balance_due) as total, COUNT(*) as count 
       FROM invoices 
-      WHERE status != 'cancelled' AND payment_status IN ('unpaid', 'partially_paid', 'overdue')
+      WHERE status != 'cancelled' AND (invoice_type IS NULL OR invoice_type != 'temporary') AND payment_status IN ('unpaid', 'partially_paid', 'overdue')
     ''');
 
     // Customer count

@@ -67,7 +67,7 @@ function numberToIndianWords(amount) {
  * @param {string} customerStateCode - e.g. "22" for Chhattisgarh
  * @param {string} businessStateCode - defaults to "22"
  */
-function calculateInvoiceFinancials(items, customerStateCode = '22', businessStateCode = '22') {
+function calculateInvoiceFinancials(items, customerStateCode = '22', businessStateCode = '22', isTemporary = false) {
   const isInterState = String(customerStateCode).trim() !== String(businessStateCode).trim();
 
   let netAmount = 0;
@@ -79,7 +79,7 @@ function calculateInvoiceFinancials(items, customerStateCode = '22', businessSta
     const qty = Number(item.quantity) || 0;
     const rate = Number(item.rate) || 0;
     const discount = Number(item.discount) || 0;
-    const gstRate = Number(item.gstRate !== undefined ? item.gstRate : (item.gst_rate !== undefined ? item.gst_rate : 18.0));
+    const gstRate = isTemporary ? 0 : Number(item.gstRate !== undefined ? item.gstRate : (item.gst_rate !== undefined ? item.gst_rate : 18.0));
 
     const grossValue = Math.round(qty * rate * 100) / 100;
     const taxableValue = Math.max(0, Math.round((grossValue - discount) * 100) / 100);
@@ -88,17 +88,19 @@ function calculateInvoiceFinancials(items, customerStateCode = '22', businessSta
     let sgstRate = 0, sgstAmount = 0;
     let igstRate = 0, igstAmount = 0;
 
-    if (isInterState) {
-      igstRate = gstRate;
-      igstAmount = Math.round((taxableValue * (igstRate / 100)) * 100) / 100;
-    } else {
-      cgstRate = Math.round((gstRate / 2) * 100) / 100;
-      sgstRate = Math.round((gstRate / 2) * 100) / 100;
-      cgstAmount = Math.round((taxableValue * (cgstRate / 100)) * 100) / 100;
-      sgstAmount = Math.round((taxableValue * (sgstRate / 100)) * 100) / 100;
+    if (!isTemporary) {
+      if (isInterState) {
+        igstRate = gstRate;
+        igstAmount = Math.round((taxableValue * (igstRate / 100)) * 100) / 100;
+      } else {
+        cgstRate = Math.round((gstRate / 2) * 100) / 100;
+        sgstRate = Math.round((gstRate / 2) * 100) / 100;
+        cgstAmount = Math.round((taxableValue * (cgstRate / 100)) * 100) / 100;
+        sgstAmount = Math.round((taxableValue * (sgstRate / 100)) * 100) / 100;
+      }
     }
 
-    const itemTotal = Math.round((taxableValue + cgstAmount + sgstAmount + igstAmount) * 100) / 100;
+    const itemTotal = isTemporary ? taxableValue : Math.round((taxableValue + cgstAmount + sgstAmount + igstAmount) * 100) / 100;
 
     netAmount += taxableValue;
     cgstTotal += cgstAmount;
@@ -108,7 +110,7 @@ function calculateInvoiceFinancials(items, customerStateCode = '22', businessSta
     return {
       sno: item.sno || idx + 1,
       description: item.description,
-      hsnCode: item.hsnCode || item.hsn_code || '',
+      hsnCode: isTemporary ? '' : (item.hsnCode || item.hsn_code || ''),
       quantity: qty,
       unit: item.unit || 'PCS',
       rate: rate,
@@ -130,9 +132,9 @@ function calculateInvoiceFinancials(items, customerStateCode = '22', businessSta
   sgstTotal = Math.round(sgstTotal * 100) / 100;
   igstTotal = Math.round(igstTotal * 100) / 100;
 
-  const unroundedGrandTotal = Math.round((netAmount + cgstTotal + sgstTotal + igstTotal) * 100) / 100;
+  const unroundedGrandTotal = isTemporary ? netAmount : Math.round((netAmount + cgstTotal + sgstTotal + igstTotal) * 100) / 100;
   const roundedGrandTotal = Math.round(unroundedGrandTotal);
-  const roundOff = Math.round((roundedGrandTotal - unroundedGrandTotal) * 100) / 100;
+  const roundOff = isTemporary ? 0 : Math.round((roundedGrandTotal - unroundedGrandTotal) * 100) / 100;
 
   const amountInWords = numberToIndianWords(roundedGrandTotal);
 

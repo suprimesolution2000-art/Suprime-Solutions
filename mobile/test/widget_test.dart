@@ -9,6 +9,7 @@ import 'package:mobile_billing/data/models/customer_model.dart';
 import 'package:mobile_billing/data/models/invoice_item_model.dart';
 import 'package:mobile_billing/services/updater/app_update_service.dart';
 import 'package:mobile_billing/providers/billing_provider.dart';
+import 'package:mobile_billing/providers/invoice_provider.dart';
 
 void main() {
   test('Indian Currency & Words Utilities Test', () {
@@ -125,6 +126,45 @@ void main() {
     expect(copied.invoiceType, 'gst');
 
     expect(CurrencyFormatter.formatWithoutSymbol(12150.00), '12,150.00');
+  });
+
+  test('BillingNotifier Temporary Bill calculation has NO GST and grandTotal equals netAmount', () {
+    final notifier = BillingNotifier();
+    notifier.setInvoiceType('temporary');
+
+    notifier.addItem(
+      description: 'Spiral Wound Gasket 50NB',
+      hsnCode: '',
+      quantity: 10,
+      unit: 'PCS',
+      rate: 450,
+    );
+
+    notifier.addItem(
+      description: 'PTFE Envelope Gasket 100NB',
+      hsnCode: '',
+      quantity: 5,
+      unit: 'PCS',
+      rate: 620,
+    );
+
+    // 10 * 450 = 4,500; 5 * 620 = 3,100 => Total = 7,600
+    expect(notifier.state.isTemporary, isTrue);
+    expect(notifier.state.cgstTotal, 0.0);
+    expect(notifier.state.sgstTotal, 0.0);
+    expect(notifier.state.igstTotal, 0.0);
+    expect(notifier.state.netAmount, 7600.0);
+    expect(notifier.state.grandTotal, 7600.0);
+    expect(notifier.state.items[0].gstRate, 0.0);
+    expect(notifier.state.items[0].totalAmount, 4500.0);
+  });
+
+  test('InvoiceListState supports invoiceType filtering (gst vs temporary)', () {
+    final state = InvoiceListState();
+    expect(state.invoiceType, 'gst');
+
+    final tempState = state.copyWith(invoiceType: 'temporary');
+    expect(tempState.invoiceType, 'temporary');
   });
 
   testWidgets('App Launches and displays Login Screen when unauthenticated', (WidgetTester tester) async {

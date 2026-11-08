@@ -130,7 +130,7 @@ exports.pushSync = async (req, res, next) => {
               ? { $or: [{ uuid: existing.customer.uuid }, { name: existing.customer.name }] }
               : (existing.customer?.name ? { name: existing.customer.name } : null);
 
-            if (custQuery) {
+            if (custQuery && existing.invoiceType !== 'temporary') {
               await Customer.updateOne(
                 custQuery,
                 {
@@ -183,17 +183,21 @@ exports.pushSync = async (req, res, next) => {
           totalAmount: Number(itm.totalAmount !== undefined ? itm.totalAmount : itm.total_amount) || 0,
         }));
 
+        const isTemporary = (inv.invoiceType || inv.invoice_type) === 'temporary';
+
         // Validate calculations
         const financials = calculateInvoiceFinancials(
           normalizedItems,
           inv.customer ? inv.customer.stateCode : '22',
-          env.COMPANY.stateCode || '22'
+          env.COMPANY.stateCode || '22',
+          isTemporary
         );
 
         if (!existing) {
           try {
             await Invoice.create({
               ...inv,
+              invoiceType: isTemporary ? 'temporary' : 'gst',
               items: financials.items,
               createdBy: inv.createdBy || (req.user ? req.user.name : 'Administrator'),
               netAmount: financials.netAmount,
@@ -259,10 +263,12 @@ exports.pushSync = async (req, res, next) => {
                   $setOnInsert: {
                     active: true
                   },
-                  $inc: {
-                    totalBilled: financials.grandTotal,
-                    outstandingBalance: financials.grandTotal
-                  }
+                  ...(isTemporary ? {} : {
+                    $inc: {
+                      totalBilled: financials.grandTotal,
+                      outstandingBalance: financials.grandTotal
+                    }
+                  })
                 },
                 { upsert: true, new: true }
               );
@@ -276,7 +282,7 @@ exports.pushSync = async (req, res, next) => {
           const newBalanceDue = Math.max(0, Math.round((financials.grandTotal - (existing.totalPaid || 0)) * 100) / 100);
           const deltaBalanceDue = Math.round((newBalanceDue - existing.balanceDue) * 100) / 100;
 
-          if (existing.customer && existing.customer.uuid) {
+          if (!isTemporary && existing.invoiceType !== 'temporary' && existing.customer && existing.customer.uuid) {
             await Customer.updateOne(
               { uuid: existing.customer.uuid },
               {
@@ -473,7 +479,8 @@ exports.pullSync = async (req, res, next) => {
       { 
         $match: { 
           'customer.uuid': { $in: customerUuids },
-          status: { $ne: 'cancelled' } 
+          status: { $ne: 'cancelled' },
+          invoiceType: { $ne: 'temporary' }
         } 
       },
       {

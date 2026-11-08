@@ -28,6 +28,7 @@ class BillingState {
   final InvoiceModel? lastSavedInvoice;
   final String? editingInvoiceUuid;
   final InvoiceModel? originalInvoice;
+  final String invoiceType;
 
   BillingState({
     required this.customer,
@@ -44,9 +45,11 @@ class BillingState {
     this.lastSavedInvoice,
     this.editingInvoiceUuid,
     this.originalInvoice,
+    this.invoiceType = 'gst',
   });
 
   bool get isEditMode => editingInvoiceUuid != null;
+  bool get isTemporary => invoiceType == 'temporary';
 
   bool get isInterState => customer.stateCode.trim() != AppConstants.stateCode;
 
@@ -55,25 +58,25 @@ class BillingState {
   }
 
   double get cgstTotal {
-    if (isInterState) return 0.0;
+    if (isTemporary || isInterState) return 0.0;
     return items.fold(0.0, (sum, itm) => sum + itm.cgstAmount);
   }
 
   double get sgstTotal {
-    if (isInterState) return 0.0;
+    if (isTemporary || isInterState) return 0.0;
     return items.fold(0.0, (sum, itm) => sum + itm.sgstAmount);
   }
 
   double get igstTotal {
-    if (!isInterState) return 0.0;
+    if (isTemporary || !isInterState) return 0.0;
     return items.fold(0.0, (sum, itm) => sum + itm.igstAmount);
   }
 
-  double get unroundedTotal => netAmount + cgstTotal + sgstTotal + igstTotal;
+  double get unroundedTotal => isTemporary ? netAmount : (netAmount + cgstTotal + sgstTotal + igstTotal);
 
   double get grandTotal => unroundedTotal.roundToDouble();
 
-  double get roundOff => ((grandTotal - unroundedTotal) * 100).round() / 100;
+  double get roundOff => isTemporary ? 0.0 : (((grandTotal - unroundedTotal) * 100).round() / 100);
 
   String get amountInWords => NumberToWords.convert(grandTotal);
 
@@ -92,6 +95,7 @@ class BillingState {
     InvoiceModel? lastSavedInvoice,
     String? editingInvoiceUuid,
     InvoiceModel? originalInvoice,
+    String? invoiceType,
   }) {
     return BillingState(
       customer: customer ?? this.customer,
@@ -108,6 +112,7 @@ class BillingState {
       lastSavedInvoice: lastSavedInvoice ?? this.lastSavedInvoice,
       editingInvoiceUuid: editingInvoiceUuid ?? this.editingInvoiceUuid,
       originalInvoice: originalInvoice ?? this.originalInvoice,
+      invoiceType: invoiceType ?? this.invoiceType,
     );
   }
 }
@@ -181,6 +186,71 @@ class BillingNotifier extends StateNotifier<BillingState> {
     state = state.copyWith(challanNumber: challanNumber, challanDate: challanDate);
   }
 
+  void setInvoiceType(String type) {
+    final wasTemp = state.isTemporary;
+    final isNowTemp = type == 'temporary';
+    state = state.copyWith(invoiceType: type);
+
+    if (wasTemp != isNowTemp) {
+      final isInter = state.isInterState;
+      final updated = state.items.map((old) {
+        final taxable = old.taxableValue;
+        if (isNowTemp) {
+          return InvoiceItemModel(
+            sno: old.sno,
+            description: old.description,
+            hsnCode: old.hsnCode,
+            quantity: old.quantity,
+            unit: old.unit,
+            rate: old.rate,
+            discount: old.discount,
+            taxableValue: taxable,
+            gstRate: 0.0,
+            cgstRate: 0.0,
+            cgstAmount: 0.0,
+            sgstRate: 0.0,
+            sgstAmount: 0.0,
+            igstRate: 0.0,
+            igstAmount: 0.0,
+            totalAmount: taxable,
+          );
+        } else {
+          final effectiveGst = old.gstRate > 0 ? old.gstRate : 18.0;
+          double cgstR = 0.0, cgstA = 0.0, sgstR = 0.0, sgstA = 0.0, igstR = 0.0, igstA = 0.0;
+          if (isInter) {
+            igstR = effectiveGst;
+            igstA = ((taxable * (igstR / 100)) * 100).round() / 100;
+          } else {
+            cgstR = effectiveGst / 2;
+            sgstR = effectiveGst / 2;
+            cgstA = ((taxable * (cgstR / 100)) * 100).round() / 100;
+            sgstA = ((taxable * (sgstR / 100)) * 100).round() / 100;
+          }
+          final total = ((taxable + cgstA + sgstA + igstA) * 100).round() / 100;
+          return InvoiceItemModel(
+            sno: old.sno,
+            description: old.description,
+            hsnCode: old.hsnCode,
+            quantity: old.quantity,
+            unit: old.unit,
+            rate: old.rate,
+            discount: old.discount,
+            taxableValue: taxable,
+            gstRate: effectiveGst,
+            cgstRate: cgstR,
+            cgstAmount: cgstA,
+            sgstRate: sgstR,
+            sgstAmount: sgstA,
+            igstRate: igstR,
+            igstAmount: igstA,
+            totalAmount: total,
+          );
+        }
+      }).toList();
+      state = state.copyWith(items: updated);
+    }
+  }
+
   void addItem({
     required String description,
     required String hsnCode,
@@ -192,33 +262,39 @@ class BillingNotifier extends StateNotifier<BillingState> {
   }) {
     final taxableValue = ((quantity * rate - discount) * 100).round() / 100;
     final isInter = state.isInterState;
+    final isTemp = state.isTemporary;
 
     double cgstRate = 0.0, cgstAmount = 0.0;
     double sgstRate = 0.0, sgstAmount = 0.0;
     double igstRate = 0.0, igstAmount = 0.0;
+    final effectiveGst = isTemp ? 0.0 : gstRate;
 
-    if (isInter) {
-      igstRate = gstRate;
-      igstAmount = ((taxableValue * (igstRate / 100)) * 100).round() / 100;
-    } else {
-      cgstRate = gstRate / 2;
-      sgstRate = gstRate / 2;
-      cgstAmount = ((taxableValue * (cgstRate / 100)) * 100).round() / 100;
-      sgstAmount = ((taxableValue * (sgstRate / 100)) * 100).round() / 100;
+    if (!isTemp) {
+      if (isInter) {
+        igstRate = effectiveGst;
+        igstAmount = ((taxableValue * (igstRate / 100)) * 100).round() / 100;
+      } else {
+        cgstRate = effectiveGst / 2;
+        sgstRate = effectiveGst / 2;
+        cgstAmount = ((taxableValue * (cgstRate / 100)) * 100).round() / 100;
+        sgstAmount = ((taxableValue * (sgstRate / 100)) * 100).round() / 100;
+      }
     }
 
-    final total = ((taxableValue + cgstAmount + sgstAmount + igstAmount) * 100).round() / 100;
+    final total = isTemp
+        ? taxableValue
+        : (((taxableValue + cgstAmount + sgstAmount + igstAmount) * 100).round() / 100);
 
     final newItem = InvoiceItemModel(
       sno: state.items.length + 1,
       description: description,
-      hsnCode: hsnCode,
+      hsnCode: isTemp ? '' : hsnCode,
       quantity: quantity,
       unit: unit,
       rate: rate,
       discount: discount,
       taxableValue: taxableValue,
-      gstRate: gstRate,
+      gstRate: effectiveGst,
       cgstRate: cgstRate,
       cgstAmount: cgstAmount,
       sgstRate: sgstRate,
@@ -261,8 +337,31 @@ class BillingNotifier extends StateNotifier<BillingState> {
 
   void _recalculateTaxes() {
     final isInter = state.isInterState;
+    final isTemp = state.isTemporary;
+
     final updated = state.items.map((old) {
       final taxable = old.taxableValue;
+      if (isTemp) {
+        return InvoiceItemModel(
+          sno: old.sno,
+          description: old.description,
+          hsnCode: '',
+          quantity: old.quantity,
+          unit: old.unit,
+          rate: old.rate,
+          discount: old.discount,
+          taxableValue: taxable,
+          gstRate: 0.0,
+          cgstRate: 0.0,
+          cgstAmount: 0.0,
+          sgstRate: 0.0,
+          sgstAmount: 0.0,
+          igstRate: 0.0,
+          igstAmount: 0.0,
+          totalAmount: taxable,
+        );
+      }
+
       double cgstRate = 0.0, cgstAmount = 0.0;
       double sgstRate = 0.0, sgstAmount = 0.0;
       double igstRate = 0.0, igstAmount = 0.0;
@@ -315,11 +414,14 @@ class BillingNotifier extends StateNotifier<BillingState> {
     state = state.copyWith(isSaving: true, errorMessage: null);
 
     try {
-      // 1. Allocate next simple sequential invoice number
-      final alloc = await _invoiceRepo.allocateNextLocalInvoiceNumber(
-        state.invoiceDate,
-        customInvoiceNumber: state.invoiceNumber,
-      );
+      final isTemp = invoiceType == 'temporary';
+      // 1. Allocate invoice number (temporary bills get internal temp id without touching GST sequence)
+      final alloc = isTemp
+          ? await _invoiceRepo.allocateTemporaryInvoiceNumber(state.invoiceDate)
+          : await _invoiceRepo.allocateNextLocalInvoiceNumber(
+              state.invoiceDate,
+              customInvoiceNumber: state.invoiceNumber,
+            );
       final invoiceNumber = alloc['invoiceNumber'] as String;
       final seqNum = alloc['sequenceNumber'] as int;
       final fy = alloc['financialYear'] as String;
@@ -327,12 +429,16 @@ class BillingNotifier extends StateNotifier<BillingState> {
       final invoiceUuid = const Uuid().v4();
 
       // 2. Save / update customer
-      final customerToSave = state.customer.copyWith(
-        uuid: state.customer.uuid.isNotEmpty ? state.customer.uuid : const Uuid().v4(),
-        totalBilled: state.customer.totalBilled + state.grandTotal,
-        outstandingBalance: state.customer.outstandingBalance + state.grandTotal,
-      );
-      await _customerRepo.saveCustomer(customerToSave);
+      final customerToSave = isTemp
+          ? state.customer.copyWith(
+              uuid: state.customer.uuid.isNotEmpty ? state.customer.uuid : const Uuid().v4(),
+            )
+          : state.customer.copyWith(
+              uuid: state.customer.uuid.isNotEmpty ? state.customer.uuid : const Uuid().v4(),
+              totalBilled: state.customer.totalBilled + state.grandTotal,
+              outstandingBalance: state.customer.outstandingBalance + state.grandTotal,
+            );
+      await _customerRepo.saveCustomer(customerToSave, preserveBalancesIfZero: isTemp);
 
       // 3. Assemble InvoiceModel
       final prefs = await SharedPreferences.getInstance();
@@ -416,6 +522,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
       items: invoice.items,
       editingInvoiceUuid: invoice.uuid,
       originalInvoice: invoice,
+      invoiceType: invoice.invoiceType,
     );
   }
 
