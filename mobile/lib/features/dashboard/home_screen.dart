@@ -242,10 +242,23 @@ class HomeScreen extends ConsumerWidget {
                               visualDensity: VisualDensity.compact,
                             ),
                             onPressed: () async {
-                              await sync.synchronize(forceFullSync: true);
+                              final ok = await sync.synchronize(forceFullSync: true);
                               ref.read(invoiceListProvider.notifier).fetchInvoices();
                               ref.read(customerListProvider.notifier).fetchCustomers();
                               ref.read(dashboardProvider.notifier).refreshSummary();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      sync.pendingCount == 0
+                                          ? 'All bills uploaded and synced with cloud!'
+                                          : '${sync.pendingCount} bills saved offline. Cloud server is waking up, please tap SYNC again in a few seconds.',
+                                    ),
+                                    backgroundColor: sync.pendingCount == 0 ? AppColors.paid : Colors.amber.shade900,
+                                    duration: const Duration(seconds: 3),
+                                  ),
+                                );
+                              }
                             },
                             child: const Text(
                               'SYNC NOW',

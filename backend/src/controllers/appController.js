@@ -72,11 +72,11 @@ const getLatestRelease = async (req, res) => {
 
     // Fallback if GitHub rate-limited and no cache yet
     const fallback = {
-      latestVersion: '1.0.24',
-      tagName: 'v1.0.24',
-      releaseName: 'Suprime Solutions v1.0.24',
-      releaseNotes: 'Fixed continuous syncing loop, accurately reconcile offline queue, display true count of bills waiting for internet to sync, and instant offline badges.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.24/Suprime_Solutions_v1.0.24.apk',
+      latestVersion: '1.0.25',
+      tagName: 'v1.0.25',
+      releaseName: 'Suprime Solutions v1.0.25',
+      releaseNotes: 'Fixed cloud upload timeout on Wi-Fi/Render cold starts, added auto-retry and 0.0.0.0 host binding, ensured reliable sync of all offline bills to MongoDB Atlas.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.25/Suprime_Solutions_v1.0.25.apk',
       apkSize: 39500000,
       publishedAt: new Date().toISOString()
     };
@@ -94,11 +94,11 @@ const getLatestRelease = async (req, res) => {
     }
     return res.json({
       success: true,
-      latestVersion: '1.0.24',
-      tagName: 'v1.0.24',
-      releaseName: 'Suprime Solutions v1.0.24',
-      releaseNotes: 'Fixed continuous syncing loop, accurately reconcile offline queue, display true count of bills waiting for internet to sync, and instant offline badges.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.24/Suprime_Solutions_v1.0.24.apk',
+      latestVersion: '1.0.25',
+      tagName: 'v1.0.25',
+      releaseName: 'Suprime Solutions v1.0.25',
+      releaseNotes: 'Fixed cloud upload timeout on Wi-Fi/Render cold starts, added auto-retry and 0.0.0.0 host binding, ensured reliable sync of all offline bills to MongoDB Atlas.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.25/Suprime_Solutions_v1.0.25.apk',
       apkSize: 39500000,
       publishedAt: new Date().toISOString()
     });

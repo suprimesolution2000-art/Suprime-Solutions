@@ -40,8 +40,8 @@ const authLimiter = rateLimit({
 });
 app.use('/api/auth', authLimiter);
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
+// Health check endpoints (supports root, /health, and /api/health)
+app.get(['/', '/health', '/api/health'], (req, res) => {
   res.json({
     status: 'ok',
     service: 'SS Supreme Solutions Mobile Billing API',
@@ -72,8 +72,8 @@ const startServer = async () => {
     process.exit(1);
   }
   const PORT = env.PORT;
-  const server = app.listen(PORT, () => {
-    console.log(`[Server] SS Supreme Solutions Backend running on http://localhost:${PORT}`);
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[Server] SS Supreme Solutions Backend running on http://0.0.0.0:${PORT}`);
   });
   return server;
 };

@@ -305,8 +305,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                   if (!mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text(ok ? 'Sync successful! All data up to date.' : 'Saved offline on device.'),
-                                      backgroundColor: ok ? AppColors.paid : Colors.deepOrange,
+                                      content: Text(
+                                        sync.pendingCount == 0
+                                            ? 'Sync successful! All data up to date.'
+                                            : '${sync.pendingCount} bills saved offline. Cloud server is waking up, please tap SYNC again in a few seconds.',
+                                      ),
+                                      backgroundColor: sync.pendingCount == 0 ? AppColors.paid : Colors.amber.shade900,
                                     ),
                                   );
                                 },

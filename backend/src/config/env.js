@@ -7,7 +7,7 @@ if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process
 module.exports = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT || 5000,
-  MONGODB_URI: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/ss_supreme_solutions',
+  MONGODB_URI: process.env.MONGODB_URI || 'mongodb+srv://suprimesolution2000_db_user:b0qXOlHnM9ZEJzq4@cluster0.and9g1p.mongodb.net/ss_supreme_solutions?retryWrites=true&w=majority',
   JWT_SECRET: process.env.JWT_SECRET || 'ss_supreme_solutions_super_secure_jwt_secret_2026',
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'ss_supreme_solutions_refresh_jwt_secret_2026',
   JWT_EXPIRES_IN: '7d',

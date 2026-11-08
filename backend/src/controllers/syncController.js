@@ -194,10 +194,31 @@ exports.pushSync = async (req, res, next) => {
           isTemporary
         );
 
+        const safeCustomer = {
+          uuid: inv.customer?.uuid || require('uuid').v4(),
+          name: (inv.customer?.name && String(inv.customer.name).trim()) ? String(inv.customer.name).trim() : 'Walk-in Customer',
+          businessName: inv.customer?.businessName || '',
+          phone: inv.customer?.phone || '',
+          email: inv.customer?.email || '',
+          gstin: inv.customer?.gstin || '',
+          address: inv.customer?.address || '',
+          city: inv.customer?.city || '',
+          state: (inv.customer?.state && String(inv.customer.state).trim()) ? String(inv.customer.state).trim() : (env.COMPANY.state || 'Chhattisgarh'),
+          stateCode: (inv.customer?.stateCode && String(inv.customer.stateCode).trim()) ? String(inv.customer.stateCode).trim() : (env.COMPANY.stateCode || '22')
+        };
+
+        const safeSeq = inv.sequenceNumber !== undefined ? Number(inv.sequenceNumber) : (isTemporary ? 0 : 1);
+        const safeFy = inv.financialYear || require('../services/invoiceService').getFinancialYear(inv.invoiceDate || new Date());
+        const safeInvNumber = inv.invoiceNumber || (isTemporary ? `TEMP-${Date.now()}` : `INV-${Date.now()}`);
+
         if (!existing) {
           try {
             await Invoice.create({
               ...inv,
+              customer: safeCustomer,
+              invoiceNumber: safeInvNumber,
+              sequenceNumber: safeSeq,
+              financialYear: safeFy,
               invoiceType: isTemporary ? 'temporary' : 'gst',
               items: financials.items,
               createdBy: inv.createdBy || (req.user ? req.user.name : 'Administrator'),
@@ -218,33 +239,30 @@ exports.pushSync = async (req, res, next) => {
             results.invoicesSynced++;
             results.syncedInvoiceUuids.push(inv.uuid);
           } catch (createErr) {
-            if (createErr.code === 11000) {
-              const collision = await Invoice.findOne({
-                $or: [{ uuid: inv.uuid }, { invoiceNumber: inv.invoiceNumber }]
-              });
-              if (collision) {
-                collision.uuid = inv.uuid;
-                collision.items = financials.items;
-                collision.netAmount = financials.netAmount;
-                collision.cgstTotal = financials.cgstTotal;
-                collision.sgstTotal = financials.sgstTotal;
-                collision.igstTotal = financials.igstTotal;
-                collision.roundOff = financials.roundOff;
-                collision.grandTotal = financials.grandTotal;
-                collision.amountInWords = financials.amountInWords;
-                collision.balanceDue = inv.balanceDue !== undefined ? Number(inv.balanceDue) : financials.grandTotal;
-                collision.paymentStatus = inv.paymentStatus || 'unpaid';
-                collision.status = inv.status || 'finalized';
-                collision.customer = { ...(collision.customer || {}), ...(inv.customer || {}) };
-                collision.syncStatus = 'synced';
-                collision.updatedAt = new Date();
-                await collision.save();
-                results.invoicesSynced++;
-                results.syncedInvoiceUuids.push(inv.uuid);
-              } else {
-                throw createErr;
-              }
+            const collision = await Invoice.findOne({
+              $or: [{ uuid: inv.uuid }, { invoiceNumber: safeInvNumber }]
+            });
+            if (collision) {
+              collision.uuid = inv.uuid;
+              collision.customer = safeCustomer;
+              collision.items = financials.items;
+              collision.netAmount = financials.netAmount;
+              collision.cgstTotal = financials.cgstTotal;
+              collision.sgstTotal = financials.sgstTotal;
+              collision.igstTotal = financials.igstTotal;
+              collision.roundOff = financials.roundOff;
+              collision.grandTotal = financials.grandTotal;
+              collision.amountInWords = financials.amountInWords;
+              collision.balanceDue = inv.balanceDue !== undefined ? Number(inv.balanceDue) : financials.grandTotal;
+              collision.paymentStatus = inv.paymentStatus || 'unpaid';
+              collision.status = inv.status || 'finalized';
+              collision.syncStatus = 'synced';
+              collision.updatedAt = new Date();
+              await collision.save();
+              results.invoicesSynced++;
+              results.syncedInvoiceUuids.push(inv.uuid);
             } else {
+              console.error(`[PushSync] Failed to create invoice ${inv.uuid}:`, createErr.message);
               throw createErr;
             }
           }

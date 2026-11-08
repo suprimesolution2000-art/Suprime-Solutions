@@ -124,6 +124,55 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
 
     try {
+      bool ok = false;
+      for (int attempt = 1; attempt <= 2; attempt++) {
+        try {
+          ok = await _executeSync(forceFullSync: forceFullSync);
+          if (ok) break;
+        } catch (attemptErr) {
+          debugPrint('[SyncService] Sync attempt $attempt failed: $attemptErr');
+          if (attempt < 2) {
+            // Wait 2.5s for cold start wake-up
+            await Future.delayed(const Duration(milliseconds: 2500));
+          }
+        }
+      }
+
+      await checkPendingQueue();
+      if (ok) {
+        _status = _pendingCount > 0 ? SyncStatus.offline : SyncStatus.synced;
+        _statusMessage = _pendingCount > 0
+            ? '$_pendingCount bills waiting for internet'
+            : 'Up to date';
+      } else {
+        _status = SyncStatus.offline;
+        _statusMessage = _pendingCount > 0
+            ? '$_pendingCount bills waiting for internet'
+            : 'Offline mode';
+      }
+      notifyListeners();
+      return ok;
+    } catch (e) {
+      debugPrint('[SyncService] Sync error: $e');
+      await checkPendingQueue();
+      _status = SyncStatus.offline;
+      _statusMessage = _pendingCount > 0
+          ? '$_pendingCount bills waiting for internet'
+          : 'Offline mode';
+      notifyListeners();
+      return false;
+    } finally {
+      _isSyncing = false;
+      await checkPendingQueue();
+      if (_status == SyncStatus.syncing) {
+        _status = _pendingCount > 0 ? SyncStatus.offline : SyncStatus.synced;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<bool> _executeSync({bool forceFullSync = false}) async {
+    try {
       final db = await AppDatabase.instance.database;
       final prefs = await SharedPreferences.getInstance();
 
@@ -406,30 +455,10 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
         }
         await prefs.setString('last_sync_time', _lastSyncTime!.toIso8601String());
       }
-
-      await checkPendingQueue();
-      _status = _pendingCount > 0 ? SyncStatus.offline : SyncStatus.synced;
-      _statusMessage = _pendingCount > 0
-          ? '$_pendingCount bills waiting for internet'
-          : 'Up to date';
-      notifyListeners();
       return true;
     } catch (e) {
-      debugPrint('[SyncService] Sync error: $e');
-      await checkPendingQueue();
-      _status = SyncStatus.offline;
-      _statusMessage = _pendingCount > 0
-          ? '$_pendingCount bills waiting for internet'
-          : 'Offline mode';
-      notifyListeners();
-      return false;
-    } finally {
-      _isSyncing = false;
-      await checkPendingQueue();
-      if (_status == SyncStatus.syncing) {
-        _status = _pendingCount > 0 ? SyncStatus.offline : SyncStatus.synced;
-        notifyListeners();
-      }
+      debugPrint('[_executeSync] error: $e');
+      rethrow;
     }
   }
 
