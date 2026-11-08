@@ -21,6 +21,7 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
   final _cityController = TextEditingController(text: 'Bilaspur');
   String _selectedState = 'Chhattisgarh';
   String _selectedStateCode = '22';
+  String? _nameError;
 
   @override
   void dispose() {
@@ -37,11 +38,14 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
     final phone = _phoneController.text.trim();
 
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter customer name')),
-      );
+      setState(() {
+        _nameError = 'Please enter customer name';
+      });
       return;
     }
+    setState(() {
+      _nameError = null;
+    });
 
     final newCust = CustomerModel(
       uuid: const Uuid().v4(),
@@ -74,7 +78,13 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Add New Customer', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Expanded(
+                    child: Text(
+                      'Add New Customer',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                   IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
                 ],
               ),
@@ -83,7 +93,16 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
 
               TextField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Customer / Business Name *', prefixIcon: Icon(Icons.person)),
+                onChanged: (_) {
+                  if (_nameError != null) {
+                    setState(() => _nameError = null);
+                  }
+                },
+                decoration: InputDecoration(
+                  labelText: 'Customer / Business Name *',
+                  prefixIcon: const Icon(Icons.person),
+                  errorText: _nameError,
+                ),
               ),
               const SizedBox(height: 12),
 
@@ -118,12 +137,16 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      initialValue: _selectedState,
+                      value: _selectedState,
+                      isExpanded: true,
                       decoration: const InputDecoration(labelText: 'State'),
                       items: AppConstants.indianStates.entries.map((e) {
                         return DropdownMenuItem<String>(
                           value: e.key,
-                          child: Text('${e.key} (${e.value})'),
+                          child: Text(
+                            '${e.key} (${e.value})',
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         );
                       }).toList(),
                       onChanged: (val) {

@@ -53,43 +53,46 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Period Totals
-                  const Text(
-                    'Sales Summary',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                  ),
-                  const SizedBox(height: 12),
+          : RefreshIndicator(
+              onRefresh: _loadReports,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Period Totals
+                    const Text(
+                      'Sales Summary',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    ),
+                    const SizedBox(height: 12),
 
-                  _buildReportItem(
-                    title: "Today's Total Sales",
-                    value: CurrencyFormatter.format(_summary['todaySales']),
-                    sub: '${_summary['todayCount']} bills issued today',
-                    icon: Icons.today,
-                    color: AppColors.primary,
-                  ),
-                  const SizedBox(height: 10),
+                    _buildReportItem(
+                      title: "Today's Total Sales",
+                      value: CurrencyFormatter.format((_summary['todaySales'] as num?)?.toDouble() ?? 0.0),
+                      sub: '${_summary['todayCount'] ?? 0} bills issued today',
+                      icon: Icons.today,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(height: 10),
 
-                  _buildReportItem(
-                    title: "This Month's Total Sales",
-                    value: CurrencyFormatter.format(_summary['monthlySales']),
-                    sub: '${_summary['monthlyCount']} bills issued this month',
-                    icon: Icons.calendar_month,
-                    color: Colors.blue.shade700,
-                  ),
-                  const SizedBox(height: 10),
+                    _buildReportItem(
+                      title: "This Month's Total Sales",
+                      value: CurrencyFormatter.format((_summary['monthlySales'] as num?)?.toDouble() ?? 0.0),
+                      sub: '${_summary['monthlyCount'] ?? 0} bills issued this month',
+                      icon: Icons.calendar_month,
+                      color: Colors.blue.shade700,
+                    ),
+                    const SizedBox(height: 10),
 
-                  _buildReportItem(
-                    title: "Total Outstanding Receivables",
-                    value: CurrencyFormatter.format(_summary['pendingPayments']),
-                    sub: 'Across ${_summary['pendingCount']} unpaid / partial bills',
-                    icon: Icons.pending_actions,
-                    color: AppColors.unpaid,
-                  ),
+                    _buildReportItem(
+                      title: "Total Outstanding Receivables",
+                      value: CurrencyFormatter.format((_summary['pendingPayments'] as num?)?.toDouble() ?? 0.0),
+                      sub: 'Across ${_summary['pendingCount'] ?? 0} unpaid / partial bills',
+                      icon: Icons.pending_actions,
+                      color: AppColors.unpaid,
+                    ),
                   const SizedBox(height: 24),
 
                   // Top Outstanding Customers
@@ -132,6 +135,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 ],
               ),
             ),
+          ),
     );
   }
 

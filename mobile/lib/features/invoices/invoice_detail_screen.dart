@@ -188,16 +188,13 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
             tooltip: 'Share on WhatsApp',
             onPressed: () => PdfInvoiceService.shareInvoicePdf(_currentInvoice.copyWith(invoiceType: _previewType)),
           ),
-          IconButton(
-            icon: const Icon(Icons.print),
-            tooltip: 'Print Invoice',
-            onPressed: () => PdfInvoiceService.printInvoice(_currentInvoice.copyWith(invoiceType: _previewType)),
-          ),
-          if (_currentInvoice.status != 'cancelled')
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              tooltip: 'Edit Bill',
-              onPressed: () async {
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            tooltip: 'More Actions',
+            onSelected: (val) async {
+              if (val == 'print') {
+                PdfInvoiceService.printInvoice(_currentInvoice.copyWith(invoiceType: _previewType));
+              } else if (val == 'edit') {
                 final result = await Navigator.push<bool>(
                   context,
                   MaterialPageRoute(
@@ -207,14 +204,45 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                 if (result == true) {
                   await _refreshInvoice();
                 }
-              },
-            ),
-          if (isOwner)
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.white),
-              tooltip: 'Delete Bill',
-              onPressed: () => _confirmDeleteInvoice(context),
-            ),
+              } else if (val == 'delete') {
+                _confirmDeleteInvoice(context);
+              }
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'print',
+                child: Row(
+                  children: [
+                    Icon(Icons.print, size: 20, color: AppColors.primary),
+                    SizedBox(width: 8),
+                    Text('Print Bill'),
+                  ],
+                ),
+              ),
+              if (_currentInvoice.status != 'cancelled')
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit_outlined, size: 20, color: AppColors.primary),
+                      SizedBox(width: 8),
+                      Text('Edit Bill'),
+                    ],
+                  ),
+                ),
+              if (isOwner)
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Delete Bill', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
       body: Column(
@@ -292,49 +320,58 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
             ),
           ),
 
-          // Bottom Action Bar with Large Buttons
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: AppColors.divider)),
-            ),
-            child: Row(
-              children: [
-                // 1. Share on WhatsApp Button (Large Green)
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF25D366),
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 52),
+          // Bottom Action Bar with Large Buttons wrapped in SafeArea
+          SafeArea(
+            top: false,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: AppColors.divider)),
+              ),
+              child: Row(
+                children: [
+                  // 1. Share on WhatsApp Button (Large Green)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF25D366),
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 52),
+                      ),
+                      icon: const Icon(Icons.share, size: 22),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'WhatsApp Share',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      onPressed: () => PdfInvoiceService.shareInvoicePdf(_currentInvoice.copyWith(invoiceType: _previewType)),
                     ),
-                    icon: const Icon(Icons.share, size: 22),
-                    label: const Text(
-                      'WhatsApp Share',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    onPressed: () => PdfInvoiceService.shareInvoicePdf(_currentInvoice.copyWith(invoiceType: _previewType)),
                   ),
-                ),
-                const SizedBox(width: 12),
+                  const SizedBox(width: 12),
 
-                // 2. Print Button (Large Primary)
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      minimumSize: const Size(double.infinity, 52),
+                  // 2. Print Button (Large Primary)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        minimumSize: const Size(double.infinity, 52),
+                      ),
+                      icon: const Icon(Icons.print, size: 22),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'Print Bill',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      onPressed: () => PdfInvoiceService.printInvoice(_currentInvoice.copyWith(invoiceType: _previewType)),
                     ),
-                    icon: const Icon(Icons.print, size: 22),
-                    label: const Text(
-                      'Print Bill',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    onPressed: () => PdfInvoiceService.printInvoice(_currentInvoice.copyWith(invoiceType: _previewType)),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],

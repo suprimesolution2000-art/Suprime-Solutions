@@ -75,12 +75,14 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                         icon: const Icon(Icons.clear),
                         onPressed: () {
                           _searchController.clear();
+                          setState(() {});
                           notifier.setSearchQuery('');
                         },
                       )
                     : null,
               ),
               onChanged: (val) {
+                setState(() {});
                 notifier.setSearchQuery(val);
               },
             ),
@@ -98,9 +100,8 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                         },
                         child: SingleChildScrollView(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          child: Container(
-                            height: 350,
-                            alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+                          child: Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -110,11 +111,13 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                                   _searchController.text.isNotEmpty
                                       ? 'No customers found matching "${_searchController.text}"'
                                       : 'No customers added yet',
+                                  textAlign: TextAlign.center,
                                   style: const TextStyle(fontSize: 16, color: AppColors.textSecondary),
                                 ),
                                 const SizedBox(height: 8),
                                 const Text(
                                   'Pull down to sync from cloud',
+                                  textAlign: TextAlign.center,
                                   style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                                 ),
                               ],
@@ -224,65 +227,71 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Text('Outstanding Due', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                  const SizedBox(height: 2),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      CurrencyFormatter.format(customer.outstandingBalance),
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: hasDue ? AppColors.unpaid : AppColors.paid,
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 105),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text('Outstanding Due', style: TextStyle(fontSize: 11, color: AppColors.textMuted), overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        CurrencyFormatter.format(customer.outstandingBalance),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: hasDue ? AppColors.unpaid : AppColors.paid,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(width: 4),
-              PopupMenuButton<String>(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: const Icon(Icons.more_vert, size: 20, color: AppColors.textMuted),
-                onSelected: (val) {
-                  if (val == 'ledger') {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => CustomerLedgerScreen(customer: customer),
+              SizedBox(
+                width: 44,
+                height: 44,
+                child: PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.more_vert, size: 20, color: AppColors.textMuted),
+                  onSelected: (val) {
+                    if (val == 'ledger') {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CustomerLedgerScreen(customer: customer),
+                        ),
+                      ).then((_) {
+                        ref.read(customerListProvider.notifier).fetchCustomers();
+                      });
+                    } else if (val == 'delete') {
+                      _confirmDeleteCustomer(context, customer);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'ledger',
+                      child: Row(
+                        children: [
+                          Icon(Icons.receipt_long, size: 18, color: AppColors.primary),
+                          SizedBox(width: 8),
+                          Text('View Ledger'),
+                        ],
                       ),
-                    ).then((_) {
-                      ref.read(customerListProvider.notifier).fetchCustomers();
-                    });
-                  } else if (val == 'delete') {
-                    _confirmDeleteCustomer(context, customer);
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'ledger',
-                    child: Row(
-                      children: [
-                        Icon(Icons.receipt_long, size: 18, color: AppColors.primary),
-                        SizedBox(width: 8),
-                        Text('View Ledger'),
-                      ],
                     ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                        SizedBox(width: 8),
-                        Text('Delete Customer', style: TextStyle(color: Colors.red)),
-                      ],
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Delete Customer', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -299,7 +308,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           children: [
             Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
             SizedBox(width: 10),
-            Text('Delete Customer?'),
+            Expanded(
+              child: Text('Delete Customer?', overflow: TextOverflow.ellipsis),
+            ),
           ],
         ),
         content: Column(

@@ -146,6 +146,8 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
           widget.invoiceToEdit != null
               ? 'Edit Bill (${widget.invoiceToEdit!.invoiceNumber})'
               : (_currentBillType == 'temporary' ? 'New Temporary Bill' : 'New GST Tax Invoice'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         actions: [
           if (widget.invoiceToEdit == null)
@@ -320,38 +322,52 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Phone & GSTIN Row
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _phoneController,
-                            keyboardType: TextInputType.phone,
-                            decoration: const InputDecoration(
-                              labelText: 'Phone Number (Optional)',
-                              hintText: 'Optional mobile',
-                              prefixIcon: Icon(Icons.phone),
-                            ),
-                            onChanged: (val) {
-                              billingNotifier.updateCustomerDetails(phone: val);
-                            },
+                    // Phone & GSTIN Responsive Section
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isNarrow = constraints.maxWidth < 360;
+                        final phoneField = TextField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          decoration: const InputDecoration(
+                            labelText: 'Phone Number (Optional)',
+                            hintText: 'Optional mobile',
+                            prefixIcon: Icon(Icons.phone),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: _gstinController,
-                            textCapitalization: TextCapitalization.characters,
-                            decoration: InputDecoration(
-                              labelText: _currentBillType == 'temporary' ? 'GSTIN (Optional)' : 'GSTIN *',
-                              hintText: 'e.g. 22AAAAA0000A1Z5',
-                            ),
-                            onChanged: (val) {
-                              billingNotifier.updateCustomerDetails(gstin: val.toUpperCase());
-                            },
+                          onChanged: (val) {
+                            billingNotifier.updateCustomerDetails(phone: val);
+                          },
+                        );
+                        final gstinField = TextField(
+                          controller: _gstinController,
+                          textCapitalization: TextCapitalization.characters,
+                          decoration: InputDecoration(
+                            labelText: _currentBillType == 'temporary' ? 'GSTIN (Optional)' : 'GSTIN *',
+                            hintText: 'e.g. 22AAAAA0000A1Z5',
                           ),
-                        ),
-                      ],
+                          onChanged: (val) {
+                            billingNotifier.updateCustomerDetails(gstin: val.toUpperCase());
+                          },
+                        );
+
+                        if (isNarrow) {
+                          return Column(
+                            children: [
+                              phoneField,
+                              const SizedBox(height: 12),
+                              gstinField,
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          children: [
+                            Expanded(child: phoneField),
+                            const SizedBox(width: 12),
+                            Expanded(child: gstinField),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 12),
 
@@ -376,13 +392,17 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                           flex: 3,
                           child: DropdownButtonFormField<String>(
                             value: AppConstants.indianStates.containsKey(_selectedState) ? _selectedState : 'Chhattisgarh',
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'State (Place of Supply) *',
                             ),
                             items: AppConstants.indianStates.entries.map((e) {
                               return DropdownMenuItem<String>(
                                 value: e.key,
-                                child: Text('${e.key} (${e.value})'),
+                                child: Text(
+                                  '${e.key} (${e.value})',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               );
                             }).toList(),
                             onChanged: (val) {
@@ -630,7 +650,16 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                                 CircleAvatar(
                                   radius: 12,
                                   backgroundColor: AppColors.primaryContainer,
-                                  child: Text('${itm.sno}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(2),
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        '${itm.sno}',
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                      ),
+                                    ),
+                                  ),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
@@ -640,11 +669,15 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                                       Text(
                                         itm.description,
                                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
                                         'Qty: ${itm.quantity.toStringAsFixed(itm.quantity.truncateToDouble() == itm.quantity ? 0 : 2)} ${itm.unit}  ×  ₹${itm.rate.toStringAsFixed(2)}  (GST ${itm.gstRate.toInt()}%)',
                                         style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ],
                                   ),
@@ -658,8 +691,9 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                                     ),
                                     IconButton(
                                       icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
+                                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                                      padding: const EdgeInsets.all(6),
+                                      tooltip: 'Remove Item',
                                       onPressed: () => billingNotifier.removeItem(index),
                                     ),
                                   ],
@@ -872,11 +906,14 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
               color: primaryThemeColor,
             ),
             const SizedBox(width: 8),
-            Text(
-              isEdit
-                  ? (isTemporary ? 'Confirm Temporary Bill Update' : 'Confirm GST Bill Update')
-                  : (isTemporary ? 'Confirm Temporary Bill' : 'Confirm GST Bill Generation'),
-              style: const TextStyle(fontSize: 17),
+            Expanded(
+              child: Text(
+                isEdit
+                    ? (isTemporary ? 'Confirm Temporary Bill Update' : 'Confirm GST Bill Update')
+                    : (isTemporary ? 'Confirm Temporary Bill' : 'Confirm GST Bill Generation'),
+                style: const TextStyle(fontSize: 17),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_constants.dart';
@@ -36,6 +37,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
 
   String _selectedUnit = 'PCS';
   double _selectedGstRate = 18.0;
+  String? _validationError;
 
   List<ProductModel> _savedProducts = [];
 
@@ -61,7 +63,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
     final q = double.tryParse(_qtyController.text) ?? 0.0;
     final r = double.tryParse(_rateController.text) ?? 0.0;
     final d = double.tryParse(_discountController.text) ?? 0.0;
-    final taxable = (q * r) - d;
+    final taxable = math.max(0.0, (q * r) - d);
     if (widget.isTemporary) return taxable;
     final tax = taxable * (_selectedGstRate / 100);
     return taxable + tax;
@@ -81,181 +83,215 @@ class _AddItemDialogState extends State<AddItemDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 500),
-        padding: const EdgeInsets.all(20),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Add Product / Item',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const Divider(),
-              const SizedBox(height: 8),
-
-              // Description of Goods (Autocomplete or manual typing)
-              Autocomplete<ProductModel>(
-                displayStringForOption: (option) => option.description,
-                optionsBuilder: (TextEditingValue textEditingValue) {
-                  if (textEditingValue.text.isEmpty) {
-                    return _savedProducts.take(6);
-                  }
-                  final query = textEditingValue.text.toLowerCase().trim();
-                  return _savedProducts.where((p) =>
-                      p.description.toLowerCase().contains(query) ||
-                      p.hsnCode.contains(query));
-                },
-                onSelected: (ProductModel selection) {
-                  _descController.text = selection.description;
-                  _hsnController.text = selection.hsnCode;
-                  if (selection.defaultRate > 0) {
-                    _rateController.text = selection.defaultRate.toString();
-                  }
-                  setState(() {
-                    _selectedUnit = selection.unit;
-                    _selectedGstRate = selection.gstRate;
-                  });
-                },
-                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                  // Keep sync with _descController & check auto-fill for HSN
-                  controller.addListener(() {
-                    _descController.text = controller.text;
-                    if (_hsnController.text.trim().isEmpty && controller.text.trim().length >= 3) {
-                      final match = _savedProducts.firstWhere(
-                        (p) => p.description.trim().toLowerCase() == controller.text.trim().toLowerCase(),
-                        orElse: () => ProductModel(uuid: '', description: ''),
-                      );
-                      if (match.hsnCode.isNotEmpty) {
-                        _hsnController.text = match.hsnCode;
-                        if (_rateController.text.isEmpty && match.defaultRate > 0) {
-                          _rateController.text = match.defaultRate.toString();
-                        }
-                      }
-                    }
-                  });
-                  return TextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    decoration: const InputDecoration(
-                      labelText: 'Description of Goods *',
-                      hintText: 'e.g. Spiral Wound Gasket 2" 150#',
-                      prefixIcon: Icon(Icons.inventory_2_outlined),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-
-              // HSN & Unit Row
-              Row(
-                children: [
-                  if (!widget.isTemporary) ...[
-                    Expanded(
-                      flex: 3,
-                      child: TextField(
-                        controller: _hsnController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'HSN / SAC Code',
-                          hintText: 'e.g. 8484',
-                          helperText: 'Saved for future bills',
-                        ),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: AnimatedPadding(
+        padding: MediaQuery.of(context).viewInsets,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.decelerate,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 500),
+          padding: const EdgeInsets.all(20),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Add Product / Item',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
                   ],
-                  Expanded(
-                    flex: widget.isTemporary ? 1 : 2,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _selectedUnit,
-                      decoration: const InputDecoration(
-                        labelText: 'Unit *',
-                      ),
-                      items: AppConstants.commonUnits.map((u) {
-                        return DropdownMenuItem(value: u, child: Text(u));
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) setState(() => _selectedUnit = val);
-                      },
+                ),
+                const Divider(),
+                if (_validationError != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.danger.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // Quantity & Rate Row
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _qtyController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Quantity *',
-                        prefixIcon: Icon(Icons.format_list_numbered),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _rateController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Rate (₹) *',
-                        prefixIcon: Icon(Icons.currency_rupee),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // Discount & GST Rate Row
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _discountController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Discount (₹)',
-                        hintText: '0',
-                      ),
-                    ),
-                  ),
-                  if (!widget.isTemporary) ...[
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: DropdownButtonFormField<double>(
-                        initialValue: _selectedGstRate,
-                        decoration: const InputDecoration(
-                          labelText: 'GST Rate *',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline, size: 18, color: AppColors.danger),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _validationError!,
+                            style: const TextStyle(fontSize: 13, color: AppColors.danger, fontWeight: FontWeight.w600),
+                          ),
                         ),
-                        items: AppConstants.gstRates.map((r) {
-                          return DropdownMenuItem(value: r, child: Text('${r.toInt()}%'));
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                const SizedBox(height: 4),
+
+                // Description of Goods (Autocomplete or manual typing)
+                Autocomplete<ProductModel>(
+                  displayStringForOption: (option) => option.description,
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text.isEmpty) {
+                      return _savedProducts.take(6);
+                    }
+                    final query = textEditingValue.text.toLowerCase().trim();
+                    return _savedProducts.where((p) =>
+                        p.description.toLowerCase().contains(query) ||
+                        p.hsnCode.contains(query));
+                  },
+                  onSelected: (ProductModel selection) {
+                    _descController.text = selection.description;
+                    _hsnController.text = selection.hsnCode;
+                    if (selection.defaultRate > 0) {
+                      _rateController.text = selection.defaultRate.toString();
+                    }
+                    setState(() {
+                      _selectedUnit = selection.unit;
+                      _selectedGstRate = selection.gstRate;
+                      _validationError = null;
+                    });
+                  },
+                  fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                    return TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onChanged: (text) {
+                        _descController.text = text;
+                        if (_validationError != null) {
+                          setState(() => _validationError = null);
+                        }
+                        if (_hsnController.text.trim().isEmpty && text.trim().length >= 3) {
+                          final match = _savedProducts.firstWhere(
+                            (p) => p.description.trim().toLowerCase() == text.trim().toLowerCase(),
+                            orElse: () => ProductModel(uuid: '', description: ''),
+                          );
+                          if (match.hsnCode.isNotEmpty) {
+                            _hsnController.text = match.hsnCode;
+                            if (_rateController.text.isEmpty && match.defaultRate > 0) {
+                              _rateController.text = match.defaultRate.toString();
+                            }
+                          }
+                        }
+                      },
+                      decoration: const InputDecoration(
+                        labelText: 'Description of Goods *',
+                        hintText: 'e.g. Spiral Wound Gasket 2" 150#',
+                        prefixIcon: Icon(Icons.inventory_2_outlined),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+
+                // HSN & Unit Row
+                Row(
+                  children: [
+                    if (!widget.isTemporary) ...[
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          controller: _hsnController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'HSN / SAC Code',
+                            hintText: 'e.g. 8484',
+                            helperText: 'Saved for future bills',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    Expanded(
+                      flex: widget.isTemporary ? 1 : 2,
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedUnit,
+                        decoration: const InputDecoration(
+                          labelText: 'Unit *',
+                        ),
+                        items: AppConstants.commonUnits.map((u) {
+                          return DropdownMenuItem(value: u, child: Text(u));
                         }).toList(),
                         onChanged: (val) {
-                          if (val != null) setState(() => _selectedGstRate = val);
+                          if (val != null) setState(() => _selectedUnit = val);
                         },
                       ),
                     ),
                   ],
-                ],
-              ),
+                ),
+                const SizedBox(height: 12),
+
+                // Quantity & Rate Row
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _qtyController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Quantity *',
+                          prefixIcon: Icon(Icons.format_list_numbered),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _rateController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Rate (₹) *',
+                          prefixIcon: Icon(Icons.currency_rupee),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Discount & GST Rate Row
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _discountController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Discount (₹)',
+                          hintText: '0',
+                        ),
+                      ),
+                    ),
+                    if (!widget.isTemporary) ...[
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<double>(
+                          value: _selectedGstRate,
+                          decoration: const InputDecoration(
+                            labelText: 'GST Rate *',
+                          ),
+                          items: AppConstants.gstRates.map((r) {
+                            return DropdownMenuItem(value: r, child: Text('${r.toInt()}%'));
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null) setState(() => _selectedGstRate = val);
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               const SizedBox(height: 16),
 
               // Live Item Total Banner
@@ -291,27 +327,19 @@ class _AddItemDialogState extends State<AddItemDialog> {
                   final discount = double.tryParse(_discountController.text) ?? 0.0;
 
                   if (desc.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please enter item description')),
-                    );
+                    setState(() => _validationError = 'Please enter item description');
                     return;
                   }
                   if (qty <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Quantity must be greater than 0')),
-                    );
+                    setState(() => _validationError = 'Quantity must be greater than 0');
                     return;
                   }
                   if (rate <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Rate must be greater than 0')),
-                    );
+                    setState(() => _validationError = 'Rate must be greater than 0');
                     return;
                   }
                   if (discount < 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Discount cannot be negative')),
-                    );
+                    setState(() => _validationError = 'Discount cannot be negative');
                     return;
                   }
                   if (discount > (qty * rate)) {
@@ -353,6 +381,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

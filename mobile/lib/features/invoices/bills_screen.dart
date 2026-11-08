@@ -282,12 +282,14 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                         icon: const Icon(Icons.clear),
                         onPressed: () {
                           _searchController.clear();
+                          setState(() {});
                           notifier.setSearchQuery('');
                         },
                       )
                     : null,
               ),
               onChanged: (val) {
+                setState(() {});
                 notifier.setSearchQuery(val);
               },
             ),
@@ -355,13 +357,16 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                           ref.read(customerListProvider.notifier).fetchCustomers();
                           ref.read(dashboardProvider.notifier).refreshSummary();
                         },
-                        child: Text(
-                          'SYNC NOW',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.amber.shade900,
-                            decoration: TextDecoration.underline,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          child: Text(
+                            'SYNC NOW',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber.shade900,
+                              decoration: TextDecoration.underline,
+                            ),
                           ),
                         ),
                       ),
@@ -383,9 +388,8 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                         },
                         child: SingleChildScrollView(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          child: Container(
-                            height: 350,
-                            alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+                          child: Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -401,11 +405,13 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                                   _searchController.text.isNotEmpty
                                       ? 'No ${invoiceState.invoiceType == "temporary" ? "temporary bills" : "GST bills"} found matching "${_searchController.text}"'
                                       : 'No ${invoiceState.invoiceType == "temporary" ? "temporary bills" : "GST bills"} found in this filter',
+                                  textAlign: TextAlign.center,
                                   style: const TextStyle(fontSize: 16, color: AppColors.textSecondary),
                                 ),
                                 const SizedBox(height: 8),
                                 const Text(
                                   'Pull down to sync from cloud',
+                                  textAlign: TextAlign.center,
                                   style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                                 ),
                               ],
@@ -614,23 +620,22 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                     // Row 1: Invoice No, Payment Badge, & Actions Menu
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
-                    child: Row(
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Flexible(
-                          child: Text(
-                            inv.invoiceType == 'temporary' ? 'Temporary Bill' : inv.invoiceNumber,
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
-                              color: inv.invoiceType == 'temporary' ? const Color(0xFF8B5A2B) : AppColors.primary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                        Text(
+                          inv.invoiceType == 'temporary' ? 'Temporary Bill' : inv.invoiceNumber,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: inv.invoiceType == 'temporary' ? const Color(0xFF8B5A2B) : AppColors.primary,
                           ),
                         ),
-                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                           decoration: BoxDecoration(
@@ -649,7 +654,6 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
@@ -661,8 +665,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                             style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: badgeText),
                           ),
                         ),
-                        if (inv.syncStatus != 'synced') ...[
-                          const SizedBox(width: 6),
+                        if (inv.syncStatus != 'synced')
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
@@ -686,13 +689,15 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                               ],
                             ),
                           ),
-                        ],
                       ],
                     ),
                   ),
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert, size: 20, color: AppColors.textSecondary),
-                    padding: EdgeInsets.zero,
+                  SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, size: 20, color: AppColors.textSecondary),
+                      padding: EdgeInsets.zero,
                     onSelected: (val) {
                       if (val == 'share') {
                         PdfInvoiceService.shareInvoicePdf(inv);
@@ -758,8 +763,9 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                         ),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
               const SizedBox(height: 6),
 
               // Row 2: Customer Name & Date
@@ -884,17 +890,18 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
 
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+            return SingleChildScrollView(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 20,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                   // Title Header
                   Row(
                     children: [
@@ -1231,9 +1238,10 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                   ],
                 ],
               ),
-            );
-          },
-        );
+            ),
+          );
+        },
+      );
       },
     );
   }

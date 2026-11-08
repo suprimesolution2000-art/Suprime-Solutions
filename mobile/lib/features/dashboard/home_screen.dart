@@ -43,6 +43,7 @@ class HomeScreen extends ConsumerWidget {
                 child: Image.asset(
                   'assets/images/app_logo.png',
                   fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.business, color: AppColors.primary, size: 24),
                 ),
               ),
             ),
@@ -53,10 +54,14 @@ class HomeScreen extends ConsumerWidget {
                   Text(
                     'Suprime Solutions',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   Text(
                     'Industrial Gaskets & Hydraulics',
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.normal, color: Colors.white70),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -189,9 +194,12 @@ class HomeScreen extends ConsumerWidget {
                   elevation: 3,
                 ),
                 icon: const Icon(Icons.add_circle, size: 28),
-                label: const Text(
-                  'CREATE NEW BILL',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+                label: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'CREATE NEW BILL',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+                  ),
                 ),
                 onPressed: () => _openCreateBillWithSelection(context, ref),
               ),
@@ -424,9 +432,13 @@ class HomeScreen extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               Icon(icon, color: color, size: 20),
             ],
@@ -480,9 +492,15 @@ class HomeScreen extends ConsumerWidget {
           children: [
             Icon(icon, color: AppColors.primary, size: 28),
             const SizedBox(height: 6),
-            Text(
-              label,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                ),
+              ),
             ),
           ],
         ),
@@ -495,9 +513,10 @@ class HomeScreen extends ConsumerWidget {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-        decoration: const BoxDecoration(
+      builder: (ctx) => SafeArea(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+          decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
@@ -542,14 +561,14 @@ class HomeScreen extends ConsumerWidget {
                 decoration: BoxDecoration(
                   border: Border.all(color: AppColors.primary, width: 1.5),
                   borderRadius: BorderRadius.circular(14),
-                  color: AppColors.primary.withOpacity(0.04),
+                  color: AppColors.primary.withValues(alpha: 0.04),
                 ),
                 child: Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.12),
+                        color: AppColors.primary.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.receipt_long, color: AppColors.primary, size: 28),
@@ -561,12 +580,15 @@ class HomeScreen extends ConsumerWidget {
                         children: [
                           Row(
                             children: [
-                              Text(
-                                'GST Bill',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primary,
+                              Expanded(
+                                child: Text(
+                                  'GST Bill',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               SizedBox(width: 8),
@@ -606,14 +628,14 @@ class HomeScreen extends ConsumerWidget {
                 decoration: BoxDecoration(
                   border: Border.all(color: const Color(0xFF8B5A2B), width: 1.5),
                   borderRadius: BorderRadius.circular(14),
-                  color: const Color(0xFF8B5A2B).withOpacity(0.05),
+                  color: const Color(0xFF8B5A2B).withValues(alpha: 0.05),
                 ),
                 child: Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF8B5A2B).withOpacity(0.12),
+                        color: const Color(0xFF8B5A2B).withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.history_edu, color: Color(0xFF8B5A2B), size: 28),
@@ -625,12 +647,15 @@ class HomeScreen extends ConsumerWidget {
                         children: [
                           Row(
                             children: [
-                              Text(
-                                'Temporary Bill',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF8B5A2B),
+                              Expanded(
+                                child: Text(
+                                  'Temporary Bill',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF8B5A2B),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               SizedBox(width: 8),
@@ -662,7 +687,8 @@ class HomeScreen extends ConsumerWidget {
           ],
         ),
       ),
-    );
+    ),
+  );
 
     if (selectedType == null || !context.mounted) return;
 

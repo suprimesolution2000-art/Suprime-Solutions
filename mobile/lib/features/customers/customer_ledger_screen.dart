@@ -59,7 +59,8 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
     final c = widget.customer;
     final totalBilled = _invoices.fold(0.0, (acc, inv) => acc + (inv.status != 'cancelled' && inv.invoiceType != 'temporary' ? inv.grandTotal : 0.0));
     final totalPaid = _payments.fold(0.0, (acc, p) => acc + p.amount);
-    final outstanding = (totalBilled - totalPaid).clamp(0.0, double.infinity);
+    final rawDue = (totalBilled - totalPaid);
+    final outstanding = (rawDue.abs() < 0.005 ? 0.0 : rawDue).clamp(0.0, double.infinity);
 
     return Scaffold(
       appBar: AppBar(
@@ -94,10 +95,14 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                                 Text(
                                   c.name,
                                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 Text(
-                                  'Phone: ${c.phone}  •  GSTIN: ${c.gstin.isNotEmpty ? c.gstin : "Unregistered"}',
+                                  'Phone: ${c.phone.isNotEmpty ? c.phone : "N/A"}  •  GSTIN: ${c.gstin.isNotEmpty ? c.gstin : "Unregistered"}',
                                   style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
                             ),
@@ -184,10 +189,18 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                                       inv.invoiceType == 'temporary'
                                           ? '${DateFormatter.format(inv.invoiceDate)} • Temporary Bill'
                                           : '${DateFormatter.format(inv.invoiceDate)} • Status: ${inv.paymentStatus.toUpperCase()}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    trailing: Text(
-                                      CurrencyFormatter.format(inv.grandTotal),
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                    trailing: ConstrainedBox(
+                                      constraints: const BoxConstraints(maxWidth: 100),
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          CurrencyFormatter.format(inv.grandTotal),
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                        ),
+                                      ),
                                     ),
                                     onTap: () {
                                       Navigator.push(
@@ -223,6 +236,8 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                                     ),
                                     subtitle: Text(
                                       'Against: ${p.invoiceNumber}  •  ${DateFormatter.format(p.paymentDate)}${p.referenceNumber.isNotEmpty ? "\nRef: ${p.referenceNumber}" : ""}',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 );
@@ -268,7 +283,12 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
           children: [
             Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
             SizedBox(width: 10),
-            Text('Delete Customer?'),
+            Expanded(
+              child: Text(
+                'Delete Customer?',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: Column(

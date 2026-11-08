@@ -75,4 +75,6 @@ class AppColors {
   static const Color partial = Color(0xFFD97706);
   static const Color partialContainer = Color(0xFFFEF3C7);
   static const Color overdue = Color(0xFFB71C1C);
+  static const Color danger = Color(0xFFC62828);
+  static const Color error = Color(0xFFC62828);
 }

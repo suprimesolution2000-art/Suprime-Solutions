@@ -70,7 +70,12 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
               children: [
                 Icon(Icons.person_add, color: AppColors.primary),
                 SizedBox(width: 8),
-                Text('Add New Staff Account'),
+                Expanded(
+                  child: Text(
+                    'Add New Staff Account',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
             content: SingleChildScrollView(
@@ -115,7 +120,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    initialValue: selectedRole,
+                    value: selectedRole,
                     decoration: const InputDecoration(
                       labelText: 'Role',
                       border: OutlineInputBorder(),
@@ -222,26 +227,32 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
-            title: Text('Reset Password for ${user['name']}'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Username: @${user['username']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: passCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'New Password *',
-                    hintText: 'Enter new password (min 6 chars)',
-                    border: OutlineInputBorder(),
+            title: Text(
+              'Reset Password for ${user['name']}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Username: @${user['username']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: passCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'New Password *',
+                      hintText: 'Enter new password (min 6 chars)',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
-                ),
-                if (dialogError != null) ...[
-                  const SizedBox(height: 8),
-                  Text(dialogError!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                  if (dialogError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(dialogError!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                  ],
                 ],
-              ],
+              ),
             ),
             actions: [
               TextButton(
@@ -484,13 +495,19 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                                         children: [
                                           const Icon(Icons.key, size: 16, color: Colors.amber),
                                           const SizedBox(width: 6),
-                                          Text('Password: $plainPass', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                          const Spacer(),
+                                          Expanded(
+                                            child: Text(
+                                              'Password: $plainPass',
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
                                           IconButton(
                                             icon: const Icon(Icons.copy, size: 16),
                                             tooltip: 'Copy Password',
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(),
+                                            padding: const EdgeInsets.all(4),
+                                            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
                                             onPressed: () {
                                               Clipboard.setData(ClipboardData(text: plainPass));
                                               ScaffoldMessenger.of(context).showSnackBar(
@@ -503,23 +520,23 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                                     ),
                                     const SizedBox(height: 8),
                                   ],
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
+                                  Wrap(
+                                    alignment: WrapAlignment.end,
+                                    spacing: 8,
+                                    runSpacing: 4,
                                     children: [
                                       TextButton.icon(
                                         icon: const Icon(Icons.lock_reset, size: 18),
                                         label: const Text('Reset Password'),
                                         onPressed: () => _showResetPasswordDialog(u),
                                       ),
-                                      if (!isOwner) ...[
-                                        const SizedBox(width: 8),
+                                      if (!isOwner)
                                         TextButton.icon(
                                           style: TextButton.styleFrom(foregroundColor: Colors.red),
                                           icon: const Icon(Icons.delete_outline, size: 18),
                                           label: const Text('Delete'),
                                           onPressed: () => _confirmDeleteUser(u),
                                         ),
-                                      ],
                                     ],
                                   ),
                                 ],

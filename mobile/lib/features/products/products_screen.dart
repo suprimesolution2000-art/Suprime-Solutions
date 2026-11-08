@@ -110,7 +110,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          initialValue: selectedUnit,
+                          value: selectedUnit,
                           decoration: const InputDecoration(
                             labelText: 'Unit',
                             border: OutlineInputBorder(),
@@ -141,7 +141,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<double>(
-                          initialValue: selectedGst,
+                          value: selectedGst,
                           decoration: const InputDecoration(
                             labelText: 'GST %',
                             border: OutlineInputBorder(),
@@ -307,13 +307,17 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         icon: const Icon(Icons.clear),
                         onPressed: () {
                           _searchController.clear();
+                          setState(() {});
                           _loadProducts();
                         },
                       )
                     : null,
                 border: const OutlineInputBorder(),
               ),
-              onChanged: (_) => _loadProducts(),
+              onChanged: (_) {
+                setState(() {});
+                _loadProducts();
+              },
             ),
           ),
 
@@ -329,9 +333,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         },
                         child: SingleChildScrollView(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          child: Container(
-                            height: 350,
-                            alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+                          child: Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -341,11 +344,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                   _searchController.text.isNotEmpty
                                       ? 'No products matching "${_searchController.text}"'
                                       : 'No products in catalogue yet',
+                                  textAlign: TextAlign.center,
                                   style: const TextStyle(fontSize: 16, color: AppColors.textSecondary),
                                 ),
                                 const SizedBox(height: 8),
                                 const Text(
                                   'Tap "+" to add an industrial product',
+                                  textAlign: TextAlign.center,
                                   style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                                 ),
                               ],
@@ -414,25 +419,27 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        CurrencyFormatter.format(p.defaultRate),
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary),
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(maxWidth: 85),
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          CurrencyFormatter.format(p.defaultRate),
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary),
+                                        ),
                                       ),
                                     ),
-                                    const SizedBox(width: 4),
+                                    const SizedBox(width: 2),
                                     IconButton(
                                       padding: const EdgeInsets.all(6),
-                                      constraints: const BoxConstraints(),
+                                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
                                       icon: const Icon(Icons.edit_outlined, size: 20, color: AppColors.primary),
                                       tooltip: 'Edit Product',
                                       onPressed: () => _showAddOrEditDialog(product: p),
                                     ),
-                                    const SizedBox(width: 4),
                                     IconButton(
                                       padding: const EdgeInsets.all(6),
-                                      constraints: const BoxConstraints(),
+                                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
                                       icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
                                       tooltip: 'Delete Product',
                                       onPressed: () => _confirmDeleteProduct(p),

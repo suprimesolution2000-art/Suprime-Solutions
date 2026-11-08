@@ -31,6 +31,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
   final _notesController = TextEditingController();
   String _selectedMethod = 'UPI';
   bool _isSaving = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -49,19 +50,14 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
   Future<void> _submitPayment() async {
     final amount = double.tryParse(_amountController.text) ?? 0.0;
     if (amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Payment amount must be greater than zero')),
-      );
+      setState(() => _errorMessage = 'Payment amount must be greater than zero');
       return;
     }
     if (amount > widget.invoice.balanceDue + 0.001) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Payment amount cannot exceed balance due of ${CurrencyFormatter.format(widget.invoice.balanceDue)}'),
-        ),
-      );
+      setState(() => _errorMessage = 'Payment amount cannot exceed balance due of ${CurrencyFormatter.format(widget.invoice.balanceDue)}');
       return;
     }
+    setState(() => _errorMessage = null);
 
     setState(() => _isSaving = true);
 
@@ -142,9 +138,12 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Record Payment',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  const Expanded(
+                    child: Text(
+                      'Record Payment',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
@@ -153,6 +152,29 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
                 ],
               ),
               const Divider(),
+              if (_errorMessage != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, size: 18, color: AppColors.danger),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: const TextStyle(fontSize: 13, color: AppColors.danger, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               const SizedBox(height: 8),
 
               // Invoice summary pill
@@ -206,7 +228,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
 
               // Payment Method
               DropdownButtonFormField<String>(
-                initialValue: _selectedMethod,
+                value: _selectedMethod,
                 decoration: const InputDecoration(
                   labelText: 'Payment Mode *',
                   prefixIcon: Icon(Icons.account_balance_wallet_outlined),

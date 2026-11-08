@@ -202,6 +202,7 @@ class AppUpdateService {
   Future<void> downloadAndInstall(
     AppUpdateInfo info, {
     required Function(int received, int total) onProgress,
+    CancelToken? cancelToken,
   }) async {
     if (kIsWeb || !Platform.isAndroid) {
       throw UnsupportedError('In-app updates are only supported on Android devices.');
@@ -227,6 +228,7 @@ class AppUpdateService {
     await _dio.download(
       info.downloadUrl,
       savePath,
+      cancelToken: cancelToken,
       onReceiveProgress: (received, total) {
         onProgress(received, total > 0 ? total : (info.apkSize ?? 0));
       },

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_constants.dart';
@@ -25,8 +26,24 @@ class _UpdateDialogState extends State<UpdateDialog> {
   double _progress = 0.0;
   String _statusText = '';
   String? _errorMessage;
+  CancelToken? _cancelToken;
+
+  @override
+  void dispose() {
+    _cancelToken?.cancel();
+    super.dispose();
+  }
+
+  void _cancelDownload() {
+    _cancelToken?.cancel('User cancelled download');
+    setState(() {
+      _isDownloading = false;
+      _statusText = '';
+    });
+  }
 
   Future<void> _startUpdate() async {
+    _cancelToken = CancelToken();
     setState(() {
       _isDownloading = true;
       _errorMessage = null;
@@ -80,6 +97,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
       await AppUpdateService.instance.downloadAndInstall(
         widget.updateInfo,
+        cancelToken: _cancelToken,
         onProgress: (received, total) {
           if (!mounted) return;
           if (total > 0) {
@@ -106,6 +124,13 @@ class _UpdateDialogState extends State<UpdateDialog> {
       }
     } catch (e) {
       if (mounted) {
+        if (e is DioException && CancelToken.isCancel(e)) {
+          setState(() {
+            _isDownloading = false;
+            _statusText = '';
+          });
+          return;
+        }
         String msg = 'Download failed. Please check your connection and tap Retry.';
         if (e.toString().contains('404')) {
           msg = 'Update file was finalizing on the server. Please tap Retry now.';
@@ -123,7 +148,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       elevation: 10,
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(22),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -275,13 +300,25 @@ class _UpdateDialogState extends State<UpdateDialog> {
                       onPressed: () => Navigator.pop(context),
                       child: const Text('Remind Later', style: TextStyle(color: AppColors.textSecondary)),
                     ),
+                  )
+                else
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: _cancelDownload,
+                      child: const Text('Cancel', style: TextStyle(color: Colors.red)),
+                    ),
                   ),
-                if (!_isDownloading) const SizedBox(width: 10),
+                const SizedBox(width: 10),
                 Expanded(
-                  flex: _isDownloading ? 1 : 1,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
+                      disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.6),
+                      disabledForegroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       elevation: 2,
