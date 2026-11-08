@@ -72,11 +72,11 @@ const getLatestRelease = async (req, res) => {
 
     // Fallback if GitHub rate-limited and no cache yet
     const fallback = {
-      latestVersion: '1.0.21',
-      tagName: 'v1.0.21',
-      releaseName: 'Suprime Solutions v1.0.21',
-      releaseNotes: 'Added choice between GST Bill and Temporary Bill upon generation, wood-themed temporary bill template with theme-matched text colors, format toggling, and sync support.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.21/Suprime_Solutions_v1.0.21.apk',
+      latestVersion: '1.0.22',
+      tagName: 'v1.0.22',
+      releaseName: 'Suprime Solutions v1.0.22',
+      releaseNotes: 'Tapping Create New Bill on Home Screen now directly gives options for GST Bill vs Temporary Bill, plus on-screen format selector tabs.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.22/Suprime_Solutions_v1.0.22.apk',
       apkSize: 39500000,
       publishedAt: new Date().toISOString()
     };
@@ -94,11 +94,11 @@ const getLatestRelease = async (req, res) => {
     }
     return res.json({
       success: true,
-      latestVersion: '1.0.21',
-      tagName: 'v1.0.21',
-      releaseName: 'Suprime Solutions v1.0.21',
-      releaseNotes: 'Added choice between GST Bill and Temporary Bill upon generation, wood-themed temporary bill template with theme-matched text colors, format toggling, and sync support.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.21/Suprime_Solutions_v1.0.21.apk',
+      latestVersion: '1.0.22',
+      tagName: 'v1.0.22',
+      releaseName: 'Suprime Solutions v1.0.22',
+      releaseNotes: 'Tapping Create New Bill on Home Screen now directly gives options for GST Bill vs Temporary Bill, plus on-screen format selector tabs.',
+      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.22/Suprime_Solutions_v1.0.22.apk',
       apkSize: 39500000,
       publishedAt: new Date().toISOString()
     });

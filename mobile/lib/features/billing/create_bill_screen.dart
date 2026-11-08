@@ -13,8 +13,13 @@ import '../invoices/invoice_detail_screen.dart';
 
 class CreateBillScreen extends ConsumerStatefulWidget {
   final InvoiceModel? invoiceToEdit;
+  final String initialInvoiceType;
 
-  const CreateBillScreen({super.key, this.invoiceToEdit});
+  const CreateBillScreen({
+    super.key,
+    this.invoiceToEdit,
+    this.initialInvoiceType = 'gst',
+  });
 
   @override
   ConsumerState<CreateBillScreen> createState() => _CreateBillScreenState();
@@ -30,6 +35,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   final _challanController = TextEditingController();
   TextEditingController? _customerAutocompleteController;
 
+  late String _currentBillType;
   String _selectedState = 'Chhattisgarh';
   int _formVersion = 0;
 
@@ -39,6 +45,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   @override
   void initState() {
     super.initState();
+    _currentBillType = widget.invoiceToEdit?.invoiceType ?? widget.initialInvoiceType;
     _loadRecentCustomers();
     if (widget.invoiceToEdit != null) {
       final inv = widget.invoiceToEdit!;
@@ -133,7 +140,11 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.invoiceToEdit != null ? 'Edit Bill (${widget.invoiceToEdit!.invoiceNumber})' : 'New Tax Invoice'),
+        title: Text(
+          widget.invoiceToEdit != null
+              ? 'Edit Bill (${widget.invoiceToEdit!.invoiceNumber})'
+              : (_currentBillType == 'temporary' ? 'New Temporary Bill' : 'New GST Tax Invoice'),
+        ),
         actions: [
           if (widget.invoiceToEdit == null)
             IconButton(
@@ -168,6 +179,86 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Format Selector Switcher
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => _currentBillType = 'gst'),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _currentBillType == 'gst' ? AppColors.primary : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.receipt_long,
+                              size: 18,
+                              color: _currentBillType == 'gst' ? Colors.white : AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'GST Tax Invoice',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: _currentBillType == 'gst' ? Colors.white : AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => _currentBillType = 'temporary'),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _currentBillType == 'temporary' ? const Color(0xFF8B5A2B) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.history_edu,
+                              size: 18,
+                              color: _currentBillType == 'temporary' ? Colors.white : AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Temporary Bill',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: _currentBillType == 'temporary' ? Colors.white : AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             // 1. Customer Information Card
             Card(
               margin: EdgeInsets.zero,
@@ -243,8 +334,8 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                           child: TextField(
                             controller: _gstinController,
                             textCapitalization: TextCapitalization.characters,
-                            decoration: const InputDecoration(
-                              labelText: 'GSTIN *',
+                            decoration: InputDecoration(
+                              labelText: _currentBillType == 'temporary' ? 'GSTIN (Optional)' : 'GSTIN *',
                               hintText: 'e.g. 22AAAAA0000A1Z5',
                             ),
                             onChanged: (val) {
@@ -259,10 +350,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                     // Address
                     TextField(
                       controller: _addressController,
-                      decoration: const InputDecoration(
-                        labelText: 'Address & City *',
+                      decoration: InputDecoration(
+                        labelText: _currentBillType == 'temporary' ? 'Address & City (Optional)' : 'Address & City *',
                         hintText: 'e.g. Industrial Area, Bilaspur',
-                        prefixIcon: Icon(Icons.location_on_outlined),
+                        prefixIcon: const Icon(Icons.location_on_outlined),
                       ),
                       onChanged: (val) {
                         billingNotifier.updateCustomerDetails(address: val);
@@ -622,7 +713,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
             // 5. THE BIG SAVE & ISSUE BUTTON
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: _currentBillType == 'temporary' ? const Color(0xFF8B5A2B) : AppColors.primary,
                 minimumSize: const Size(double.infinity, 60),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
@@ -632,8 +723,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
               child: billState.isSaving
                   ? const CircularProgressIndicator(color: Colors.white)
                   : Text(
-                      widget.invoiceToEdit != null ? 'UPDATE INVOICE' : 'SAVE & GENERATE INVOICE',
-                      style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                      widget.invoiceToEdit != null
+                          ? (_currentBillType == 'temporary' ? 'UPDATE TEMPORARY BILL' : 'UPDATE GST BILL')
+                          : (_currentBillType == 'temporary' ? 'SAVE & ISSUE TEMPORARY BILL' : 'SAVE & ISSUE GST BILL'),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                     ),
             ),
             const SizedBox(height: 20),
@@ -658,13 +751,9 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
       return;
     }
 
-    // 2. Present 2 Options: GST Bill or Temporary Bill
-    final billType = await _showBillTypeSelectionDialog();
-    if (billType == null) return; // User cancelled selection
+    final isTemporary = _currentBillType == 'temporary';
 
-    final isTemporary = billType == 'temporary';
-
-    // 3. Validate Customer Name (Compulsory for both formats)
+    // 2. Validate Customer Name (Compulsory for both formats)
     final custName = _customerNameController.text.trim().isNotEmpty
         ? _customerNameController.text.trim()
         : billState.customer.name.trim();
@@ -685,7 +774,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
         ? _addressController.text.trim()
         : billState.customer.address.trim();
 
-    // 4. Validate GSTIN & Address only for GST Tax Invoices
+    // 3. Validate GSTIN & Address only for GST Tax Invoices
     if (!isTemporary) {
       if (gstin.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -815,9 +904,9 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
     if (confirmed != true) return;
 
-    // 6. Proceed to save
+    // 5. Proceed to save
     if (isEdit) {
-      final updated = await billingNotifier.updateExistingInvoice(invoiceType: billType);
+      final updated = await billingNotifier.updateExistingInvoice(invoiceType: _currentBillType);
       if (!mounted) return;
       if (updated != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -839,7 +928,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
         }
       }
     } else {
-      final invoice = await billingNotifier.saveAndIssueInvoice(invoiceType: billType);
+      final invoice = await billingNotifier.saveAndIssueInvoice(invoiceType: _currentBillType);
       if (!mounted) return;
       if (invoice != null) {
         Navigator.pushReplacement(
@@ -860,175 +949,6 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
         }
       }
     }
-  }
-
-  Future<String?> _showBillTypeSelectionDialog() async {
-    return await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Select Bill Format',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Choose how you want to generate and issue this bill:',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-
-            // 1. GST Bill Option
-            InkWell(
-              onTap: () => Navigator.pop(ctx, 'gst'),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.primary, width: 1.5),
-                  borderRadius: BorderRadius.circular(12),
-                  color: AppColors.primary.withOpacity(0.04),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.receipt_long, color: AppColors.primary, size: 28),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Text(
-                                'GST Bill',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Text(
-                                  'Tax Invoice',
-                                  style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Official tax invoice with GSTIN, CGST / SGST / IGST breakdown & HSN codes',
-                            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios, size: 16, color: AppColors.primary),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // 2. Temporary Bill Option
-            InkWell(
-              onTap: () => Navigator.pop(ctx, 'temporary'),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFF8B5A2B), width: 1.5),
-                  borderRadius: BorderRadius.circular(12),
-                  color: const Color(0xFFFAF5EE),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF8B5A2B).withOpacity(0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.history_edu, color: Color(0xFF8B5A2B), size: 28),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Text(
-                                'Temporary Bill',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF3B2213)),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF8B5A2B),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Text(
-                                  'Estimate / Non-GST',
-                                  style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Wood-themed temporary estimate bill without tax calculations',
-                            style: TextStyle(fontSize: 12, color: Color(0xFF6B4423)),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios, size: 16, color: Color(0xFF8B5A2B)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _buildDialogRow(String label, String value, {bool isHighlight = false, bool isBold = false, Color? highlightColor}) {
