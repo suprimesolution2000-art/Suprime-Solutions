@@ -40,15 +40,19 @@ const authLimiter = rateLimit({
 });
 app.use('/api/auth', authLimiter);
 
-// Health check endpoints (supports root, /health, and /api/health)
-app.get(['/', '/health', '/api/health'], (req, res) => {
+// Health check endpoints
+const sendHealth = (req, res) => {
   res.json({
     status: 'ok',
     service: 'SS Supreme Solutions Mobile Billing API',
     company: env.COMPANY.name,
     timestamp: new Date().toISOString()
   });
-});
+};
+
+app.get('/', sendHealth);
+app.get('/health', sendHealth);
+app.get('/api/health', sendHealth);
 
 // Mount Routes
 app.use('/api/auth', authRoutes);
@@ -66,15 +70,16 @@ app.use(errorHandler);
 
 // Connect DB and Start server
 const startServer = async () => {
-  const conn = await connectDB();
-  if (!conn && env.NODE_ENV === 'production') {
-    console.error('[FATAL] Failed to connect to MongoDB Atlas in production. Server will not accept traffic.');
-    process.exit(1);
-  }
   const PORT = env.PORT;
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[Server] SS Supreme Solutions Backend running on http://0.0.0.0:${PORT}`);
+  const server = app.listen(PORT, () => {
+    console.log(`[Server] SS Supreme Solutions Backend running on port ${PORT}`);
   });
+
+  // Connect to database in background so health check responds immediately on boot
+  connectDB().catch((err) => {
+    console.error(`[MongoDB Atlas] Initial connection error: ${err.message}`);
+  });
+
   return server;
 };
 
