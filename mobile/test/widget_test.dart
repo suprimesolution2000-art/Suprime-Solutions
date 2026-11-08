@@ -8,6 +8,7 @@ import 'package:mobile_billing/data/models/invoice_model.dart';
 import 'package:mobile_billing/data/models/customer_model.dart';
 import 'package:mobile_billing/data/models/invoice_item_model.dart';
 import 'package:mobile_billing/services/updater/app_update_service.dart';
+import 'package:mobile_billing/services/sync/sync_service.dart';
 import 'package:mobile_billing/providers/billing_provider.dart';
 import 'package:mobile_billing/providers/invoice_provider.dart';
 
@@ -165,6 +166,13 @@ void main() {
 
     final tempState = state.copyWith(invoiceType: 'temporary');
     expect(tempState.invoiceType, 'temporary');
+  });
+
+  test('SyncService pendingCount and isSyncing state test', () {
+    final sync = SyncService.instance;
+    expect(sync.pendingCount, isA<int>());
+    expect(sync.isSyncing, isFalse);
+    expect(sync.status, isNot(SyncStatus.syncing));
   });
 
   testWidgets('App Launches and displays Login Screen when unauthenticated', (WidgetTester tester) async {

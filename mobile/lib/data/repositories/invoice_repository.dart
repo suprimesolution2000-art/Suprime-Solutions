@@ -141,6 +141,7 @@ class InvoiceRepository {
     );
     try {
       await CustomerRepository().recalculateCustomerBalances(targetCustomerUuid: invoice.customer.uuid);
+      await SyncService.instance.checkPendingQueue();
       await SyncService.instance.synchronize(forceFullSync: true);
     } catch (_) {}
   }
@@ -159,6 +160,7 @@ class InvoiceRepository {
     );
     try {
       await CustomerRepository().recalculateCustomerBalances();
+      await SyncService.instance.checkPendingQueue();
       await SyncService.instance.synchronize(forceFullSync: true);
     } catch (_) {}
   }
@@ -173,6 +175,7 @@ class InvoiceRepository {
     );
     try {
       await CustomerRepository().recalculateCustomerBalances();
+      await SyncService.instance.checkPendingQueue();
       await SyncService.instance.synchronize(forceFullSync: true);
     } catch (_) {}
   }
@@ -210,6 +213,7 @@ class InvoiceRepository {
 
     try {
       await CustomerRepository().recalculateCustomerBalances(targetCustomerUuid: invoice.customer.uuid);
+      await SyncService.instance.checkPendingQueue();
       unawaited(SyncService.instance.synchronize(forceFullSync: false));
     } catch (_) {}
   }
@@ -275,6 +279,7 @@ class InvoiceRepository {
 
     try {
       await CustomerRepository().recalculateCustomerBalances();
+      await SyncService.instance.checkPendingQueue();
       await SyncService.instance.synchronize(forceFullSync: true);
     } catch (_) {}
   }

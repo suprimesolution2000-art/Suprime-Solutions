@@ -263,14 +263,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             color: sync.status == SyncStatus.offline ? Colors.deepOrange : AppColors.primary,
                           ),
                         ),
-                        if (sync.pendingCount > 0)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              '${sync.pendingCount} local bills waiting to upload when internet is connected.',
-                              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            sync.pendingCount > 0
+                                ? '${sync.pendingCount} local ${sync.pendingCount == 1 ? "bill is" : "bills are"} waiting for internet to upload to cloud.'
+                                : 'All local bills are uploaded and synced with cloud.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: sync.pendingCount > 0 ? Colors.amber.shade900 : AppColors.textMuted,
+                              fontWeight: sync.pendingCount > 0 ? FontWeight.w600 : FontWeight.normal,
                             ),
                           ),
+                        ),
                         if (sync.lastSyncTime != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 4),

@@ -313,6 +313,64 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
           ),
           const Divider(height: 16),
 
+          // Offline bills banner if pendingCount > 0
+          ListenableBuilder(
+            listenable: SyncService.instance,
+            builder: (context, _) {
+              final sync = SyncService.instance;
+              if (sync.pendingCount <= 0) return const SizedBox.shrink();
+              return Container(
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      sync.isSyncing ? Icons.sync : Icons.cloud_off,
+                      color: Colors.amber.shade900,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        sync.isSyncing
+                            ? 'Syncing ${sync.pendingCount} local bills with cloud...'
+                            : '${sync.pendingCount} local ${sync.pendingCount == 1 ? "bill is" : "bills are"} waiting for internet to upload',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.amber.shade900,
+                        ),
+                      ),
+                    ),
+                    if (!sync.isSyncing)
+                      InkWell(
+                        onTap: () async {
+                          await sync.synchronize(forceFullSync: true);
+                          ref.read(invoiceListProvider.notifier).fetchInvoices();
+                          ref.read(customerListProvider.notifier).fetchCustomers();
+                          ref.read(dashboardProvider.notifier).refreshSummary();
+                        },
+                        child: Text(
+                          'SYNC NOW',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.amber.shade900,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+
           // 3. Invoices List
           Expanded(
             child: invoiceState.isLoading
@@ -603,6 +661,32 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                             style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: badgeText),
                           ),
                         ),
+                        if (inv.syncStatus != 'synced') ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.shade100,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.amber.shade600, width: 0.8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.cloud_off, size: 10, color: Colors.amber.shade900),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'OFFLINE',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.amber.shade900,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

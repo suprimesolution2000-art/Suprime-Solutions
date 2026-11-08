@@ -71,30 +71,43 @@ class HomeScreen extends ConsumerWidget {
               final sync = SyncService.instance;
               IconData icon = Icons.cloud_done;
               Color color = Colors.greenAccent;
-              String tip = 'Synced with cloud';
+              String tip = 'All bills synced with cloud';
 
               if (sync.status == SyncStatus.syncing) {
                 icon = Icons.sync;
                 color = Colors.amberAccent;
-                tip = 'Syncing...';
-              } else if (sync.status == SyncStatus.offline || sync.pendingCount > 0) {
-                icon = Icons.cloud_off;
+                tip = sync.pendingCount > 0
+                    ? 'Syncing ${sync.pendingCount} bills with cloud...'
+                    : 'Syncing with cloud...';
+              } else if (sync.pendingCount > 0) {
+                icon = Icons.cloud_upload_outlined;
                 color = Colors.orangeAccent;
-                tip = '${sync.pendingCount} bills waiting for internet';
+                tip = '${sync.pendingCount} ${sync.pendingCount == 1 ? "bill" : "bills"} waiting for internet to upload';
+              } else if (sync.status == SyncStatus.offline) {
+                icon = Icons.cloud_off;
+                color = Colors.grey.shade400;
+                tip = 'Offline mode (all local bills synced)';
               }
 
               return IconButton(
                 icon: Icon(icon, color: color),
                 tooltip: tip,
                 onPressed: () async {
-                  await SyncService.instance.synchronize(forceFullSync: true);
+                  if (sync.status == SyncStatus.syncing) return;
+                  final ok = await SyncService.instance.synchronize(forceFullSync: true);
+                  await SyncService.instance.checkPendingQueue();
                   ref.read(dashboardProvider.notifier).refreshSummary();
                   ref.read(customerListProvider.notifier).fetchCustomers();
                   ref.read(invoiceListProvider.notifier).fetchInvoices();
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(sync.statusMessage),
+                        content: Text(
+                          ok
+                              ? (sync.pendingCount == 0 ? 'All bills synced successfully!' : '${sync.pendingCount} bills waiting for internet')
+                              : 'Offline: bills will upload automatically when connected',
+                        ),
+                        backgroundColor: ok ? (sync.pendingCount == 0 ? AppColors.paid : Colors.amber.shade800) : Colors.deepOrange,
                         duration: const Duration(seconds: 2),
                       ),
                     );
@@ -181,6 +194,74 @@ class HomeScreen extends ConsumerWidget {
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 0.8),
                 ),
                 onPressed: () => _openCreateBillWithSelection(context, ref),
+              ),
+
+              // Offline Sync Status Banner (Only visible when local bills await cloud upload)
+              ListenableBuilder(
+                listenable: SyncService.instance,
+                builder: (context, _) {
+                  final sync = SyncService.instance;
+                  if (sync.pendingCount <= 0) return const SizedBox.shrink();
+
+                  return Container(
+                    margin: const EdgeInsets.only(top: 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.amber.shade400, width: 1.2),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          sync.isSyncing ? Icons.sync : Icons.cloud_upload_outlined,
+                          color: Colors.amber.shade900,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            sync.isSyncing
+                                ? 'Uploading ${sync.pendingCount} local ${sync.pendingCount == 1 ? "bill" : "bills"} to cloud...'
+                                : '${sync.pendingCount} local ${sync.pendingCount == 1 ? "bill is" : "bills are"} saved offline and waiting to upload to cloud.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.amber.shade900,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (!sync.isSyncing)
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              backgroundColor: Colors.amber.shade700,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            onPressed: () async {
+                              await sync.synchronize(forceFullSync: true);
+                              ref.read(invoiceListProvider.notifier).fetchInvoices();
+                              ref.read(customerListProvider.notifier).fetchCustomers();
+                              ref.read(dashboardProvider.notifier).refreshSummary();
+                            },
+                            child: const Text(
+                              'SYNC NOW',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          )
+                        else
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                      ],
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 24),
 

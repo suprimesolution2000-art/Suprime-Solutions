@@ -75,6 +75,7 @@ exports.pushSync = async (req, res, next) => {
       invoicesSynced: 0,
       paymentsSynced: 0,
       productsSynced: 0,
+      syncedInvoiceUuids: [],
       errors: []
     };
 
@@ -207,12 +208,20 @@ exports.pushSync = async (req, res, next) => {
               roundOff: financials.roundOff,
               grandTotal: financials.grandTotal,
               amountInWords: financials.amountInWords,
+              balanceDue: inv.balanceDue !== undefined ? Number(inv.balanceDue) : financials.grandTotal,
+              totalPaid: Number(inv.totalPaid) || 0,
+              isInterState: inv.isInterState !== undefined ? Boolean(inv.isInterState) : false,
+              paymentStatus: inv.paymentStatus || 'unpaid',
+              status: inv.status || 'finalized',
               syncStatus: 'synced'
             });
             results.invoicesSynced++;
+            results.syncedInvoiceUuids.push(inv.uuid);
           } catch (createErr) {
-            if (createErr.code === 11000 && inv.invoiceNumber) {
-              const collision = await Invoice.findOne({ invoiceNumber: inv.invoiceNumber });
+            if (createErr.code === 11000) {
+              const collision = await Invoice.findOne({
+                $or: [{ uuid: inv.uuid }, { invoiceNumber: inv.invoiceNumber }]
+              });
               if (collision) {
                 collision.uuid = inv.uuid;
                 collision.items = financials.items;
@@ -223,7 +232,7 @@ exports.pushSync = async (req, res, next) => {
                 collision.roundOff = financials.roundOff;
                 collision.grandTotal = financials.grandTotal;
                 collision.amountInWords = financials.amountInWords;
-                collision.balanceDue = inv.balanceDue !== undefined ? inv.balanceDue : financials.grandTotal;
+                collision.balanceDue = inv.balanceDue !== undefined ? Number(inv.balanceDue) : financials.grandTotal;
                 collision.paymentStatus = inv.paymentStatus || 'unpaid';
                 collision.status = inv.status || 'finalized';
                 collision.customer = { ...(collision.customer || {}), ...(inv.customer || {}) };
@@ -231,6 +240,7 @@ exports.pushSync = async (req, res, next) => {
                 collision.updatedAt = new Date();
                 await collision.save();
                 results.invoicesSynced++;
+                results.syncedInvoiceUuids.push(inv.uuid);
               } else {
                 throw createErr;
               }
@@ -319,6 +329,7 @@ exports.pushSync = async (req, res, next) => {
           existing.updatedAt = new Date();
           await existing.save();
           results.invoicesSynced++;
+          results.syncedInvoiceUuids.push(inv.uuid);
         }
 
         // Auto-catalogue any products in invoice items without resurrecting deactivated ones
@@ -411,8 +422,9 @@ exports.pushSync = async (req, res, next) => {
     }
 
     res.json({
-      success: results.errors.length === 0,
-      message: results.errors.length === 0 ? 'Sync completed' : 'Sync completed with errors',
+      success: true,
+      hasErrors: results.errors.length > 0,
+      message: results.errors.length === 0 ? 'Sync completed' : 'Sync completed with non-critical warnings',
       results
     });
   } catch (error) {

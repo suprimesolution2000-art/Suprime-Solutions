@@ -37,6 +37,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
   DateTime? get lastSyncTime => _lastSyncTime;
 
   bool _isSyncing = false;
+  bool get isSyncing => _status == SyncStatus.syncing || _isSyncing;
   Timer? _foregroundTimer;
 
   Future<void> initialize() async {
@@ -56,7 +57,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
 
     await checkPendingQueue();
 
-    // Start periodic background sync for active sessions (every 25 seconds)
+    // Start periodic background sync for active sessions (every 3 minutes)
     _startForegroundTimer();
 
     // Initial full sync on app startup
@@ -81,7 +82,8 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
 
   void _startForegroundTimer() {
     _stopForegroundTimer();
-    _foregroundTimer = Timer.periodic(const Duration(seconds: 25), (timer) {
+    // Periodic background sync every 3 minutes (180s) to avoid continuous spinning
+    _foregroundTimer = Timer.periodic(const Duration(minutes: 3), (timer) {
       if (!_isSyncing) {
         synchronize(forceFullSync: true);
       }
@@ -93,13 +95,22 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
     _foregroundTimer = null;
   }
 
-  Future<void> checkPendingQueue() async {
-    final db = await AppDatabase.instance.database;
-    final res = await db.rawQuery(
-      "SELECT COUNT(*) as count FROM invoices WHERE sync_status != 'synced'",
-    );
-    _pendingCount = (res.first['count'] as int?) ?? 0;
-    notifyListeners();
+  Future<int> checkPendingQueue() async {
+    try {
+      final db = await AppDatabase.instance.database;
+      final res = await db.rawQuery('''
+        SELECT COUNT(*) as count 
+        FROM invoices 
+        WHERE sync_status != 'synced' 
+          AND (status IS NULL OR status != 'cancelled')
+      ''');
+      _pendingCount = (res.first['count'] as int?) ?? 0;
+      notifyListeners();
+      return _pendingCount;
+    } catch (e) {
+      debugPrint('[SyncService] checkPendingQueue error: $e');
+      return _pendingCount;
+    }
   }
 
   // Trigger synchronization across bills, customers, products, and payments
@@ -107,7 +118,9 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
     if (_isSyncing) return false;
     _isSyncing = true;
     _status = SyncStatus.syncing;
-    _statusMessage = 'Syncing bills with cloud...';
+    _statusMessage = _pendingCount > 0
+        ? 'Syncing $_pendingCount bills with cloud...'
+        : 'Syncing bills with cloud...';
     notifyListeners();
 
     try {
@@ -245,14 +258,24 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
           products: productsToPush,
         );
 
-        if (pushRes.statusCode == 200 && pushRes.data['success'] == true) {
+        if (pushRes.statusCode == 200 && pushRes.data != null) {
+          final resData = pushRes.data as Map<String, dynamic>? ?? {};
+          final results = resData['results'] as Map<String, dynamic>? ?? {};
+          final syncedList = (results['syncedInvoiceUuids'] as List?)
+                  ?.map((e) => e.toString())
+                  .toSet() ??
+              <String>{};
+
           for (final row in pendingInvoicesData) {
-            await db.update(
-              'invoices',
-              {'sync_status': 'synced'},
-              where: 'uuid = ?',
-              whereArgs: [row['uuid']],
-            );
+            final uuid = row['uuid'] as String;
+            if (syncedList.contains(uuid) || (resData['success'] == true && syncedList.isEmpty)) {
+              await db.update(
+                'invoices',
+                {'sync_status': 'synced'},
+                where: 'uuid = ?',
+                whereArgs: [uuid],
+              );
+            }
           }
         }
       }
@@ -304,26 +327,25 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
 
           final localExisting = await db.query(
             'invoices',
-            where: 'uuid = ?',
-            whereArgs: [serverInv.uuid],
+            where: 'uuid = ? OR invoice_number = ?',
+            whereArgs: [serverInv.uuid, serverInv.invoiceNumber],
             limit: 1,
           );
-          if (localExisting.isNotEmpty && localExisting.first['sync_status'] != 'synced') {
-            continue; // Protect local offline changes
+          if (localExisting.isNotEmpty) {
+            // Already present in cloud! Ensure local copy is updated and marked synced
+            await db.update(
+              'invoices',
+              serverInv.copyWith(syncStatus: 'synced').toMap(),
+              where: 'uuid = ? OR invoice_number = ?',
+              whereArgs: [serverInv.uuid, serverInv.invoiceNumber],
+            );
+          } else {
+            await db.insert(
+              'invoices',
+              serverInv.copyWith(syncStatus: 'synced').toMap(),
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
           }
-
-          // Clean up any conflicting local row with same invoice_number but different uuid
-          await db.delete(
-            'invoices',
-            where: 'invoice_number = ? AND uuid != ?',
-            whereArgs: [serverInv.invoiceNumber, serverInv.uuid],
-          );
-
-          await db.insert(
-            'invoices',
-            serverInv.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
         }
 
         // Keep local sequence counter aligned with cloud maximum
@@ -386,18 +408,28 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
       }
 
       await checkPendingQueue();
-      _status = SyncStatus.synced;
-      _statusMessage = 'Up to date';
+      _status = _pendingCount > 0 ? SyncStatus.offline : SyncStatus.synced;
+      _statusMessage = _pendingCount > 0
+          ? '$_pendingCount bills waiting for internet'
+          : 'Up to date';
       notifyListeners();
       return true;
     } catch (e) {
       debugPrint('[SyncService] Sync error: $e');
-      _status = SyncStatus.failed;
-      _statusMessage = 'Sync failed. Will retry automatically.';
+      await checkPendingQueue();
+      _status = SyncStatus.offline;
+      _statusMessage = _pendingCount > 0
+          ? '$_pendingCount bills waiting for internet'
+          : 'Offline mode';
       notifyListeners();
       return false;
     } finally {
       _isSyncing = false;
+      await checkPendingQueue();
+      if (_status == SyncStatus.syncing) {
+        _status = _pendingCount > 0 ? SyncStatus.offline : SyncStatus.synced;
+        notifyListeners();
+      }
     }
   }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -491,8 +492,9 @@ class BillingNotifier extends StateNotifier<BillingState> {
         }
       }
 
-      // 6. Trigger background sync attempt
-      SyncService.instance.synchronize();
+      // 6. Trigger background sync attempt and refresh pending queue count
+      await SyncService.instance.checkPendingQueue();
+      unawaited(SyncService.instance.synchronize());
 
       // Automatically reset form for the next bill so stale products/customer are cleared
       await resetForm();
@@ -627,7 +629,8 @@ class BillingNotifier extends StateNotifier<BillingState> {
         // Will sync on next sync pass
       }
 
-      SyncService.instance.synchronize();
+      await SyncService.instance.checkPendingQueue();
+      unawaited(SyncService.instance.synchronize());
 
       state = state.copyWith(
         isSaving: false,

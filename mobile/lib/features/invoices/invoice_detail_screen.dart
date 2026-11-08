@@ -142,6 +142,27 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                 style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ),
+            if (_currentInvoice.syncStatus != 'synced') ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade700,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.cloud_off, size: 10, color: Colors.white),
+                    SizedBox(width: 3),
+                    Text(
+                      'OFFLINE',
+                      style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
         actions: [
