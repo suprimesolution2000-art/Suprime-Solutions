@@ -170,7 +170,11 @@ class _AddItemDialogState extends State<AddItemDialog> {
                               subtitle: option.hsnCode.isNotEmpty
                                   ? Text('HSN: ${option.hsnCode} • ₹${option.defaultRate}', style: const TextStyle(fontSize: 11))
                                   : null,
-                              onTap: () => onSelected(option),
+                              onTap: () {
+                                FocusScope.of(context).unfocus();
+                                FocusManager.instance.primaryFocus?.unfocus();
+                                onSelected(option);
+                              },
                             );
                           },
                         ),
@@ -179,17 +183,19 @@ class _AddItemDialogState extends State<AddItemDialog> {
                   );
                 },
                 onSelected: (ProductModel selection) {
-                    _descController.text = selection.description;
-                    _hsnController.text = selection.hsnCode;
-                    if (selection.defaultRate > 0) {
-                      _rateController.text = selection.defaultRate.toString();
-                    }
-                    setState(() {
-                      _selectedUnit = selection.unit;
-                      _selectedGstRate = selection.gstRate;
-                      _validationError = null;
-                    });
-                  },
+                  FocusScope.of(context).unfocus();
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  _descController.text = selection.description;
+                  _hsnController.text = selection.hsnCode;
+                  if (selection.defaultRate > 0) {
+                    _rateController.text = selection.defaultRate.toString();
+                  }
+                  setState(() {
+                    _selectedUnit = selection.unit;
+                    _selectedGstRate = selection.gstRate;
+                    _validationError = null;
+                  });
+                },
                   fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                     return TextField(
                       controller: controller,
@@ -389,6 +395,9 @@ class _AddItemDialogState extends State<AddItemDialog> {
                       gstRate: effectiveGst,
                     );
                   }
+
+                  FocusScope.of(context).unfocus();
+                  FocusManager.instance.primaryFocus?.unfocus();
 
                   widget.onAdd(
                     description: desc,

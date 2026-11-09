@@ -34,7 +34,9 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   final _poController = TextEditingController();
   final _challanController = TextEditingController();
   final _scrollController = ScrollController();
+  final GlobalKey _itemsSectionKey = GlobalKey();
   TextEditingController? _customerAutocompleteController;
+  FocusNode? _customerFocusNode;
 
   late String _currentBillType;
   String _selectedState = 'Chhattisgarh';
@@ -110,6 +112,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   }
 
   void _onCustomerSelected(CustomerModel c) {
+    _customerFocusNode?.unfocus();
+    FocusScope.of(context).unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+
     _customerAutocompleteController?.text = c.name;
     _customerNameController.text = c.name;
     _phoneController.text = c.phone;
@@ -305,9 +311,41 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                             c.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
                             c.phone.contains(textEditingValue.text));
                       },
+                      optionsViewBuilder: (context, onSelected, options) {
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 4.0,
+                            borderRadius: BorderRadius.circular(8),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 200, maxWidth: 320),
+                              child: ListView.builder(
+                                padding: EdgeInsets.zero,
+                                shrinkWrap: true,
+                                itemCount: options.length,
+                                itemBuilder: (BuildContext context, int index) {
+                                  final option = options.elementAt(index);
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(option.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                    subtitle: option.phone.isNotEmpty ? Text(option.phone, style: const TextStyle(fontSize: 11)) : null,
+                                    onTap: () {
+                                      _customerFocusNode?.unfocus();
+                                      FocusScope.of(context).unfocus();
+                                      FocusManager.instance.primaryFocus?.unfocus();
+                                      onSelected(option);
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                       onSelected: _onCustomerSelected,
                       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
                         _customerAutocompleteController = controller;
+                        _customerFocusNode = focusNode;
                         return TextField(
                           controller: controller,
                           focusNode: focusNode,
@@ -561,6 +599,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
             // 3. Line Items Section
             Card(
+              key: _itemsSectionKey,
               margin: EdgeInsets.zero,
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -582,7 +621,11 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                           ),
                           icon: const Icon(Icons.add, size: 20),
                           label: const Text('Add Item', style: TextStyle(fontSize: 15)),
-                          onPressed: () {
+                          onPressed: () async {
+                            _customerFocusNode?.unfocus();
+                            FocusScope.of(context).unfocus();
+                            FocusManager.instance.primaryFocus?.unfocus();
+
                             final maxItems = _currentBillType == 'temporary' ? 16 : 11;
                             if (billState.items.length >= maxItems) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -593,7 +636,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                               );
                               return;
                             }
-                            showDialog(
+                            await showDialog(
                               context: context,
                               builder: (_) => AddItemDialog(
                                 isTemporary: _currentBillType == 'temporary',
@@ -616,7 +659,17 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                                     gstRate: gstRate,
                                   );
                                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                                    if (_scrollController.hasClients) {
+                                    _customerFocusNode?.unfocus();
+                                    FocusScope.of(context).unfocus();
+                                    FocusManager.instance.primaryFocus?.unfocus();
+                                    if (_itemsSectionKey.currentContext != null) {
+                                      Scrollable.ensureVisible(
+                                        _itemsSectionKey.currentContext!,
+                                        duration: const Duration(milliseconds: 350),
+                                        curve: Curves.easeOut,
+                                        alignment: 0.05,
+                                      );
+                                    } else if (_scrollController.hasClients) {
                                       _scrollController.animateTo(
                                         _scrollController.position.maxScrollExtent,
                                         duration: const Duration(milliseconds: 350),
@@ -627,6 +680,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                                 },
                               ),
                             );
+
+                            _customerFocusNode?.unfocus();
+                            FocusScope.of(context).unfocus();
+                            FocusManager.instance.primaryFocus?.unfocus();
                           },
                         ),
                       ],
