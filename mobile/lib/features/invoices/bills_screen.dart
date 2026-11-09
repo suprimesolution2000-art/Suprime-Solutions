@@ -64,21 +64,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
     final invoiceState = ref.watch(invoiceListProvider);
     final notifier = ref.read(invoiceListProvider.notifier);
 
-    // Extract unique cities present across current bills and combine with commercial cities
-    final currentBillCities = <String>{};
-    for (final inv in invoiceState.invoices) {
-      if (inv.customer.city.trim().isNotEmpty) {
-        currentBillCities.add(inv.customer.city.trim());
-      }
-    }
-    final cityList = <String>['all'];
-    final sortedBillCities = currentBillCities.toList()..sort();
-    cityList.addAll(sortedBillCities);
-    for (final c in CityHelper.commercialCities) {
-      if (!cityList.contains(c)) {
-        cityList.add(c);
-      }
-    }
+    // City selection is handled via _showCitySearchSheet with keyboard search and frequency sorting
 
     return PopScope(
       canPop: !_isSelectionMode,
@@ -331,54 +317,61 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
             ),
           ),
 
-          // City Filter & Layered Sorting Row
+          // City Filter & Direct Sorting Row
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
               children: [
-                // 1. City Filter Dropdown
+                // 1. Searchable City Filter Button
                 Expanded(
                   flex: 5,
-                  child: Container(
-                    height: 38,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: invoiceState.selectedCity != 'all'
-                          ? AppColors.primaryContainer.withValues(alpha: 0.35)
-                          : AppColors.surfaceLight,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: invoiceState.selectedCity != 'all' ? AppColors.primary : AppColors.border,
-                        width: invoiceState.selectedCity != 'all' ? 1.5 : 1,
+                  child: InkWell(
+                    onTap: () => _showCitySearchSheet(context, notifier, invoiceState),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      height: 38,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: invoiceState.selectedCity != 'all'
+                            ? AppColors.primaryContainer.withValues(alpha: 0.35)
+                            : AppColors.surfaceLight,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: invoiceState.selectedCity != 'all' ? AppColors.primary : AppColors.border,
+                          width: invoiceState.selectedCity != 'all' ? 1.5 : 1,
+                        ),
                       ),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: cityList.contains(invoiceState.selectedCity) ? invoiceState.selectedCity : 'all',
-                        isExpanded: true,
-                        icon: const Icon(Icons.location_city, size: 18, color: AppColors.primary),
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                        items: [
-                          const DropdownMenuItem(
-                            value: 'all',
-                            child: Text('📍 All Cities', style: TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.location_on,
+                            size: 16,
+                            color: invoiceState.selectedCity != 'all' ? AppColors.primary : AppColors.textSecondary,
                           ),
-                          ...cityList.where((c) => c != 'all').map((c) => DropdownMenuItem(
-                            value: c,
-                            child: Text('📍 $c', overflow: TextOverflow.ellipsis),
-                          )),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              invoiceState.selectedCity != 'all' ? '📍 ${invoiceState.selectedCity}' : '📍 All Cities',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: invoiceState.selectedCity != 'all' ? FontWeight.bold : FontWeight.w600,
+                                color: invoiceState.selectedCity != 'all' ? AppColors.primary : AppColors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Icon(
+                            Icons.arrow_drop_down,
+                            size: 20,
+                            color: invoiceState.selectedCity != 'all' ? AppColors.primary : AppColors.textSecondary,
+                          ),
                         ],
-                        onChanged: (val) {
-                          if (val != null) {
-                            notifier.setSelectedCity(val);
-                          }
-                        },
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                // 2. Layered Sorting Dropdown
+                // 2. Direct Sorting Dropdown (Newest, Oldest, Unpaid First, Paid First, Amount)
                 Expanded(
                   flex: 6,
                   child: Container(
@@ -391,17 +384,24 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
-                        value: invoiceState.sortBy,
+                        value: const [
+                          'date_desc',
+                          'date_asc',
+                          'unpaid_first',
+                          'paid_first',
+                          'amount_desc',
+                          'amount_asc',
+                        ].contains(invoiceState.sortBy)
+                            ? invoiceState.sortBy
+                            : 'date_desc',
                         isExpanded: true,
                         icon: const Icon(Icons.swap_vert, size: 18, color: AppColors.textSecondary),
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                         items: const [
-                          DropdownMenuItem(value: 'city_unpaid_first', child: Text('City ➔ Unpaid First', overflow: TextOverflow.ellipsis)),
-                          DropdownMenuItem(value: 'city_paid_first', child: Text('City ➔ Paid First', overflow: TextOverflow.ellipsis)),
-                          DropdownMenuItem(value: 'unpaid_city', child: Text('Unpaid First ➔ City', overflow: TextOverflow.ellipsis)),
-                          DropdownMenuItem(value: 'paid_city', child: Text('Paid First ➔ City', overflow: TextOverflow.ellipsis)),
                           DropdownMenuItem(value: 'date_desc', child: Text('Date: Newest First', overflow: TextOverflow.ellipsis)),
                           DropdownMenuItem(value: 'date_asc', child: Text('Date: Oldest First', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'unpaid_first', child: Text('Unpaid First', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'paid_first', child: Text('Paid First', overflow: TextOverflow.ellipsis)),
                           DropdownMenuItem(value: 'amount_desc', child: Text('Amount: High to Low', overflow: TextOverflow.ellipsis)),
                           DropdownMenuItem(value: 'amount_asc', child: Text('Amount: Low to High', overflow: TextOverflow.ellipsis)),
                         ],
@@ -952,6 +952,283 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
 ),
 );
 }
+
+  Future<void> _showCitySearchSheet(
+    BuildContext context,
+    InvoiceListNotifier notifier,
+    InvoiceListState invoiceState,
+  ) async {
+    final counts = await InvoiceRepository().getCityBillCounts();
+    final totalBills = counts.values.fold<int>(0, (sum, c) => sum + c);
+
+    // Active cities sorted by frequency (number of bills) descending
+    final activeCities = counts.keys.toList()
+      ..sort((a, b) {
+        final countCmp = (counts[b] ?? 0).compareTo(counts[a] ?? 0);
+        if (countCmp != 0) return countCmp;
+        return a.compareTo(b);
+      });
+
+    // Zero-bill commercial cities sorted alphabetically
+    final zeroBillCities = <String>[];
+    for (final c in CityHelper.commercialCities) {
+      if (!counts.containsKey(c)) {
+        zeroBillCities.add(c);
+      }
+    }
+    zeroBillCities.sort();
+
+    final allDisplayCities = [...activeCities, ...zeroBillCities];
+
+    if (!context.mounted) return;
+
+    final searchController = TextEditingController();
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (sheetContext, setModalState) {
+            final query = searchController.text.trim().toLowerCase();
+            final filteredCities = allDisplayCities.where((c) {
+              if (query.isEmpty) return true;
+              return c.toLowerCase().contains(query);
+            }).toList();
+
+            final showAllCitiesOption = query.isEmpty || 'all cities'.contains(query) || 'all'.contains(query);
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+              child: Container(
+                height: MediaQuery.of(ctx).size.height * 0.72,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Column(
+                  children: [
+                    // Drag Handle
+                    Container(
+                      margin: const EdgeInsets.only(top: 10, bottom: 6),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+
+                    // Header Row
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.location_city, color: AppColors.primary, size: 22),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Select City',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          if (invoiceState.selectedCity != 'all')
+                            TextButton.icon(
+                              icon: const Icon(Icons.refresh, size: 16),
+                              label: const Text('Reset', style: TextStyle(fontSize: 13)),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.error,
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                              ),
+                              onPressed: () {
+                                notifier.setSelectedCity('all');
+                                Navigator.pop(ctx);
+                              },
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            tooltip: 'Close',
+                            onPressed: () => Navigator.pop(ctx),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Search Box with Automatic Keyboard Focus
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+                      child: TextField(
+                        controller: searchController,
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: 'Search city name (e.g. Raipur, Korba)...',
+                          hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                          prefixIcon: const Icon(Icons.search, color: AppColors.primary, size: 20),
+                          suffixIcon: searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  onPressed: () {
+                                    searchController.clear();
+                                    setModalState(() {});
+                                  },
+                                )
+                              : null,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                          ),
+                          filled: true,
+                          fillColor: AppColors.surfaceLight,
+                        ),
+                        onChanged: (_) => setModalState(() {}),
+                      ),
+                    ),
+
+                    const Divider(height: 1),
+
+                    // City List ordered by bill frequency
+                    Expanded(
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        itemCount: (showAllCitiesOption ? 1 : 0) + filteredCities.length,
+                        separatorBuilder: (c, i) => const Divider(height: 1, indent: 56),
+                        itemBuilder: (c, index) {
+                          if (showAllCitiesOption && index == 0) {
+                            final isSelected = invoiceState.selectedCity == 'all';
+                            return ListTile(
+                              dense: true,
+                              leading: Container(
+                                padding: const EdgeInsets.all(7),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? AppColors.primary : Colors.grey.shade100,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.public,
+                                  size: 18,
+                                  color: isSelected ? Colors.white : AppColors.primary,
+                                ),
+                              ),
+                              title: const Text(
+                                'All Cities',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              ),
+                              subtitle: Text(
+                                'Show bills from all locations ($totalBills total bills)',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                              ),
+                              trailing: isSelected
+                                  ? const Icon(Icons.check_circle, color: AppColors.primary, size: 22)
+                                  : Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        '$totalBills bills',
+                                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                                      ),
+                                    ),
+                              onTap: () {
+                                notifier.setSelectedCity('all');
+                                Navigator.pop(ctx);
+                              },
+                            );
+                          }
+
+                          final cityIndex = showAllCitiesOption ? index - 1 : index;
+                          final cityName = filteredCities[cityIndex];
+                          final count = counts[cityName] ?? 0;
+                          final isSelected = invoiceState.selectedCity.trim().toLowerCase() == cityName.trim().toLowerCase();
+
+                          return ListTile(
+                            dense: true,
+                            leading: Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppColors.primary
+                                    : (count > 0 ? AppColors.primaryContainer.withValues(alpha: 0.35) : Colors.grey.shade100),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.location_on,
+                                size: 18,
+                                color: isSelected
+                                    ? Colors.white
+                                    : (count > 0 ? AppColors.primary : Colors.grey.shade400),
+                              ),
+                            ),
+                            title: Text(
+                              cityName,
+                              style: TextStyle(
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                fontSize: 14,
+                                color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                              ),
+                            ),
+                            subtitle: count > 0
+                                ? Text(
+                                    '$count bill${count == 1 ? '' : 's'} recorded',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                  )
+                                : null,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (count > 0)
+                                  Container(
+                                    margin: const EdgeInsets.only(right: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      '$count bills',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                                if (isSelected)
+                                  const Icon(Icons.check_circle, color: AppColors.primary, size: 22),
+                              ],
+                            ),
+                            onTap: () {
+                              notifier.setSelectedCity(cityName);
+                              Navigator.pop(ctx);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   void _showDateRangePicker(BuildContext context, InvoiceListNotifier notifier) {
     showModalBottomSheet(

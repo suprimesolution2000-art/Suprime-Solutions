@@ -135,8 +135,22 @@ class InvoiceRepository {
       }
     }
 
-    // Layered sorting (e.g. City then Paid/Unpaid, or vice versa)
-    if (sortBy == 'city_unpaid_first') {
+    // Direct Unpaid First / Paid First sorting (applies for all cities or within selected city)
+    if (sortBy == 'unpaid_first') {
+      invoices.sort((a, b) {
+        final pCmp = paymentPriority(a.paymentStatus, unpaidFirst: true)
+            .compareTo(paymentPriority(b.paymentStatus, unpaidFirst: true));
+        if (pCmp != 0) return pCmp;
+        return b.invoiceDate.compareTo(a.invoiceDate);
+      });
+    } else if (sortBy == 'paid_first') {
+      invoices.sort((a, b) {
+        final pCmp = paymentPriority(a.paymentStatus, unpaidFirst: false)
+            .compareTo(paymentPriority(b.paymentStatus, unpaidFirst: false));
+        if (pCmp != 0) return pCmp;
+        return b.invoiceDate.compareTo(a.invoiceDate);
+      });
+    } else if (sortBy == 'city_unpaid_first') {
       invoices.sort((a, b) {
         final cA = a.customer.city.trim().toLowerCase();
         final cB = b.customer.city.trim().toLowerCase();
@@ -643,6 +657,26 @@ class InvoiceRepository {
         await batch.commit(noResult: true);
       }
     } catch (_) {}
+  }
+
+  /// Returns a map of city name -> number of bills in that city
+  Future<Map<String, int>> getCityBillCounts() async {
+    final db = await _db.database;
+    final rows = await db.query('invoices', columns: ['customer_json']);
+    final counts = <String, int>{};
+    for (final r in rows) {
+      final raw = r['customer_json'] as String?;
+      if (raw != null && raw.isNotEmpty) {
+        try {
+          final map = jsonDecode(raw) as Map<String, dynamic>;
+          final c = CityHelper.extractCity((map['city'] ?? '').toString(), (map['address'] ?? '').toString());
+          if (c.isNotEmpty) {
+            counts[c] = (counts[c] ?? 0) + 1;
+          }
+        } catch (_) {}
+      }
+    }
+    return counts;
   }
 
   /// Returns list of all distinct cities currently present in invoices

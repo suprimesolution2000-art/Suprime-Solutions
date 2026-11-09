@@ -169,18 +169,18 @@ void main() {
     expect(tempState.invoiceType, 'temporary');
   });
 
-  test('InvoiceListState supports layered sorting (city_unpaid_first, city_paid_first, unpaid_city, paid_city)', () {
+  test('InvoiceListState supports direct sorting (unpaid_first, paid_first, date_desc, amount_desc)', () {
     final state = InvoiceListState();
     expect(state.sortBy, 'date_desc');
 
-    final cityUnpaid = state.copyWith(sortBy: 'city_unpaid_first');
-    expect(cityUnpaid.sortBy, 'city_unpaid_first');
+    final unpaidFirst = state.copyWith(sortBy: 'unpaid_first');
+    expect(unpaidFirst.sortBy, 'unpaid_first');
 
-    final unpaidCity = state.copyWith(sortBy: 'unpaid_city');
-    expect(unpaidCity.sortBy, 'unpaid_city');
+    final paidFirst = state.copyWith(sortBy: 'paid_first');
+    expect(paidFirst.sortBy, 'paid_first');
 
-    final paidCity = state.copyWith(sortBy: 'paid_city');
-    expect(paidCity.sortBy, 'paid_city');
+    final amountDesc = state.copyWith(sortBy: 'amount_desc');
+    expect(amountDesc.sortBy, 'amount_desc');
   });
 
   test('Customer payment status logic handles float epsilon accurately', () {
