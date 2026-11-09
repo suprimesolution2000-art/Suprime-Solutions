@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/city_helper.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/repositories/customer_repository.dart';
 
@@ -18,7 +19,9 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
   final _phoneController = TextEditingController();
   final _gstinController = TextEditingController();
   final _addressController = TextEditingController();
-  final _cityController = TextEditingController(text: 'Bilaspur');
+  final _customCityController = TextEditingController();
+  String _selectedCity = 'Bilaspur';
+  bool _isCustomCity = false;
   String _selectedState = 'Chhattisgarh';
   String _selectedStateCode = '22';
   String? _nameError;
@@ -29,7 +32,7 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
     _phoneController.dispose();
     _gstinController.dispose();
     _addressController.dispose();
-    _cityController.dispose();
+    _customCityController.dispose();
     super.dispose();
   }
 
@@ -53,7 +56,9 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
       phone: phone,
       gstin: _gstinController.text.trim().toUpperCase(),
       address: _addressController.text.trim(),
-      city: _cityController.text.trim(),
+      city: _isCustomCity
+          ? (_customCityController.text.trim().isNotEmpty ? _customCityController.text.trim() : 'Bilaspur')
+          : _selectedCity,
       state: _selectedState,
       stateCode: _selectedStateCode,
     );
@@ -124,14 +129,37 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
                 controller: _addressController,
                 decoration: const InputDecoration(labelText: 'Address', prefixIcon: Icon(Icons.location_on_outlined)),
               ),
+              if (_isCustomCity) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _customCityController,
+                  decoration: const InputDecoration(labelText: 'Enter Custom City Name *', prefixIcon: Icon(Icons.edit_location_alt)),
+                ),
+              ],
               const SizedBox(height: 12),
 
               Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _cityController,
-                      decoration: const InputDecoration(labelText: 'City'),
+                    child: DropdownButtonFormField<String>(
+                      value: _isCustomCity ? 'Other' : (CityHelper.commercialCities.contains(_selectedCity) ? _selectedCity : 'Bilaspur'),
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'City *'),
+                      items: [
+                        ...CityHelper.commercialCities.map((c) => DropdownMenuItem(
+                          value: c,
+                          child: Text(c, overflow: TextOverflow.ellipsis),
+                        )),
+                        const DropdownMenuItem(value: 'Other', child: Text('Other...')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedCity = val;
+                            _isCustomCity = val == 'Other';
+                          });
+                        }
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),

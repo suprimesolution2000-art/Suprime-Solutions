@@ -1,4 +1,5 @@
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/city_helper.dart';
 
 class CustomerModel {
   final String uuid;
@@ -69,6 +70,10 @@ class CustomerModel {
         map['active'] == '1' ||
         map['active'] == 'true';
 
+    final rawCity = (map['city'] ?? '').toString();
+    final rawAddress = (map['address'] ?? '').toString();
+    final effectiveCity = CityHelper.extractCity(rawCity, rawAddress);
+
     return CustomerModel(
       uuid: rawUuid,
       name: (map['name'] ?? '').toString(),
@@ -76,8 +81,8 @@ class CustomerModel {
       phone: (map['phone'] ?? '').toString(),
       email: (map['email'] ?? '').toString(),
       gstin: (map['gstin'] ?? '').toString(),
-      address: (map['address'] ?? '').toString(),
-      city: (map['city'] ?? 'Bilaspur').toString(),
+      address: rawAddress,
+      city: effectiveCity,
       state: (map['state'] ?? 'Chhattisgarh').toString(),
       stateCode: (map['state_code'] ?? map['stateCode'] ?? '22').toString(),
       pincode: (map['pincode'] ?? '').toString(),

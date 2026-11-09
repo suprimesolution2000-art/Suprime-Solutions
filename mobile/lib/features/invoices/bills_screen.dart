@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../core/utils/city_helper.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../providers/invoice_provider.dart';
 import '../../providers/customer_provider.dart';
@@ -62,6 +63,22 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
   Widget build(BuildContext context) {
     final invoiceState = ref.watch(invoiceListProvider);
     final notifier = ref.read(invoiceListProvider.notifier);
+
+    // Extract unique cities present across current bills and combine with commercial cities
+    final currentBillCities = <String>{};
+    for (final inv in invoiceState.invoices) {
+      if (inv.customer.city.trim().isNotEmpty) {
+        currentBillCities.add(inv.customer.city.trim());
+      }
+    }
+    final cityList = <String>['all'];
+    final sortedBillCities = currentBillCities.toList()..sort();
+    cityList.addAll(sortedBillCities);
+    for (final c in CityHelper.commercialCities) {
+      if (!cityList.contains(c)) {
+        cityList.add(c);
+      }
+    }
 
     return PopScope(
       canPop: !_isSelectionMode,
@@ -314,22 +331,59 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
             ),
           ),
 
-          // Layered Sorting Selector
+          // City Filter & Layered Sorting Row
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
               children: [
-                const Icon(Icons.swap_vert, size: 18, color: AppColors.textSecondary),
-                const SizedBox(width: 6),
-                const Text(
-                  'Sort by:',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                // 1. City Filter Dropdown
+                Expanded(
+                  flex: 5,
+                  child: Container(
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: invoiceState.selectedCity != 'all'
+                          ? AppColors.primaryContainer.withValues(alpha: 0.35)
+                          : AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: invoiceState.selectedCity != 'all' ? AppColors.primary : AppColors.border,
+                        width: invoiceState.selectedCity != 'all' ? 1.5 : 1,
+                      ),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: cityList.contains(invoiceState.selectedCity) ? invoiceState.selectedCity : 'all',
+                        isExpanded: true,
+                        icon: const Icon(Icons.location_city, size: 18, color: AppColors.primary),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'all',
+                            child: Text('📍 All Cities', style: TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                          ),
+                          ...cityList.where((c) => c != 'all').map((c) => DropdownMenuItem(
+                            value: c,
+                            child: Text('📍 $c', overflow: TextOverflow.ellipsis),
+                          )),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            notifier.setSelectedCity(val);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 8),
+                // 2. Layered Sorting Dropdown
                 Expanded(
+                  flex: 6,
                   child: Container(
-                    height: 36,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
                     decoration: BoxDecoration(
                       color: AppColors.surfaceLight,
                       borderRadius: BorderRadius.circular(8),
@@ -339,17 +393,17 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                       child: DropdownButton<String>(
                         value: invoiceState.sortBy,
                         isExpanded: true,
-                        icon: const Icon(Icons.arrow_drop_down, size: 20),
+                        icon: const Icon(Icons.swap_vert, size: 18, color: AppColors.textSecondary),
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                         items: const [
-                          DropdownMenuItem(value: 'city_unpaid_first', child: Text('City ➔ Unpaid First')),
-                          DropdownMenuItem(value: 'city_paid_first', child: Text('City ➔ Paid First')),
-                          DropdownMenuItem(value: 'unpaid_city', child: Text('Unpaid First ➔ City')),
-                          DropdownMenuItem(value: 'paid_city', child: Text('Paid First ➔ City')),
-                          DropdownMenuItem(value: 'date_desc', child: Text('Date: Newest First')),
-                          DropdownMenuItem(value: 'date_asc', child: Text('Date: Oldest First')),
-                          DropdownMenuItem(value: 'amount_desc', child: Text('Amount: High to Low')),
-                          DropdownMenuItem(value: 'amount_asc', child: Text('Amount: Low to High')),
+                          DropdownMenuItem(value: 'city_unpaid_first', child: Text('City ➔ Unpaid First', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'city_paid_first', child: Text('City ➔ Paid First', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'unpaid_city', child: Text('Unpaid First ➔ City', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'paid_city', child: Text('Paid First ➔ City', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'date_desc', child: Text('Date: Newest First', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'date_asc', child: Text('Date: Oldest First', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'amount_desc', child: Text('Amount: High to Low', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: 'amount_asc', child: Text('Amount: Low to High', overflow: TextOverflow.ellipsis)),
                         ],
                         onChanged: (val) {
                           if (val != null) {
@@ -849,7 +903,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                               const Icon(Icons.location_on_outlined, size: 10, color: AppColors.textMuted),
                               const SizedBox(width: 2),
                               Text(
-                                (inv.customer.city.isNotEmpty ? inv.customer.city : 'Bilaspur').trim(),
+                                inv.customer.city.trim().isNotEmpty ? inv.customer.city.trim() : 'Bilaspur',
                                 style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
                               ),
                             ],

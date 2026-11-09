@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../core/utils/city_helper.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../providers/billing_provider.dart';
 import '../../data/models/customer_model.dart';
@@ -49,6 +50,9 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   String _selectedPaymentStatus = 'unpaid';
   final _receivedAmountController = TextEditingController();
   String _selectedPaymentMethod = 'Cash';
+  String _selectedCity = 'Bilaspur';
+  final _customCityController = TextEditingController();
+  bool _isCustomCity = false;
 
   @override
   void initState() {
@@ -70,6 +74,15 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
       if (inv.totalPaid > 0) {
         _receivedAmountController.text = inv.totalPaid.toStringAsFixed(2);
       }
+      final cCity = CityHelper.extractCity(inv.customer.city, inv.customer.address);
+      if (CityHelper.commercialCities.contains(cCity)) {
+        _selectedCity = cCity;
+        _isCustomCity = false;
+      } else {
+        _selectedCity = 'Other';
+        _isCustomCity = true;
+        _customCityController.text = cCity;
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.read(billingProvider.notifier).initForEdit(inv);
         ref.read(billingProvider.notifier).setInvoiceType(_currentBillType);
@@ -87,6 +100,9 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
       _selectedPaymentStatus = 'unpaid';
       _receivedAmountController.clear();
       _selectedPaymentMethod = 'Cash';
+      _selectedCity = 'Bilaspur';
+      _isCustomCity = false;
+      _customCityController.clear();
       _formVersion++;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await ref.read(billingProvider.notifier).resetForm();
@@ -120,6 +136,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
     _poController.dispose();
     _challanController.dispose();
     _receivedAmountController.dispose();
+    _customCityController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -137,6 +154,19 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
     if (c.state.isNotEmpty) {
       setState(() {
         _selectedState = c.state;
+      });
+    }
+    final extractedCity = CityHelper.extractCity(c.city, c.address);
+    if (CityHelper.commercialCities.contains(extractedCity)) {
+      setState(() {
+        _selectedCity = extractedCity;
+        _isCustomCity = false;
+      });
+    } else {
+      setState(() {
+        _selectedCity = 'Other';
+        _isCustomCity = true;
+        _customCityController.text = extractedCity;
       });
     }
 
@@ -186,6 +216,9 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 _poController.clear();
                 _challanController.clear();
                 _receivedAmountController.clear();
+                _customCityController.clear();
+                _selectedCity = 'Bilaspur';
+                _isCustomCity = false;
                 _selectedPaymentStatus = 'unpaid';
                 _selectedPaymentMethod = 'Cash';
                 setState(() {
@@ -442,14 +475,59 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                     TextField(
                       controller: _addressController,
                       decoration: InputDecoration(
-                        labelText: _currentBillType == 'temporary' ? 'Address & City (Optional)' : 'Address & City *',
-                        hintText: 'e.g. Industrial Area, Bilaspur',
+                        labelText: _currentBillType == 'temporary' ? 'Address (Optional)' : 'Address *',
+                        hintText: 'e.g. Industrial Area, Sirgitti / Pandri Market',
                         prefixIcon: const Icon(Icons.location_on_outlined),
                       ),
                       onChanged: (val) {
                         billingNotifier.updateCustomerDetails(address: val);
                       },
                     ),
+                    const SizedBox(height: 12),
+
+                    // Dedicated City Dropdown Menu (Includes all cities)
+                    DropdownButtonFormField<String>(
+                      value: _isCustomCity ? 'Other' : (CityHelper.commercialCities.contains(_selectedCity) ? _selectedCity : 'Bilaspur'),
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'City (Select from dropdown) *',
+                        prefixIcon: Icon(Icons.location_city),
+                      ),
+                      items: [
+                        ...CityHelper.commercialCities.map((c) => DropdownMenuItem(
+                          value: c,
+                          child: Text(c, overflow: TextOverflow.ellipsis),
+                        )),
+                        const DropdownMenuItem(
+                          value: 'Other',
+                          child: Text('Other (Enter Custom City)...', style: TextStyle(fontStyle: FontStyle.italic)),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedCity = val;
+                            _isCustomCity = val == 'Other';
+                          });
+                          final effCity = val == 'Other' ? _customCityController.text.trim() : val;
+                          billingNotifier.updateCustomerDetails(city: effCity);
+                        }
+                      },
+                    ),
+                    if (_isCustomCity) ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _customCityController,
+                        decoration: const InputDecoration(
+                          labelText: 'Enter Custom City Name *',
+                          hintText: 'e.g. Kondagaon, Bhatapara, etc.',
+                          prefixIcon: Icon(Icons.edit_location_alt),
+                        ),
+                        onChanged: (val) {
+                          billingNotifier.updateCustomerDetails(city: val.trim());
+                        },
+                      ),
+                    ],
                     const SizedBox(height: 12),
 
                     // State & State Code Row
@@ -1135,10 +1213,14 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
     // Synchronize customer details before opening confirmation dialog
     final selectedCode = AppConstants.indianStates[_selectedState] ?? '22';
+    final effectiveCity = _isCustomCity
+        ? (_customCityController.text.trim().isNotEmpty ? _customCityController.text.trim() : 'Bilaspur')
+        : _selectedCity;
     billingNotifier.updateCustomerDetails(
       name: custName,
       gstin: gstin,
       address: address,
+      city: effectiveCity,
       phone: _phoneController.text.trim(),
       stateName: _selectedState,
       stateCode: selectedCode,
@@ -1201,6 +1283,8 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                     _buildDialogRow('Bill Date:', invDateStr, isHighlight: true, isBold: true, highlightColor: primaryThemeColor),
                     const Divider(height: 16),
                     _buildDialogRow('Customer:', custName),
+                    const Divider(height: 16),
+                    _buildDialogRow('City:', effectiveCity, isHighlight: true, isBold: true, highlightColor: primaryThemeColor),
                     if (gstin.isNotEmpty) ...[
                       const Divider(height: 16),
                       _buildDialogRow('GSTIN:', gstin),

@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
+import '../../core/utils/city_helper.dart';
 import '../database/app_database.dart';
 import '../models/invoice_model.dart';
 import 'customer_repository.dart';
@@ -13,6 +15,7 @@ class InvoiceRepository {
     String? searchQuery,
     String? paymentFilter, // 'paid', 'unpaid', 'partially_paid', 'overdue'
     String? invoiceType, // 'gst' or 'temporary'
+    String? cityFilter, // 'all' or specific city e.g. 'Raipur'
     DateTime? startDate,
     DateTime? endDate,
     double? minAmount,
@@ -111,7 +114,11 @@ class InvoiceRepository {
       offset: offset,
     );
 
-    final invoices = results.map((m) => InvoiceModel.fromMap(m)).toList();
+    var invoices = results.map((m) => InvoiceModel.fromMap(m)).toList();
+
+    if (cityFilter != null && cityFilter.isNotEmpty && cityFilter != 'all') {
+      invoices = invoices.where((inv) => inv.customer.city.trim().toLowerCase() == cityFilter.trim().toLowerCase()).toList();
+    }
 
     int paymentPriority(String status, {bool unpaidFirst = true}) {
       final s = status.toLowerCase();
@@ -131,8 +138,8 @@ class InvoiceRepository {
     // Layered sorting (e.g. City then Paid/Unpaid, or vice versa)
     if (sortBy == 'city_unpaid_first') {
       invoices.sort((a, b) {
-        final cA = (a.customer.city.isNotEmpty ? a.customer.city : 'Bilaspur').trim().toLowerCase();
-        final cB = (b.customer.city.isNotEmpty ? b.customer.city : 'Bilaspur').trim().toLowerCase();
+        final cA = a.customer.city.trim().toLowerCase();
+        final cB = b.customer.city.trim().toLowerCase();
         final cCmp = cA.compareTo(cB);
         if (cCmp != 0) return cCmp;
         final pCmp = paymentPriority(a.paymentStatus, unpaidFirst: true)
@@ -142,8 +149,8 @@ class InvoiceRepository {
       });
     } else if (sortBy == 'city_paid_first') {
       invoices.sort((a, b) {
-        final cA = (a.customer.city.isNotEmpty ? a.customer.city : 'Bilaspur').trim().toLowerCase();
-        final cB = (b.customer.city.isNotEmpty ? b.customer.city : 'Bilaspur').trim().toLowerCase();
+        final cA = a.customer.city.trim().toLowerCase();
+        final cB = b.customer.city.trim().toLowerCase();
         final cCmp = cA.compareTo(cB);
         if (cCmp != 0) return cCmp;
         final pCmp = paymentPriority(a.paymentStatus, unpaidFirst: false)
@@ -156,8 +163,8 @@ class InvoiceRepository {
         final pCmp = paymentPriority(a.paymentStatus, unpaidFirst: true)
             .compareTo(paymentPriority(b.paymentStatus, unpaidFirst: true));
         if (pCmp != 0) return pCmp;
-        final cA = (a.customer.city.isNotEmpty ? a.customer.city : 'Bilaspur').trim().toLowerCase();
-        final cB = (b.customer.city.isNotEmpty ? b.customer.city : 'Bilaspur').trim().toLowerCase();
+        final cA = a.customer.city.trim().toLowerCase();
+        final cB = b.customer.city.trim().toLowerCase();
         final cCmp = cA.compareTo(cB);
         if (cCmp != 0) return cCmp;
         return b.invoiceDate.compareTo(a.invoiceDate);
@@ -167,8 +174,8 @@ class InvoiceRepository {
         final pCmp = paymentPriority(a.paymentStatus, unpaidFirst: false)
             .compareTo(paymentPriority(b.paymentStatus, unpaidFirst: false));
         if (pCmp != 0) return pCmp;
-        final cA = (a.customer.city.isNotEmpty ? a.customer.city : 'Bilaspur').trim().toLowerCase();
-        final cB = (b.customer.city.isNotEmpty ? b.customer.city : 'Bilaspur').trim().toLowerCase();
+        final cA = a.customer.city.trim().toLowerCase();
+        final cB = b.customer.city.trim().toLowerCase();
         final cCmp = cA.compareTo(cB);
         if (cCmp != 0) return cCmp;
         return b.invoiceDate.compareTo(a.invoiceDate);
@@ -584,5 +591,76 @@ class InvoiceRepository {
       'pendingCount': (pendingRes.first['count'] as int?) ?? 0,
       'customerCount': (custRes.first['count'] as int?) ?? 0,
     };
+  }
+  /// Automatically extracts and repairs city data for legacy bills and customers
+  Future<void> autoRepairLegacyCities() async {
+    try {
+      final db = await _db.database;
+      final rows = await db.query('invoices', columns: ['uuid', 'customer_json']);
+      final batch = db.batch();
+      bool needsUpdate = false;
+
+      for (final r in rows) {
+        final uuid = r['uuid'] as String;
+        final rawCust = r['customer_json'] as String?;
+        if (rawCust == null || rawCust.isEmpty) continue;
+        try {
+          final custMap = jsonDecode(rawCust) as Map<String, dynamic>;
+          final currentCity = (custMap['city'] ?? '').toString();
+          final address = (custMap['address'] ?? '').toString();
+          final extracted = CityHelper.extractCity(currentCity, address);
+          if (extracted != currentCity && extracted.isNotEmpty) {
+            custMap['city'] = extracted;
+            batch.update(
+              'invoices',
+              {'customer_json': jsonEncode(custMap)},
+              where: 'uuid = ?',
+              whereArgs: [uuid],
+            );
+            needsUpdate = true;
+          }
+        } catch (_) {}
+      }
+
+      final custRows = await db.query('customers', columns: ['uuid', 'city', 'address']);
+      for (final c in custRows) {
+        final uuid = c['uuid'] as String;
+        final currentCity = (c['city'] ?? '').toString();
+        final address = (c['address'] ?? '').toString();
+        final extracted = CityHelper.extractCity(currentCity, address);
+        if (extracted != currentCity && extracted.isNotEmpty) {
+          batch.update(
+            'customers',
+            {'city': extracted},
+            where: 'uuid = ?',
+            whereArgs: [uuid],
+          );
+          needsUpdate = true;
+        }
+      }
+
+      if (needsUpdate) {
+        await batch.commit(noResult: true);
+      }
+    } catch (_) {}
+  }
+
+  /// Returns list of all distinct cities currently present in invoices
+  Future<List<String>> getDistinctCities() async {
+    final db = await _db.database;
+    final rows = await db.query('invoices', columns: ['customer_json']);
+    final cities = <String>{};
+    for (final r in rows) {
+      final raw = r['customer_json'] as String?;
+      if (raw != null && raw.isNotEmpty) {
+        try {
+          final map = jsonDecode(raw) as Map<String, dynamic>;
+          final c = CityHelper.extractCity((map['city'] ?? '').toString(), (map['address'] ?? '').toString());
+          if (c.isNotEmpty) cities.add(c);
+        } catch (_) {}
+      }
+    }
+    final list = cities.toList()..sort();
+    return list;
   }
 }

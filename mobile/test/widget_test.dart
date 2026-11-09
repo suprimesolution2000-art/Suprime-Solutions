@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_billing/main.dart';
 import 'package:mobile_billing/core/constants/app_constants.dart';
+import 'package:mobile_billing/core/utils/city_helper.dart';
 import 'package:mobile_billing/core/utils/number_to_words.dart';
 import 'package:mobile_billing/core/utils/currency_formatter.dart';
 import 'package:mobile_billing/data/models/invoice_model.dart';
@@ -201,6 +202,36 @@ void main() {
       outstandingBalance: 0.0,
     );
     expect(customer.outstandingBalance <= 0.005, isTrue);
+  });
+
+  test('CityHelper.extractCity extracts correct cities from address and handles defaults', () {
+    // 1. Explicit city given
+    expect(CityHelper.extractCity('Raipur', 'Some Street'), 'Raipur');
+    expect(CityHelper.extractCity('Korba', ''), 'Korba');
+
+    // 2. Defaulted to Bilaspur but address explicitly mentions another city
+    expect(CityHelper.extractCity('Bilaspur', 'Shop 12, Pandri, Raipur, CG'), 'Raipur');
+    expect(CityHelper.extractCity('Bilaspur', 'Transport Nagar, Korba'), 'Korba');
+    expect(CityHelper.extractCity('Bilaspur', 'Power House, Bhilai, 490001'), 'Bhilai');
+    expect(CityHelper.extractCity('Bilaspur', 'Ganjpara, Durg'), 'Durg');
+
+    // 3. True Bilaspur addresses
+    expect(CityHelper.extractCity('Bilaspur', 'Sirgitti Industrial Area, Bilaspur'), 'Bilaspur');
+    expect(CityHelper.extractCity('', 'Vyapar Vihar, Bilaspur'), 'Bilaspur');
+
+    // 4. Fallback when empty
+    expect(CityHelper.extractCity('', ''), 'Bilaspur');
+  });
+
+  test('InvoiceListState supports selectedCity filtering', () {
+    final state = InvoiceListState();
+    expect(state.selectedCity, 'all');
+
+    final raipurState = state.copyWith(selectedCity: 'Raipur');
+    expect(raipurState.selectedCity, 'Raipur');
+
+    final korbaState = state.copyWith(selectedCity: 'Korba');
+    expect(korbaState.selectedCity, 'Korba');
   });
 
   test('SyncService pendingCount and isSyncing state test', () {

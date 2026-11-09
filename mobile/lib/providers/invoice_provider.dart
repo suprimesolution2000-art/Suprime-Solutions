@@ -12,6 +12,7 @@ class InvoiceListState {
   final String filterChip; // 'all', 'paid', 'unpaid', 'partial', 'overdue'
   final String invoiceType; // 'gst' or 'temporary'
   final String sortBy; // 'date_desc', 'city_unpaid_first', 'city_paid_first', 'unpaid_city', 'paid_city', 'amount_desc'
+  final String selectedCity; // 'all' or specific city e.g. 'Raipur'
   final DateTime? startDate;
   final DateTime? endDate;
   final String? errorMessage;
@@ -23,6 +24,7 @@ class InvoiceListState {
     this.filterChip = 'all',
     this.invoiceType = 'gst',
     this.sortBy = 'date_desc',
+    this.selectedCity = 'all',
     this.startDate,
     this.endDate,
     this.errorMessage,
@@ -35,6 +37,7 @@ class InvoiceListState {
     String? filterChip,
     String? invoiceType,
     String? sortBy,
+    String? selectedCity,
     DateTime? startDate,
     DateTime? endDate,
     String? errorMessage,
@@ -46,6 +49,7 @@ class InvoiceListState {
       filterChip: filterChip ?? this.filterChip,
       invoiceType: invoiceType ?? this.invoiceType,
       sortBy: sortBy ?? this.sortBy,
+      selectedCity: selectedCity ?? this.selectedCity,
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
       errorMessage: errorMessage,
@@ -59,6 +63,7 @@ class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
   Timer? _debounceTimer;
 
   InvoiceListNotifier() : super(InvoiceListState()) {
+    unawaited(_repo.autoRepairLegacyCities());
     fetchInvoices();
     _syncListener = () {
       if (SyncService.instance.status == SyncStatus.synced) {
@@ -85,6 +90,7 @@ class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
         paymentFilter: state.filterChip,
         invoiceType: state.invoiceType,
         sortBy: state.sortBy,
+        cityFilter: state.selectedCity,
         startDate: state.startDate,
         endDate: state.endDate,
       );
@@ -97,6 +103,12 @@ class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
   void setSortBy(String sort) {
     if (state.sortBy == sort) return;
     state = state.copyWith(sortBy: sort);
+    fetchInvoices();
+  }
+
+  void setSelectedCity(String city) {
+    if (state.selectedCity == city) return;
+    state = state.copyWith(selectedCity: city);
     fetchInvoices();
   }
 
