@@ -8,21 +8,23 @@ const CACHE_DURATION_MS = 2 * 60 * 1000; // 2 minutes
 const getLatestRelease = async (req, res) => {
   try {
     const now = Date.now();
+    const hostUrl = `${req.protocol}://${req.get('host')}`;
+    const directBackendDownloadUrl = `${hostUrl}/api/app/download`;
+
     if (cachedRelease && (now - lastFetchTime < CACHE_DURATION_MS)) {
       return res.json({
         success: true,
-        ...cachedRelease
+        ...cachedRelease,
+        downloadUrl: directBackendDownloadUrl
       });
     }
 
-    // Try fetching from GitHub releases API
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
     const headers = {
-      'User-Agent': 'Suprime-Solutions-Backend',
-      'Accept': 'application/vnd.github.v3+json'
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/vnd.github.v3+json',
+      ...(token ? { 'Authorization': `token ${token}` } : {})
     };
-    if (process.env.GITHUB_TOKEN) {
-      headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
-    }
 
     const response = await fetch('https://api.github.com/repos/suprimesolution2000-art/Suprime-Solutions/releases?per_page=5', {
       headers
@@ -39,7 +41,7 @@ const getLatestRelease = async (req, res) => {
         );
 
         if (readyRelease) {
-          const tagName = readyRelease.tag_name || 'v1.0.16';
+          const tagName = readyRelease.tag_name || 'v1.0.29';
           const version = tagName.replace(/^v/, '');
           const apkAsset = readyRelease.assets.find(a => a.name && a.name.endsWith('.apk') && a.state === 'uploaded');
 
@@ -48,7 +50,8 @@ const getLatestRelease = async (req, res) => {
             tagName: tagName,
             releaseName: readyRelease.name || `Release ${tagName}`,
             releaseNotes: readyRelease.body || 'New update available with performance improvements and bug fixes.',
-            downloadUrl: apkAsset.browser_download_url,
+            downloadUrl: directBackendDownloadUrl,
+            browserDownloadUrl: apkAsset.browser_download_url,
             apkSize: apkAsset.size,
             publishedAt: readyRelease.published_at || new Date().toISOString()
           };
@@ -66,18 +69,20 @@ const getLatestRelease = async (req, res) => {
     if (cachedRelease) {
       return res.json({
         success: true,
-        ...cachedRelease
+        ...cachedRelease,
+        downloadUrl: directBackendDownloadUrl
       });
     }
 
     // Fallback if GitHub rate-limited and no cache yet
     const fallback = {
-      latestVersion: '1.0.26',
-      tagName: 'v1.0.26',
-      releaseName: 'Suprime Solutions v1.0.26',
-      releaseNotes: 'Updated Temporary Bill layout with latest sleek design, CUSTOMER NAME and DATE fields, and clean header.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.26/Suprime_Solutions_v1.0.26.apk',
-      apkSize: 39500000,
+      latestVersion: '1.0.29',
+      tagName: 'v1.0.29',
+      releaseName: 'Suprime Solutions v1.0.29',
+      releaseNotes: 'Fixed item selection keyboard auto-dismiss, prevented Customer Name viewport jump, and added high-speed resilient APK downloads.',
+      downloadUrl: directBackendDownloadUrl,
+      browserDownloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.29/Suprime_Solutions_v1.0.29.apk',
+      apkSize: 40562004,
       publishedAt: new Date().toISOString()
     };
     return res.json({
@@ -86,25 +91,82 @@ const getLatestRelease = async (req, res) => {
     });
   } catch (err) {
     console.error('Error fetching latest release:', err.message);
+    const hostUrl = `${req.protocol}://${req.get('host')}`;
+    const directBackendDownloadUrl = `${hostUrl}/api/app/download`;
+
     if (cachedRelease) {
       return res.json({
         success: true,
-        ...cachedRelease
+        ...cachedRelease,
+        downloadUrl: directBackendDownloadUrl
       });
     }
     return res.json({
       success: true,
-      latestVersion: '1.0.26',
-      tagName: 'v1.0.26',
-      releaseName: 'Suprime Solutions v1.0.26',
-      releaseNotes: 'Updated Temporary Bill layout with latest sleek design, CUSTOMER NAME and DATE fields, and clean header.',
-      downloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.26/Suprime_Solutions_v1.0.26.apk',
-      apkSize: 39500000,
+      latestVersion: '1.0.29',
+      tagName: 'v1.0.29',
+      releaseName: 'Suprime Solutions v1.0.29',
+      releaseNotes: 'Fixed item selection keyboard auto-dismiss, prevented Customer Name viewport jump, and added high-speed resilient APK downloads.',
+      downloadUrl: directBackendDownloadUrl,
+      browserDownloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.29/Suprime_Solutions_v1.0.29.apk',
+      apkSize: 40562004,
       publishedAt: new Date().toISOString()
     });
   }
 };
 
+/**
+ * High-speed direct APK download endpoint
+ * Bypasses GitHub releases/download edge timeouts (HTTP 504) by redirecting directly to Azure CDN storage
+ */
+const downloadLatestApk = async (req, res) => {
+  try {
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/vnd.github.v3+json',
+      ...(token ? { 'Authorization': `token ${token}` } : {})
+    };
+
+    const response = await fetch('https://api.github.com/repos/suprimesolution2000-art/Suprime-Solutions/releases?per_page=5', {
+      headers
+    });
+
+    if (response.ok) {
+      const releases = await response.json();
+      const readyRelease = releases.find(r => 
+        !r.draft && 
+        r.assets && 
+        r.assets.some(a => a.name && a.name.endsWith('.apk') && a.state === 'uploaded')
+      );
+
+      if (readyRelease) {
+        const apkAsset = readyRelease.assets.find(a => a.name && a.name.endsWith('.apk') && a.state === 'uploaded');
+        if (apkAsset && apkAsset.browser_download_url) {
+          // Resolve direct Azure CDN redirect from GitHub with browser User-Agent
+          const directRes = await fetch(apkAsset.browser_download_url, {
+            redirect: 'manual',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+          });
+
+          const location = directRes.headers.get('location');
+          if (location) {
+            return res.redirect(302, location);
+          }
+        }
+      }
+    }
+
+    return res.redirect(302, 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.28/Suprime_Solutions_v1.0.28.apk');
+  } catch (err) {
+    console.error('Error redirecting APK download:', err.message);
+    return res.redirect(302, 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.28/Suprime_Solutions_v1.0.28.apk');
+  }
+};
+
 module.exports = {
-  getLatestRelease
+  getLatestRelease,
+  downloadLatestApk
 };

@@ -224,15 +224,61 @@ class AppUpdateService {
       }
     }
 
-    // Download APK directly
-    await _dio.download(
-      info.downloadUrl,
-      savePath,
-      cancelToken: cancelToken,
-      onReceiveProgress: (received, total) {
-        onProgress(received, total > 0 ? total : (info.apkSize ?? 0));
-      },
-    );
+    // Build prioritized list of download URLs (backend high-speed redirect first to prevent 504 timeouts)
+    final List<String> candidateUrls = [];
+    final backendDownloadUrl = '${ApiClient.defaultBaseUrl}/app/download';
+    
+    if (info.downloadUrl.isNotEmpty && info.downloadUrl.contains('/api/app/download')) {
+      candidateUrls.add(info.downloadUrl);
+    } else {
+      candidateUrls.add(backendDownloadUrl);
+      if (info.downloadUrl.isNotEmpty) {
+        candidateUrls.add(info.downloadUrl);
+      }
+    }
+
+    Object? lastError;
+    bool downloadSuccess = false;
+
+    for (final url in candidateUrls) {
+      try {
+        debugPrint('[AppUpdateService] Attempting APK download from: $url');
+        await _dio.download(
+          url,
+          savePath,
+          cancelToken: cancelToken,
+          options: Options(
+            followRedirects: true,
+            maxRedirects: 5,
+            receiveTimeout: const Duration(seconds: 90),
+            sendTimeout: const Duration(seconds: 30),
+          ),
+          onReceiveProgress: (received, total) {
+            onProgress(received, total > 0 ? total : (info.apkSize ?? 0));
+          },
+        );
+
+        final downloadedFile = File(savePath);
+        if (await downloadedFile.exists() && (await downloadedFile.length()) > 1000000) {
+          downloadSuccess = true;
+          break;
+        }
+      } catch (err) {
+        lastError = err;
+        debugPrint('[AppUpdateService] Download failed from $url: $err');
+        if (cancelToken != null && cancelToken.isCancelled) {
+          rethrow;
+        }
+        // Clean up partial file before retrying next URL
+        if (await targetFile.exists()) {
+          try { await targetFile.delete(); } catch (_) {}
+        }
+      }
+    }
+
+    if (!downloadSuccess) {
+      throw lastError ?? Exception('Failed to download update APK from all available sources.');
+    }
 
     // Trigger installation
     await _installApk(savePath);
