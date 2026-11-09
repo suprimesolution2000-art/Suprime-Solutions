@@ -28,7 +28,7 @@ const invoiceSchema = new mongoose.Schema({
   invoiceNumber: {
     type: String,
     required: true,
-    unique: true // e.g. "SS/26-27/001"
+    index: true // e.g. "SS/26-27/001" or "1"
   },
   sequenceNumber: {
     type: Number,
@@ -158,6 +158,9 @@ const invoiceSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// Unique scoped per invoice type and financial year
+invoiceSchema.index({ invoiceNumber: 1, invoiceType: 1, financialYear: 1 }, { unique: true });
 
 // Full-text search index across invoice number, customer name, phone, gstin, PO, challan, and item descriptions
 invoiceSchema.index({

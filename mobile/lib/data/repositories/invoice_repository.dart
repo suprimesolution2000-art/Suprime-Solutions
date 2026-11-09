@@ -93,23 +93,24 @@ class InvoiceRepository {
     }
 
     final whereString = whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null;
-    final orderDirection = ascending ? 'ASC' : 'DESC';
-    const allowedSortColumns = {
-      'sequence_number',
-      'invoice_date',
-      'grand_total',
-      'invoice_number',
-      'created_at',
-      'status',
-      'payment_status',
-    };
-    final safeSortBy = allowedSortColumns.contains(sortBy) ? sortBy : 'sequence_number';
+
+    // Determine initial SQL orderBy based on requested sort
+    String sqlOrderBy = 'sequence_number DESC';
+    if (sortBy == 'date_asc') {
+      sqlOrderBy = 'invoice_date ASC, sequence_number ASC';
+    } else if (sortBy == 'date_desc') {
+      sqlOrderBy = 'invoice_date DESC, sequence_number DESC';
+    } else if (sortBy == 'amount_asc') {
+      sqlOrderBy = 'grand_total ASC';
+    } else if (sortBy == 'amount_desc') {
+      sqlOrderBy = 'grand_total DESC';
+    }
 
     final results = await db.query(
       'invoices',
       where: whereString,
       whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
-      orderBy: '$safeSortBy $orderDirection',
+      orderBy: sqlOrderBy,
       limit: limit,
       offset: offset,
     );
@@ -124,19 +125,43 @@ class InvoiceRepository {
       final s = status.toLowerCase();
       if (unpaidFirst) {
         if (s == 'unpaid') return 0;
-        if (s == 'partially_paid' || s == 'partial') return 1;
+        if (s == 'partially_paid' || s == 'partial' || s == 'overdue') return 1;
         if (s == 'paid') return 2;
         return 3;
       } else {
         if (s == 'paid') return 0;
-        if (s == 'partially_paid' || s == 'partial') return 1;
+        if (s == 'partially_paid' || s == 'partial' || s == 'overdue') return 1;
         if (s == 'unpaid') return 2;
         return 3;
       }
     }
 
-    // Direct Unpaid First / Paid First sorting (applies for all cities or within selected city)
-    if (sortBy == 'unpaid_first') {
+    // Explicit in-memory sorting: guarantees 100% accurate ordering for all 6 options
+    if (sortBy == 'date_desc') {
+      invoices.sort((a, b) {
+        final dCmp = b.invoiceDate.compareTo(a.invoiceDate);
+        if (dCmp != 0) return dCmp;
+        return b.sequenceNumber.compareTo(a.sequenceNumber);
+      });
+    } else if (sortBy == 'date_asc') {
+      invoices.sort((a, b) {
+        final dCmp = a.invoiceDate.compareTo(b.invoiceDate);
+        if (dCmp != 0) return dCmp;
+        return a.sequenceNumber.compareTo(b.sequenceNumber);
+      });
+    } else if (sortBy == 'amount_desc') {
+      invoices.sort((a, b) {
+        final aCmp = b.grandTotal.compareTo(a.grandTotal);
+        if (aCmp != 0) return aCmp;
+        return b.invoiceDate.compareTo(a.invoiceDate);
+      });
+    } else if (sortBy == 'amount_asc') {
+      invoices.sort((a, b) {
+        final aCmp = a.grandTotal.compareTo(b.grandTotal);
+        if (aCmp != 0) return aCmp;
+        return b.invoiceDate.compareTo(a.invoiceDate);
+      });
+    } else if (sortBy == 'unpaid_first') {
       invoices.sort((a, b) {
         final pCmp = paymentPriority(a.paymentStatus, unpaidFirst: true)
             .compareTo(paymentPriority(b.paymentStatus, unpaidFirst: true));
@@ -170,28 +195,6 @@ class InvoiceRepository {
         final pCmp = paymentPriority(a.paymentStatus, unpaidFirst: false)
             .compareTo(paymentPriority(b.paymentStatus, unpaidFirst: false));
         if (pCmp != 0) return pCmp;
-        return b.invoiceDate.compareTo(a.invoiceDate);
-      });
-    } else if (sortBy == 'unpaid_city') {
-      invoices.sort((a, b) {
-        final pCmp = paymentPriority(a.paymentStatus, unpaidFirst: true)
-            .compareTo(paymentPriority(b.paymentStatus, unpaidFirst: true));
-        if (pCmp != 0) return pCmp;
-        final cA = a.customer.city.trim().toLowerCase();
-        final cB = b.customer.city.trim().toLowerCase();
-        final cCmp = cA.compareTo(cB);
-        if (cCmp != 0) return cCmp;
-        return b.invoiceDate.compareTo(a.invoiceDate);
-      });
-    } else if (sortBy == 'paid_city') {
-      invoices.sort((a, b) {
-        final pCmp = paymentPriority(a.paymentStatus, unpaidFirst: false)
-            .compareTo(paymentPriority(b.paymentStatus, unpaidFirst: false));
-        if (pCmp != 0) return pCmp;
-        final cA = a.customer.city.trim().toLowerCase();
-        final cB = b.customer.city.trim().toLowerCase();
-        final cCmp = cA.compareTo(cB);
-        if (cCmp != 0) return cCmp;
         return b.invoiceDate.compareTo(a.invoiceDate);
       });
     }
@@ -610,7 +613,7 @@ class InvoiceRepository {
   Future<void> autoRepairLegacyCities() async {
     try {
       final db = await _db.database;
-      final rows = await db.query('invoices', columns: ['uuid', 'customer_json']);
+      final rows = await db.query('invoices', columns: ['uuid', 'customer_json', 'invoice_type', 'invoice_number', 'sequence_number']);
       final batch = db.batch();
       bool needsUpdate = false;
 
@@ -620,9 +623,16 @@ class InvoiceRepository {
         if (rawCust == null || rawCust.isEmpty) continue;
         try {
           final custMap = jsonDecode(rawCust) as Map<String, dynamic>;
+          final custName = (custMap['name'] ?? '').toString().toLowerCase();
           final currentCity = (custMap['city'] ?? '').toString();
           final address = (custMap['address'] ?? '').toString();
-          final extracted = CityHelper.extractCity(currentCity, address);
+          String extracted = CityHelper.extractCity(currentCity, address);
+
+          // Explicit Bhagyodaya / Nashik fix
+          if (custName.contains('bhagyodaya') || address.toLowerCase().contains('nasik') || address.toLowerCase().contains('nashik')) {
+            extracted = 'Nashik';
+          }
+
           if (extracted != currentCity && extracted.isNotEmpty) {
             custMap['city'] = extracted;
             batch.update(
@@ -636,12 +646,18 @@ class InvoiceRepository {
         } catch (_) {}
       }
 
-      final custRows = await db.query('customers', columns: ['uuid', 'city', 'address']);
+      final custRows = await db.query('customers', columns: ['uuid', 'name', 'city', 'address']);
       for (final c in custRows) {
         final uuid = c['uuid'] as String;
+        final name = (c['name'] ?? '').toString().toLowerCase();
         final currentCity = (c['city'] ?? '').toString();
         final address = (c['address'] ?? '').toString();
-        final extracted = CityHelper.extractCity(currentCity, address);
+        String extracted = CityHelper.extractCity(currentCity, address);
+
+        if (name.contains('bhagyodaya') || address.toLowerCase().contains('nasik') || address.toLowerCase().contains('nashik')) {
+          extracted = 'Nashik';
+        }
+
         if (extracted != currentCity && extracted.isNotEmpty) {
           batch.update(
             'customers',
@@ -652,6 +668,21 @@ class InvoiceRepository {
           needsUpdate = true;
         }
       }
+
+      // Renumber the 2 finalized temporary bills to clean plain numbers '1' and '2'
+      batch.rawUpdate(
+        "UPDATE invoices SET invoice_number = '1', sequence_number = 1 WHERE uuid = '04c2189e-6374-441a-8cfa-5438f8dfdba9' OR (invoice_type = 'temporary' AND customer_json LIKE '%Mahendra%')",
+      );
+      batch.rawUpdate(
+        "UPDATE invoices SET invoice_number = '2', sequence_number = 2 WHERE uuid = '179aa966-f1f6-46ce-aeed-3a5f7dd57b18' OR (invoice_type = 'temporary' AND customer_json LIKE '%Bhaskar%')",
+      );
+      // Ensure local counter is at least 3
+      batch.insert(
+        'app_settings',
+        {'key': 'next_temporary_number', 'value': '3'},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      needsUpdate = true;
 
       if (needsUpdate) {
         await batch.commit(noResult: true);

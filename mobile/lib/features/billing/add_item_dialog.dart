@@ -31,7 +31,7 @@ class AddItemDialog extends StatefulWidget {
 class _AddItemDialogState extends State<AddItemDialog> {
   final _descController = TextEditingController();
   final _hsnController = TextEditingController();
-  final _qtyController = TextEditingController(text: '1');
+  final _qtyController = TextEditingController();
   final _rateController = TextEditingController();
   final _discountController = TextEditingController(text: '0');
 
@@ -274,6 +274,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         decoration: const InputDecoration(
                           labelText: 'Quantity *',
+                          hintText: 'Enter quantity',
                           prefixIcon: Icon(Icons.format_list_numbered),
                         ),
                       ),

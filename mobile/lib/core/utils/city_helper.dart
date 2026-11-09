@@ -49,6 +49,7 @@ class CityHelper {
     'Kharsia',
     'Gharghoda',
     'Nagpur',
+    'Nashik',
     'Kolkata',
     'Mumbai',
     'Delhi',
@@ -63,7 +64,7 @@ class CityHelper {
 
   /// Extracts the true city from explicit city or address text.
   /// If city was previously defaulted to 'Bilaspur', but address mentions another city
-  /// (e.g. "Pandri, Raipur"), it accurately extracts and returns "Raipur".
+  /// (e.g. "Pandri, Raipur" or "Manmad Dist Nasik"), it accurately extracts and returns the real city.
   static String extractCity(String? city, String? address) {
     final cleanCity = (city ?? '').trim();
     final cleanAddress = (address ?? '').trim();
@@ -76,6 +77,12 @@ class CityHelper {
     // 2. Check if the address contains any known city (longer names checked first)
     if (cleanAddress.isNotEmpty) {
       final addrLower = cleanAddress.toLowerCase();
+
+      // Special alias check for Nasik/Nashik/Manmad
+      if (RegExp(r'\b(nashik|nasik|manmad)\b').hasMatch(addrLower)) {
+        return 'Nashik';
+      }
+
       final sortedCities = List<String>.from(commercialCities)
         ..sort((a, b) => b.length.compareTo(a.length));
 
@@ -90,8 +97,11 @@ class CityHelper {
       final parts = cleanAddress.split(RegExp(r'[,;\n]')).map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
       for (final part in parts.reversed) {
         if (RegExp(r'^\d+$').hasMatch(part)) continue;
-        final cleanPart = part.replaceAll(RegExp(r'\b(chhattisgarh|c\.g\.|cg|india|\d{6})\b', caseSensitive: false), '').trim();
+        final cleanPart = part.replaceAll(RegExp(r'\b(chhattisgarh|c\.g\.|cg|maharashtra|maharasra|india|\d{6})\b', caseSensitive: false), '').trim();
         if (cleanPart.isNotEmpty) {
+          if (cleanPart.toLowerCase() == 'nasik' || cleanPart.toLowerCase() == 'nashik') {
+            return 'Nashik';
+          }
           for (final c in commercialCities) {
             if (c.toLowerCase() == cleanPart.toLowerCase()) {
               return c;
@@ -111,6 +121,7 @@ class CityHelper {
 
   static String _formatCity(String c) {
     if (c.isEmpty) return 'Bilaspur';
+    if (c.toLowerCase() == 'nasik' || c.toLowerCase() == 'nashik') return 'Nashik';
     for (final known in commercialCities) {
       if (known.toLowerCase() == c.toLowerCase()) return known;
     }

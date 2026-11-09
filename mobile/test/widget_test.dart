@@ -214,6 +214,8 @@ void main() {
     expect(CityHelper.extractCity('Bilaspur', 'Transport Nagar, Korba'), 'Korba');
     expect(CityHelper.extractCity('Bilaspur', 'Power House, Bhilai, 490001'), 'Bhilai');
     expect(CityHelper.extractCity('Bilaspur', 'Ganjpara, Durg'), 'Durg');
+    expect(CityHelper.extractCity('Bilaspur', '1508 Mahatma Phole Chowk, Manmad Dist Nasik.Maharasra'), 'Nashik');
+    expect(CityHelper.extractCity('', 'Near College, Nashik Road'), 'Nashik');
 
     // 3. True Bilaspur addresses
     expect(CityHelper.extractCity('Bilaspur', 'Sirgitti Industrial Area, Bilaspur'), 'Bilaspur');
