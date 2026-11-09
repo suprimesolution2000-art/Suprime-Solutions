@@ -84,74 +84,101 @@ class _AddItemDialogState extends State<AddItemDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      child: AnimatedPadding(
-        padding: MediaQuery.of(context).viewInsets,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.decelerate,
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 500),
-          padding: const EdgeInsets.all(20),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Add Product / Item',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-                const Divider(),
-                if (_validationError != null) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.danger.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.error_outline, size: 18, color: AppColors.danger),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _validationError!,
-                            style: const TextStyle(fontSize: 13, color: AppColors.danger, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: 500,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        padding: const EdgeInsets.all(20),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Add Product / Item',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+                  ),
                 ],
-                const SizedBox(height: 4),
+              ),
+              const Divider(),
+              if (_validationError != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, size: 18, color: AppColors.danger),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _validationError!,
+                          style: const TextStyle(fontSize: 13, color: AppColors.danger, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              const SizedBox(height: 4),
 
-                // Description of Goods (Autocomplete or manual typing)
-                Autocomplete<ProductModel>(
-                  displayStringForOption: (option) => option.description,
-                  optionsBuilder: (TextEditingValue textEditingValue) {
-                    if (textEditingValue.text.isEmpty) {
-                      return _savedProducts.take(6);
-                    }
-                    final query = textEditingValue.text.toLowerCase().trim();
-                    return _savedProducts.where((p) =>
-                        p.description.toLowerCase().contains(query) ||
-                        p.hsnCode.contains(query));
-                  },
-                  onSelected: (ProductModel selection) {
+              // Description of Goods (Autocomplete or manual typing)
+              Autocomplete<ProductModel>(
+                displayStringForOption: (option) => option.description,
+                optionsBuilder: (TextEditingValue textEditingValue) {
+                  if (textEditingValue.text.isEmpty) {
+                    return _savedProducts.take(6);
+                  }
+                  final query = textEditingValue.text.toLowerCase().trim();
+                  return _savedProducts.where((p) =>
+                      p.description.toLowerCase().contains(query) ||
+                      p.hsnCode.contains(query));
+                },
+                optionsViewBuilder: (context, onSelected, options) {
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4.0,
+                      borderRadius: BorderRadius.circular(8),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 200, maxWidth: 300),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          itemBuilder: (BuildContext context, int index) {
+                            final option = options.elementAt(index);
+                            return ListTile(
+                              dense: true,
+                              title: Text(option.description, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                              subtitle: option.hsnCode.isNotEmpty
+                                  ? Text('HSN: ${option.hsnCode} • ₹${option.defaultRate}', style: const TextStyle(fontSize: 11))
+                                  : null,
+                              onTap: () => onSelected(option),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                onSelected: (ProductModel selection) {
                     _descController.text = selection.description;
                     _hsnController.text = selection.hsnCode;
                     if (selection.defaultRate > 0) {
@@ -373,7 +400,7 @@ class _AddItemDialogState extends State<AddItemDialog> {
                     gstRate: effectiveGst,
                   );
 
-                  Navigator.pop(context);
+                  Navigator.of(context, rootNavigator: true).pop();
                 },
                 child: const Text('Add Item to Bill'),
               ),
@@ -381,7 +408,6 @@ class _AddItemDialogState extends State<AddItemDialog> {
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

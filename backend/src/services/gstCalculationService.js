@@ -28,9 +28,9 @@ function numberToIndianWords(amount) {
     return str;
   }
 
-  const rounded = Math.round(amount * 100) / 100;
-  const rupees = Math.floor(rounded);
-  const paise = Math.round((rounded - rupees) * 100);
+  const totalPaise = Math.round(amount * 100);
+  const rupees = Math.floor(totalPaise / 100);
+  const paise = totalPaise % 100;
 
   let words = '';
 

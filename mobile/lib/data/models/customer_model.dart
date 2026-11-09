@@ -1,3 +1,5 @@
+import '../../core/constants/app_constants.dart';
+
 class CustomerModel {
   final String uuid;
   final String name;
@@ -23,9 +25,9 @@ class CustomerModel {
     this.email = '',
     this.gstin = '',
     this.address = '',
-    this.city = 'Bilaspur',
-    this.state = 'Chhattisgarh',
-    this.stateCode = '22',
+    this.city = AppConstants.defaultCity,
+    this.state = AppConstants.defaultState,
+    this.stateCode = AppConstants.defaultStateCode,
     this.pincode = '',
     this.outstandingBalance = 0.0,
     this.totalBilled = 0.0,

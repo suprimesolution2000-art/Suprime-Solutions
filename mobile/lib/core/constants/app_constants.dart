@@ -1,7 +1,7 @@
 class AppConstants {
   static const String appName = 'Suprime Solutions';
-  static const String appVersion = '1.0.26';
-  static const int buildNumber = 26;
+  static const String appVersion = '1.0.27';
+  static const int buildNumber = 27;
   static const String companyName = 'Suprime Solutions';
   static const String gstin = '22FWDPD2626D1Z7';
   static const String ePan = 'FWDPD2626D';
@@ -9,6 +9,9 @@ class AppConstants {
   static const String address = 'Mahalaxmi Bole, Beside Yashoda Dairy, Tikrapara, Bilaspur (C.G.) 495001';
   static const String state = 'Chhattisgarh';
   static const String stateCode = '22';
+  static const String defaultCity = 'Bilaspur';
+  static const String defaultState = 'Chhattisgarh';
+  static const String defaultStateCode = '22';
 
   // All 36 Indian States & Union Territories with official GST State Codes
   static const Map<String, String> indianStates = {

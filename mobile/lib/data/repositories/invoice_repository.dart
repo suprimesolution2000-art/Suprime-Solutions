@@ -91,12 +91,22 @@ class InvoiceRepository {
 
     final whereString = whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null;
     final orderDirection = ascending ? 'ASC' : 'DESC';
+    const allowedSortColumns = {
+      'sequence_number',
+      'invoice_date',
+      'grand_total',
+      'invoice_number',
+      'created_at',
+      'status',
+      'payment_status',
+    };
+    final safeSortBy = allowedSortColumns.contains(sortBy) ? sortBy : 'sequence_number';
 
     final results = await db.query(
       'invoices',
       where: whereString,
       whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
-      orderBy: '$sortBy $orderDirection',
+      orderBy: '$safeSortBy $orderDirection',
       limit: limit,
       offset: offset,
     );
@@ -335,53 +345,55 @@ class InvoiceRepository {
     final db = await _db.database;
     final fy = getFinancialYear(date);
 
-    final nextNumRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number']);
+    return await db.transaction<Map<String, dynamic>>((txn) async {
+      final nextNumRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number']);
 
-    int nextNum = 1;
-    if (nextNumRes.isNotEmpty) {
-      nextNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
-    } else {
-      // Find highest existing sequence in this FY
-      final maxRes = await db.rawQuery(
-        'SELECT MAX(sequence_number) as max_seq FROM invoices WHERE financial_year = ?',
-        [fy],
-      );
-      if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
-        nextNum = (maxRes.first['max_seq'] as int) + 1;
+      int nextNum = 1;
+      if (nextNumRes.isNotEmpty) {
+        nextNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
+      } else {
+        // Find highest existing sequence in this FY
+        final maxRes = await txn.rawQuery(
+          'SELECT MAX(sequence_number) as max_seq FROM invoices WHERE financial_year = ?',
+          [fy],
+        );
+        if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
+          nextNum = (maxRes.first['max_seq'] as int) + 1;
+        }
       }
-    }
 
-    final prefixRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['invoice_prefix']);
-    final prefix = prefixRes.isNotEmpty ? (prefixRes.first['value'] as String? ?? '') : '';
+      final prefixRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['invoice_prefix']);
+      final prefix = prefixRes.isNotEmpty ? (prefixRes.first['value'] as String? ?? '') : '';
 
-    String invoiceNumber;
-    int seqNum;
+      String invoiceNumber;
+      int seqNum;
 
-    if (customInvoiceNumber != null && customInvoiceNumber.trim().isNotEmpty) {
-      invoiceNumber = customInvoiceNumber.trim();
-      final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber) ?? RegExp(r'(\d+)').firstMatch(invoiceNumber);
-      final parsed = match != null ? int.tryParse(match.group(1)!) : null;
-      seqNum = parsed ?? nextNum;
-      nextNum = (parsed != null && parsed >= nextNum) ? parsed + 1 : nextNum + 1;
-    } else {
-      // Simple format: e.g. "1", "2", "3" or "SS-1"
-      invoiceNumber = prefix.isNotEmpty ? '$prefix$nextNum' : '$nextNum';
-      seqNum = nextNum;
-      nextNum = nextNum + 1;
-    }
+      if (customInvoiceNumber != null && customInvoiceNumber.trim().isNotEmpty) {
+        invoiceNumber = customInvoiceNumber.trim();
+        final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber) ?? RegExp(r'(\d+)').firstMatch(invoiceNumber);
+        final parsed = match != null ? int.tryParse(match.group(1)!) : null;
+        seqNum = parsed ?? nextNum;
+        nextNum = (parsed != null && parsed >= nextNum) ? parsed + 1 : nextNum + 1;
+      } else {
+        // Simple format: e.g. "1", "2", "3" or "SS-1"
+        invoiceNumber = prefix.isNotEmpty ? '$prefix$nextNum' : '$nextNum';
+        seqNum = nextNum;
+        nextNum = nextNum + 1;
+      }
 
-    // Increment and save next usable number
-    await db.insert(
-      'app_settings',
-      {'key': 'next_usable_number', 'value': nextNum.toString()},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+      // Increment and save next usable number
+      await txn.insert(
+        'app_settings',
+        {'key': 'next_usable_number', 'value': nextNum.toString()},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
 
-    return {
-      'invoiceNumber': invoiceNumber,
-      'sequenceNumber': seqNum,
-      'financialYear': fy,
-    };
+      return {
+        'invoiceNumber': invoiceNumber,
+        'sequenceNumber': seqNum,
+        'financialYear': fy,
+      };
+    });
   }
 
   /// Allocate a dedicated identifier for Temporary Bill without consuming or affecting

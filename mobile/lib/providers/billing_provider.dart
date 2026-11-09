@@ -75,7 +75,8 @@ class BillingState {
 
   double get unroundedTotal => isTemporary ? netAmount : (netAmount + cgstTotal + sgstTotal + igstTotal);
 
-  double get grandTotal => unroundedTotal.roundToDouble();
+  // Standard commercial half-up rounding (where .50 rounds up to next whole rupee)
+  double get grandTotal => (unroundedTotal + 0.5).floorToDouble();
 
   double get roundOff => isTemporary ? 0.0 : (((grandTotal - unroundedTotal) * 100).round() / 100);
 
@@ -261,7 +262,9 @@ class BillingNotifier extends StateNotifier<BillingState> {
     double discount = 0.0,
     double gstRate = 18.0,
   }) {
-    final taxableValue = ((quantity * rate - discount) * 100).round() / 100;
+    final maxDiscount = quantity * rate;
+    final safeDiscount = discount.clamp(0.0, maxDiscount);
+    final taxableValue = (((quantity * rate - safeDiscount) * 100).round() / 100).clamp(0.0, double.infinity);
     final isInter = state.isInterState;
     final isTemp = state.isTemporary;
 

@@ -23,14 +23,12 @@ const invoiceSchema = new mongoose.Schema({
   uuid: {
     type: String,
     required: true,
-    unique: true,
-    index: true
+    unique: true
   },
   invoiceNumber: {
     type: String,
     required: true,
-    unique: true,
-    index: true // e.g. "SS/26-27/001"
+    unique: true // e.g. "SS/26-27/001"
   },
   sequenceNumber: {
     type: Number,

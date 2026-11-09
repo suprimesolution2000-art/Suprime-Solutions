@@ -42,8 +42,10 @@ app.use('/api/auth', authLimiter);
 
 // Health check endpoints
 const sendHealth = (req, res) => {
-  res.json({
-    status: 'ok',
+  const isDbConnected = mongoose.connection.readyState === 1;
+  res.status(isDbConnected ? 200 : 200).json({
+    status: isDbConnected ? 'ok' : 'degraded',
+    database: isDbConnected ? 'connected' : 'connecting',
     service: 'SS Supreme Solutions Mobile Billing API',
     company: env.COMPANY.name,
     timestamp: new Date().toISOString()

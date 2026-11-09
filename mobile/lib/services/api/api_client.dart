@@ -8,6 +8,11 @@ class ApiClient {
   // Production Render live cloud backend URL
   static const String defaultBaseUrl = 'https://ss-supreme-solutions-backend.onrender.com/api';
   String _baseUrl = defaultBaseUrl;
+  String? _cachedToken;
+
+  void updateCachedToken(String? token) {
+    _cachedToken = token;
+  }
 
   ApiClient._init() {
     dio = Dio(
@@ -27,30 +32,45 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final prefs = await SharedPreferences.getInstance();
-          final token = prefs.getString('access_token');
-          if (token != null && token.isNotEmpty) {
-            options.headers['Authorization'] = 'Bearer $token';
+          if (_cachedToken == null) {
+            final prefs = await SharedPreferences.getInstance();
+            _cachedToken = prefs.getString('access_token');
+          }
+          if (_cachedToken != null && _cachedToken!.isNotEmpty) {
+            options.headers['Authorization'] = 'Bearer $_cachedToken';
           }
           return handler.next(options);
         },
         onError: (DioException error, handler) async {
-          // If 401 Unauthorized, attempt refresh token
-          if (error.response?.statusCode == 401) {
+          // If 401 Unauthorized, attempt refresh token with retry guard
+          final isAuthEndpoint = error.requestOptions.path.contains('/auth/refresh') ||
+              error.requestOptions.path.contains('/auth/login');
+          if (error.response?.statusCode == 401 &&
+              !isAuthEndpoint &&
+              error.requestOptions.extra['isRetry'] != true) {
+            error.requestOptions.extra['isRetry'] = true;
             final refreshed = await _refreshToken();
             if (refreshed) {
               // Retry original request
               final opts = error.requestOptions;
-              final prefs = await SharedPreferences.getInstance();
-              final newToken = prefs.getString('access_token');
-              opts.headers['Authorization'] = 'Bearer $newToken';
-              final cloneReq = await dio.request(
-                opts.path,
-                options: Options(method: opts.method, headers: opts.headers),
-                data: opts.data,
-                queryParameters: opts.queryParameters,
-              );
-              return handler.resolve(cloneReq);
+              opts.headers['Authorization'] = 'Bearer $_cachedToken';
+              try {
+                final cloneReq = await dio.request(
+                  opts.path,
+                  options: Options(
+                    method: opts.method,
+                    headers: opts.headers,
+                    extra: opts.extra,
+                  ),
+                  data: opts.data,
+                  queryParameters: opts.queryParameters,
+                );
+                return handler.resolve(cloneReq);
+              } catch (retryErr) {
+                if (retryErr is DioException) {
+                  return handler.next(retryErr);
+                }
+              }
             }
           }
           return handler.next(error);
@@ -78,6 +98,7 @@ class ApiClient {
       );
 
       if (res.statusCode == 200 && res.data['success'] == true) {
+        _cachedToken = res.data['accessToken'];
         await prefs.setString('access_token', res.data['accessToken']);
         if (res.data['refreshToken'] != null) {
           await prefs.setString('refresh_token', res.data['refreshToken']);

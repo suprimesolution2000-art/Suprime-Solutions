@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/invoice_model.dart';
@@ -51,6 +52,7 @@ class InvoiceListState {
 class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
   final InvoiceRepository _repo = InvoiceRepository();
   VoidCallback? _syncListener;
+  Timer? _debounceTimer;
 
   InvoiceListNotifier() : super(InvoiceListState()) {
     fetchInvoices();
@@ -64,6 +66,7 @@ class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     if (_syncListener != null) {
       SyncService.instance.removeListener(_syncListener!);
     }
@@ -94,7 +97,10 @@ class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
 
   void setSearchQuery(String query) {
     state = state.copyWith(searchQuery: query);
-    fetchInvoices();
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 250), () {
+      fetchInvoices();
+    });
   }
 
   void setFilterChip(String chip) {

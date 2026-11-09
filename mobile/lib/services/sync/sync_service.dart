@@ -217,11 +217,30 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
         };
       }).toList();
 
-      // Collect all local customers to sync
-      final localCustomers = await db.query(
-        'customers',
-        where: "active = 1 OR active IS NULL OR active = 'true'",
-      );
+      // Collect local customers to sync (delta sync vs full sync)
+      final List<Map<String, dynamic>> localCustomers;
+      if (forceFullSync) {
+        localCustomers = await db.query(
+          'customers',
+          where: "active = 1 OR active IS NULL OR active = 'true'",
+        );
+      } else {
+        final pendingCustUuids = invoicesToPush
+            .map((i) => (i['customer'] as Map?)?['uuid'] as String?)
+            .where((u) => u != null && u.isNotEmpty)
+            .cast<String>()
+            .toSet();
+        if (pendingCustUuids.isNotEmpty) {
+          final placeholders = List.filled(pendingCustUuids.length, '?').join(',');
+          localCustomers = await db.query(
+            'customers',
+            where: "uuid IN ($placeholders) AND (active = 1 OR active IS NULL OR active = 'true')",
+            whereArgs: pendingCustUuids.toList(),
+          );
+        } else {
+          localCustomers = [];
+        }
+      }
       final customersToPush = localCustomers.map((c) => {
         'uuid': c['uuid'],
         'name': c['name'],
@@ -240,11 +259,13 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
         'active': c['active'] == 1 || c['active'] == true,
       }).toList();
 
-      // Collect products
-      final localProducts = await db.query(
-        'products',
-        where: "active = 1 OR active IS NULL OR active = 'true'",
-      );
+      // Collect products (only push during full sync or when pending items exist)
+      final List<Map<String, dynamic>> localProducts = forceFullSync
+          ? await db.query(
+              'products',
+              where: "active = 1 OR active IS NULL OR active = 'true'",
+            )
+          : [];
       final productsToPush = localProducts.map((p) => {
         'uuid': p['uuid'],
         'description': p['description'],

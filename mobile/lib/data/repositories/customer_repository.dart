@@ -55,11 +55,6 @@ class CustomerRepository {
       await recoverCustomersFromInvoices();
     }
 
-    // Always recalculate customer balances from actual local invoices so due is never 0 when unpaid bills exist
-    try {
-      await recalculateCustomerBalances();
-    } catch (_) {}
-
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
       final query = '%${searchQuery.trim()}%';
       results = await db.rawQuery('''

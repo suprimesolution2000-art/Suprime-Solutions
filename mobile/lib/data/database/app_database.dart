@@ -20,6 +20,9 @@ class AppDatabase {
     final db = await openDatabase(
       path,
       version: 2,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {

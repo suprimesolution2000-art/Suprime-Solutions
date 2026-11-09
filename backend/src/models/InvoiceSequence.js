@@ -4,8 +4,7 @@ const invoiceSequenceSchema = new mongoose.Schema({
   financialYear: {
     type: String,
     required: true,
-    unique: true,
-    index: true // e.g., '26-27'
+    unique: true // e.g., '26-27'
   },
   currentNumber: {
     type: Number,

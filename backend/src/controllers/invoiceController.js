@@ -337,8 +337,8 @@ exports.cancelInvoice = async (req, res, next) => {
     invoice.status = 'cancelled';
     await invoice.save();
 
-    // Adjust customer ledger balance
-    if (invoice.customer && invoice.customer.uuid) {
+    // Adjust customer ledger balance for non-temporary bills
+    if (invoice.customer && invoice.customer.uuid && invoice.invoiceType !== 'temporary') {
       await Customer.updateOne(
         { uuid: invoice.customer.uuid },
         {
@@ -389,7 +389,8 @@ exports.updateInvoice = async (req, res, next) => {
       poDate,
       challanNumber,
       challanDate,
-      deviceId
+      deviceId,
+      invoiceType
     } = req.body;
 
     if (items && !items.length) {

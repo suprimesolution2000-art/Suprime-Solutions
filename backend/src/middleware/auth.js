@@ -12,16 +12,15 @@ const authMiddleware = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, env.JWT_SECRET);
 
-    // If MongoDB is reachable, verify active user; otherwise use token payload
-    try {
-      const user = await User.findById(decoded.id).select('-passwordHash');
-      if (user && !user.active) {
-        return res.status(403).json({ success: false, message: 'User account is inactive.' });
-      }
-      req.user = user || decoded;
-    } catch {
-      req.user = decoded;
+    // Verify user exists and is active in database
+    const user = await User.findById(decoded.id).select('-passwordHash');
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'User account not found.' });
     }
+    if (!user.active) {
+      return res.status(403).json({ success: false, message: 'User account is inactive.' });
+    }
+    req.user = user;
 
     next();
   } catch (error) {

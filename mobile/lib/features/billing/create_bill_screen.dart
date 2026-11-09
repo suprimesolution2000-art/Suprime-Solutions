@@ -33,6 +33,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   final _invoiceNumberController = TextEditingController();
   final _poController = TextEditingController();
   final _challanController = TextEditingController();
+  final _scrollController = ScrollController();
   TextEditingController? _customerAutocompleteController;
 
   late String _currentBillType;
@@ -104,6 +105,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
     _invoiceNumberController.dispose();
     _poController.dispose();
     _challanController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -179,6 +181,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
         ],
       ),
       body: SingleChildScrollView(
+        controller: _scrollController,
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -612,6 +615,15 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                                     discount: discount,
                                     gstRate: gstRate,
                                   );
+                                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                                    if (_scrollController.hasClients) {
+                                      _scrollController.animateTo(
+                                        _scrollController.position.maxScrollExtent,
+                                        duration: const Duration(milliseconds: 350),
+                                        curve: Curves.easeOut,
+                                      );
+                                    }
+                                  });
                                 },
                               ),
                             );
@@ -813,6 +825,76 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
           ],
         ),
       ),
+      bottomNavigationBar: billState.items.isNotEmpty
+          ? Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, -3),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${billState.items.length} ${billState.items.length == 1 ? "Item" : "Items"} • ${_currentBillType == 'temporary' ? 'Temporary' : 'GST'}',
+                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 2),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              CurrencyFormatter.format(billState.grandTotal),
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: _currentBillType == 'temporary' ? const Color(0xFF8B5A2B) : AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _currentBillType == 'temporary' ? const Color(0xFF8B5A2B) : AppColors.primary,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(140, 46),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        elevation: 2,
+                      ),
+                      onPressed: billState.isSaving
+                          ? null
+                          : () => _handleSaveInvoice(isEdit: widget.invoiceToEdit != null),
+                      child: billState.isSaving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : Text(
+                              widget.invoiceToEdit != null ? 'Update Bill' : 'Save & Issue',
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : null,
     );
   }
 

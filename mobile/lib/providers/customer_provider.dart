@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/customer_model.dart';
@@ -35,6 +36,7 @@ class CustomerListState {
 class CustomerListNotifier extends StateNotifier<CustomerListState> {
   final CustomerRepository _repo = CustomerRepository();
   VoidCallback? _syncListener;
+  Timer? _debounceTimer;
 
   CustomerListNotifier() : super(CustomerListState()) {
     fetchCustomers();
@@ -48,6 +50,7 @@ class CustomerListNotifier extends StateNotifier<CustomerListState> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     if (_syncListener != null) {
       SyncService.instance.removeListener(_syncListener!);
     }
@@ -72,7 +75,10 @@ class CustomerListNotifier extends StateNotifier<CustomerListState> {
 
   void setSearchQuery(String query) {
     state = state.copyWith(searchQuery: query);
-    fetchCustomers();
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 250), () {
+      fetchCustomers();
+    });
   }
 
   Future<void> addCustomer(CustomerModel customer) async {

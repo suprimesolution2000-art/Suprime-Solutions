@@ -115,13 +115,22 @@ exports.register = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Username is already taken. Please log in or choose another.' });
     }
 
+    // Protect registration: If owner account already exists, only admin can create staff
+    const ownerCount = await User.countDocuments({ role: 'owner' });
+    if (ownerCount > 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'Owner account is already configured. New staff accounts must be created by the Administrator.'
+      });
+    }
+
     const passwordHash = await User.hashPassword(password);
     const user = await User.create({
       name: name.trim(),
       username: cleanUsername,
       passwordHash,
       plainPassword: password,
-      role: role || 'owner',
+      role: 'owner',
       phone: phone || env.COMPANY.phone,
       active: true
     });

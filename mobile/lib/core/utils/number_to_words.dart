@@ -54,9 +54,9 @@ class NumberToWords {
     if (amount == 0) return 'Rupees Zero Only';
     if (amount < 0) return 'Minus ${convert(amount.abs())}';
 
-    final rounded = (amount * 100).round() / 100;
-    final rupees = rounded.floor();
-    final paise = ((rounded - rupees) * 100).round();
+    final totalPaise = (amount * 100).round();
+    final rupees = totalPaise ~/ 100;
+    final paise = totalPaise % 100;
 
     var words = '';
 
