@@ -57,7 +57,7 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
   @override
   Widget build(BuildContext context) {
     final c = widget.customer;
-    final totalBilled = _invoices.fold(0.0, (acc, inv) => acc + (inv.status != 'cancelled' && inv.invoiceType != 'temporary' ? inv.grandTotal : 0.0));
+    final totalBilled = _invoices.fold(0.0, (acc, inv) => acc + (inv.status != 'cancelled' ? inv.grandTotal : 0.0));
     final totalPaid = _payments.fold(0.0, (acc, p) => acc + p.amount);
     final rawDue = (totalBilled - totalPaid);
     final outstanding = (rawDue.abs() < 0.005 ? 0.0 : rawDue).clamp(0.0, double.infinity);
@@ -162,7 +162,9 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                                     title: Row(
                                       children: [
                                         Text(
-                                          inv.invoiceType == 'temporary' ? 'Temporary Bill' : inv.invoiceNumber,
+                                          inv.invoiceType == 'temporary'
+                                              ? 'Temp Bill #${inv.invoiceNumber.isNotEmpty ? inv.invoiceNumber : inv.sequenceNumber}'
+                                              : inv.invoiceNumber,
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             color: inv.invoiceType == 'temporary' ? const Color(0xFF8B5A2B) : null,
@@ -186,9 +188,7 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                                       ],
                                     ),
                                     subtitle: Text(
-                                      inv.invoiceType == 'temporary'
-                                          ? '${DateFormatter.format(inv.invoiceDate)} • Temporary Bill'
-                                          : '${DateFormatter.format(inv.invoiceDate)} • Status: ${inv.paymentStatus.toUpperCase()}',
+                                      '${DateFormatter.format(inv.invoiceDate)} • Status: ${inv.paymentStatus.toUpperCase()}',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),

@@ -20,6 +20,7 @@ class CustomersScreen extends ConsumerStatefulWidget {
 
 class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   final _searchController = TextEditingController();
+  String _paymentFilter = 'all'; // 'all', 'due', 'cleared'
 
   @override
   void dispose() {
@@ -88,6 +89,52 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             ),
           ),
 
+          // Payment Status Filter Chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+            child: Row(
+              children: [
+                FilterChip(
+                  label: Text('All (${customerState.customers.length})'),
+                  selected: _paymentFilter == 'all',
+                  onSelected: (_) => setState(() => _paymentFilter = 'all'),
+                  selectedColor: AppColors.primaryContainer,
+                  checkmarkColor: AppColors.primary,
+                  labelStyle: TextStyle(
+                    fontWeight: _paymentFilter == 'all' ? FontWeight.bold : FontWeight.normal,
+                    color: _paymentFilter == 'all' ? AppColors.primary : AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: Text('With Due (${customerState.customers.where((c) => c.outstandingBalance > 0.005).length})'),
+                  selected: _paymentFilter == 'due',
+                  onSelected: (_) => setState(() => _paymentFilter = 'due'),
+                  selectedColor: AppColors.unpaidContainer,
+                  checkmarkColor: AppColors.unpaid,
+                  labelStyle: TextStyle(
+                    fontWeight: _paymentFilter == 'due' ? FontWeight.bold : FontWeight.normal,
+                    color: _paymentFilter == 'due' ? AppColors.unpaid : AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: Text('Paid / Clear (${customerState.customers.where((c) => c.outstandingBalance <= 0.005).length})'),
+                  selected: _paymentFilter == 'cleared',
+                  onSelected: (_) => setState(() => _paymentFilter = 'cleared'),
+                  selectedColor: AppColors.paidContainer,
+                  checkmarkColor: AppColors.paid,
+                  labelStyle: TextStyle(
+                    fontWeight: _paymentFilter == 'cleared' ? FontWeight.bold : FontWeight.normal,
+                    color: _paymentFilter == 'cleared' ? AppColors.paid : AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
           // Customers List
           Expanded(
             child: customerState.isLoading
@@ -95,6 +142,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 : customerState.customers.isEmpty
                     ? RefreshIndicator(
                         onRefresh: () async {
+                          await CustomerRepository().recalculateCustomerBalances();
                           await SyncService.instance.synchronize(forceFullSync: true);
                           await notifier.fetchCustomers();
                         },
@@ -127,15 +175,38 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                       )
                     : RefreshIndicator(
                         onRefresh: () async {
+                          await CustomerRepository().recalculateCustomerBalances();
                           await SyncService.instance.synchronize(forceFullSync: true);
                           await notifier.fetchCustomers();
                         },
-                        child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: customerState.customers.length,
-                          itemBuilder: (context, index) {
-                            final c = customerState.customers[index];
-                            return _buildCustomerCard(context, c);
+                        child: Builder(
+                          builder: (context) {
+                            final filteredList = customerState.customers.where((c) {
+                              if (_paymentFilter == 'due') return c.outstandingBalance > 0.005;
+                              if (_paymentFilter == 'cleared') return c.outstandingBalance <= 0.005;
+                              return true;
+                            }).toList();
+
+                            if (filteredList.isEmpty) {
+                              return Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24),
+                                  child: Text(
+                                    'No customers found in this payment filter',
+                                    style: const TextStyle(fontSize: 15, color: AppColors.textSecondary),
+                                  ),
+                                ),
+                              );
+                            }
+
+                            return ListView.builder(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              itemCount: filteredList.length,
+                              itemBuilder: (context, index) {
+                                final c = filteredList[index];
+                                return _buildCustomerCard(context, c);
+                              },
+                            );
                           },
                         ),
                       ),
@@ -162,7 +233,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   }
 
   Widget _buildCustomerCard(BuildContext context, CustomerModel customer) {
-    final hasDue = customer.outstandingBalance > 0;
+    final hasDue = customer.outstandingBalance > 0.005;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -201,11 +272,33 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      customer.name,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            customer.name,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: hasDue ? AppColors.unpaidContainer : AppColors.paidContainer,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            hasDue ? 'DUE' : 'CLEAR',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: hasDue ? AppColors.unpaid : AppColors.paid,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(

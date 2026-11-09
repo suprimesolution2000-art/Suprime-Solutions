@@ -4,7 +4,7 @@ const Payment = require('../models/Payment');
 const Product = require('../models/Product');
 const AuditLog = require('../models/AuditLog');
 const { calculateInvoiceFinancials } = require('../services/gstCalculationService');
-const { allocateInvoiceNumber, getFinancialYear } = require('../services/invoiceService');
+const { allocateInvoiceNumber, allocateTemporaryInvoiceNumber, getFinancialYear } = require('../services/invoiceService');
 const { generateInvoicePdf } = require('../services/pdfService');
 const env = require('../config/env');
 const { v4: uuidv4 } = require('uuid');
@@ -170,9 +170,13 @@ exports.createInvoice = async (req, res, next) => {
 
     if (isTemporary) {
       if (!invoiceNumber) {
-        invoiceNumber = `TEMP-${Date.now()}`;
+        const allocated = await allocateTemporaryInvoiceNumber(invoiceDate);
+        invoiceNumber = allocated.invoiceNumber;
+        sequenceNumber = allocated.sequenceNumber;
+      } else if (!sequenceNumber) {
+        const parsedSeq = parseInt((invoiceNumber.match(/\d+/) || [])[0], 10);
+        sequenceNumber = isNaN(parsedSeq) ? 1 : parsedSeq;
       }
-      sequenceNumber = sequenceNumber || 0;
     } else {
       if (!invoiceNumber) {
         const allocated = await allocateInvoiceNumber(invoiceDate);
@@ -222,13 +226,20 @@ exports.createInvoice = async (req, res, next) => {
           outstandingBalance: isTemporary ? 0 : financials.grandTotal
         });
       }
-    } else if (!isTemporary) {
+    const clientTotalPaid = Number(req.body.totalPaid) || 0;
+    const clientBalanceDue = Math.max(0, Math.round((financials.grandTotal - clientTotalPaid) * 100) / 100);
+    const clientPaymentStatus = clientBalanceDue <= 0.01
+        ? 'paid'
+        : (clientTotalPaid > 0 ? 'partially_paid' : (req.body.paymentStatus || 'unpaid'));
+
+    if (!isTemporary && customerUuid) {
       await Customer.updateOne(
         { uuid: customerUuid },
         {
           $inc: {
             totalBilled: financials.grandTotal,
-            outstandingBalance: financials.grandTotal
+            totalPaid: clientTotalPaid,
+            outstandingBalance: clientBalanceDue
           }
         }
       );
@@ -270,9 +281,10 @@ exports.createInvoice = async (req, res, next) => {
       grandTotal: financials.grandTotal,
       amountInWords: financials.amountInWords,
       status: status,
-      paymentStatus: 'unpaid',
-      totalPaid: 0,
-      balanceDue: financials.grandTotal,
+      paymentStatus: clientPaymentStatus,
+      totalPaid: clientTotalPaid,
+      balanceDue: clientBalanceDue,
+      invoiceType: isTemporary ? 'temporary' : 'gst',
       deviceId: deviceId || 'web-or-mobile',
       createdBy: req.user ? req.user.name : 'System',
       syncStatus: 'synced'

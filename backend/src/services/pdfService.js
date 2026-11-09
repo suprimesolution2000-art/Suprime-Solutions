@@ -51,6 +51,18 @@ async function generateTemporaryBillPdf(invoice) {
   const cust = invoice.customer || {};
   const custName = (cust.name || cust.businessName || 'Customer').toUpperCase();
 
+  // Bill Number (Drawn directly inside the top-right "NO." box above the underline)
+  const billNoStr = invoice.sequenceNumber ? String(invoice.sequenceNumber) : (invoice.invoiceNumber || '').replace(/^TEMP-/, '');
+  if (billNoStr) {
+    page.drawText(billNoStr, {
+      x: 468.0,
+      y: toPdfY(88.0),
+      size: 14.0,
+      font: fontBold,
+      color: espressoColor,
+    });
+  }
+
   // Billed To (Customer Name only, directly above line)
   page.drawText(custName, {
     x: 58.0,

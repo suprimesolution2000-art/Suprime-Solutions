@@ -11,6 +11,7 @@ class InvoiceListState {
   final String searchQuery;
   final String filterChip; // 'all', 'paid', 'unpaid', 'partial', 'overdue'
   final String invoiceType; // 'gst' or 'temporary'
+  final String sortBy; // 'date_desc', 'city_unpaid_first', 'city_paid_first', 'unpaid_city', 'paid_city', 'amount_desc'
   final DateTime? startDate;
   final DateTime? endDate;
   final String? errorMessage;
@@ -21,6 +22,7 @@ class InvoiceListState {
     this.searchQuery = '',
     this.filterChip = 'all',
     this.invoiceType = 'gst',
+    this.sortBy = 'date_desc',
     this.startDate,
     this.endDate,
     this.errorMessage,
@@ -32,6 +34,7 @@ class InvoiceListState {
     String? searchQuery,
     String? filterChip,
     String? invoiceType,
+    String? sortBy,
     DateTime? startDate,
     DateTime? endDate,
     String? errorMessage,
@@ -42,6 +45,7 @@ class InvoiceListState {
       searchQuery: searchQuery ?? this.searchQuery,
       filterChip: filterChip ?? this.filterChip,
       invoiceType: invoiceType ?? this.invoiceType,
+      sortBy: sortBy ?? this.sortBy,
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
       errorMessage: errorMessage,
@@ -80,6 +84,7 @@ class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
         searchQuery: state.searchQuery,
         paymentFilter: state.filterChip,
         invoiceType: state.invoiceType,
+        sortBy: state.sortBy,
         startDate: state.startDate,
         endDate: state.endDate,
       );
@@ -87,6 +92,12 @@ class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
     } catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: e.toString());
     }
+  }
+
+  void setSortBy(String sort) {
+    if (state.sortBy == sort) return;
+    state = state.copyWith(sortBy: sort);
+    fetchInvoices();
   }
 
   void setInvoiceType(String type) {

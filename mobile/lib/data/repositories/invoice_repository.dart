@@ -111,7 +111,71 @@ class InvoiceRepository {
       offset: offset,
     );
 
-    return results.map((m) => InvoiceModel.fromMap(m)).toList();
+    final invoices = results.map((m) => InvoiceModel.fromMap(m)).toList();
+
+    int paymentPriority(String status, {bool unpaidFirst = true}) {
+      final s = status.toLowerCase();
+      if (unpaidFirst) {
+        if (s == 'unpaid') return 0;
+        if (s == 'partially_paid' || s == 'partial') return 1;
+        if (s == 'paid') return 2;
+        return 3;
+      } else {
+        if (s == 'paid') return 0;
+        if (s == 'partially_paid' || s == 'partial') return 1;
+        if (s == 'unpaid') return 2;
+        return 3;
+      }
+    }
+
+    // Layered sorting (e.g. City then Paid/Unpaid, or vice versa)
+    if (sortBy == 'city_unpaid_first') {
+      invoices.sort((a, b) {
+        final cA = (a.customer.city.isNotEmpty ? a.customer.city : 'Bilaspur').trim().toLowerCase();
+        final cB = (b.customer.city.isNotEmpty ? b.customer.city : 'Bilaspur').trim().toLowerCase();
+        final cCmp = cA.compareTo(cB);
+        if (cCmp != 0) return cCmp;
+        final pCmp = paymentPriority(a.paymentStatus, unpaidFirst: true)
+            .compareTo(paymentPriority(b.paymentStatus, unpaidFirst: true));
+        if (pCmp != 0) return pCmp;
+        return b.invoiceDate.compareTo(a.invoiceDate);
+      });
+    } else if (sortBy == 'city_paid_first') {
+      invoices.sort((a, b) {
+        final cA = (a.customer.city.isNotEmpty ? a.customer.city : 'Bilaspur').trim().toLowerCase();
+        final cB = (b.customer.city.isNotEmpty ? b.customer.city : 'Bilaspur').trim().toLowerCase();
+        final cCmp = cA.compareTo(cB);
+        if (cCmp != 0) return cCmp;
+        final pCmp = paymentPriority(a.paymentStatus, unpaidFirst: false)
+            .compareTo(paymentPriority(b.paymentStatus, unpaidFirst: false));
+        if (pCmp != 0) return pCmp;
+        return b.invoiceDate.compareTo(a.invoiceDate);
+      });
+    } else if (sortBy == 'unpaid_city') {
+      invoices.sort((a, b) {
+        final pCmp = paymentPriority(a.paymentStatus, unpaidFirst: true)
+            .compareTo(paymentPriority(b.paymentStatus, unpaidFirst: true));
+        if (pCmp != 0) return pCmp;
+        final cA = (a.customer.city.isNotEmpty ? a.customer.city : 'Bilaspur').trim().toLowerCase();
+        final cB = (b.customer.city.isNotEmpty ? b.customer.city : 'Bilaspur').trim().toLowerCase();
+        final cCmp = cA.compareTo(cB);
+        if (cCmp != 0) return cCmp;
+        return b.invoiceDate.compareTo(a.invoiceDate);
+      });
+    } else if (sortBy == 'paid_city') {
+      invoices.sort((a, b) {
+        final pCmp = paymentPriority(a.paymentStatus, unpaidFirst: false)
+            .compareTo(paymentPriority(b.paymentStatus, unpaidFirst: false));
+        if (pCmp != 0) return pCmp;
+        final cA = (a.customer.city.isNotEmpty ? a.customer.city : 'Bilaspur').trim().toLowerCase();
+        final cB = (b.customer.city.isNotEmpty ? b.customer.city : 'Bilaspur').trim().toLowerCase();
+        final cCmp = cA.compareTo(cB);
+        if (cCmp != 0) return cCmp;
+        return b.invoiceDate.compareTo(a.invoiceDate);
+      });
+    }
+
+    return invoices;
   }
 
   Future<InvoiceModel?> getInvoiceByUuid(String uuid) async {
@@ -311,7 +375,7 @@ class InvoiceRepository {
     return '$startYY-$endYY';
   }
 
-  // Preview next simple invoice number without advancing the sequence
+  // Preview next simple invoice number without advancing the sequence (GST bills)
   Future<String> getNextInvoiceNumberPreview(DateTime date) async {
     final db = await _db.database;
     final fy = getFinancialYear(date);
@@ -323,7 +387,7 @@ class InvoiceRepository {
       nextNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
     } else {
       final maxRes = await db.rawQuery(
-        'SELECT MAX(sequence_number) as max_seq FROM invoices WHERE financial_year = ?',
+        "SELECT MAX(sequence_number) as max_seq FROM invoices WHERE (invoice_type IS NULL OR invoice_type != 'temporary') AND financial_year = ?",
         [fy],
       );
       if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
@@ -337,7 +401,33 @@ class InvoiceRepository {
     return prefix.isNotEmpty ? '$prefix$nextNum' : '$nextNum';
   }
 
-  // Allocate next sequential invoice number locally (Simple format: "1", "2", "3" or "SS-1")
+  // Preview next temporary bill number without advancing the sequence (Temporary bills)
+  Future<String> getNextTemporaryInvoiceNumberPreview(DateTime date) async {
+    final db = await _db.database;
+    final fy = getFinancialYear(date);
+
+    final nextNumRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number']);
+
+    int nextNum = 1;
+    if (nextNumRes.isNotEmpty) {
+      nextNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
+    } else {
+      final maxRes = await db.rawQuery(
+        "SELECT MAX(sequence_number) as max_seq FROM invoices WHERE invoice_type = 'temporary' AND financial_year = ?",
+        [fy],
+      );
+      if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
+        nextNum = (maxRes.first['max_seq'] as int) + 1;
+      }
+    }
+
+    final prefixRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['temporary_invoice_prefix']);
+    final prefix = prefixRes.isNotEmpty ? (prefixRes.first['value'] as String? ?? '') : '';
+
+    return prefix.isNotEmpty ? '$prefix$nextNum' : '$nextNum';
+  }
+
+  // Allocate next sequential invoice number locally for GST Bills
   Future<Map<String, dynamic>> allocateNextLocalInvoiceNumber(
     DateTime date, {
     String? customInvoiceNumber,
@@ -352,9 +442,9 @@ class InvoiceRepository {
       if (nextNumRes.isNotEmpty) {
         nextNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
       } else {
-        // Find highest existing sequence in this FY
+        // Find highest existing sequence for GST in this FY
         final maxRes = await txn.rawQuery(
-          'SELECT MAX(sequence_number) as max_seq FROM invoices WHERE financial_year = ?',
+          "SELECT MAX(sequence_number) as max_seq FROM invoices WHERE (invoice_type IS NULL OR invoice_type != 'temporary') AND financial_year = ?",
           [fy],
         );
         if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
@@ -396,17 +486,62 @@ class InvoiceRepository {
     });
   }
 
-  /// Allocate a dedicated identifier for Temporary Bill without consuming or affecting
-  /// the official GST sequential invoice numbers.
-  Future<Map<String, dynamic>> allocateTemporaryInvoiceNumber(DateTime date) async {
+  /// Allocate a dedicated sequential number for Temporary Bill (completely separate from GST sequence)
+  Future<Map<String, dynamic>> allocateTemporaryInvoiceNumber(
+    DateTime date, {
+    String? customInvoiceNumber,
+  }) async {
+    final db = await _db.database;
     final fy = getFinancialYear(date);
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final tempId = 'TEMP-$timestamp';
-    return {
-      'invoiceNumber': tempId,
-      'sequenceNumber': 0,
-      'financialYear': fy,
-    };
+
+    return await db.transaction<Map<String, dynamic>>((txn) async {
+      final nextNumRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number']);
+
+      int nextNum = 1;
+      if (nextNumRes.isNotEmpty) {
+        nextNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
+      } else {
+        // Find highest existing sequence for temporary bills in this FY
+        final maxRes = await txn.rawQuery(
+          "SELECT MAX(sequence_number) as max_seq FROM invoices WHERE invoice_type = 'temporary' AND financial_year = ?",
+          [fy],
+        );
+        if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
+          nextNum = (maxRes.first['max_seq'] as int) + 1;
+        }
+      }
+
+      final prefixRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['temporary_invoice_prefix']);
+      final prefix = prefixRes.isNotEmpty ? (prefixRes.first['value'] as String? ?? '') : '';
+
+      String invoiceNumber;
+      int seqNum;
+
+      if (customInvoiceNumber != null && customInvoiceNumber.trim().isNotEmpty) {
+        invoiceNumber = customInvoiceNumber.trim();
+        final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber) ?? RegExp(r'(\d+)').firstMatch(invoiceNumber);
+        final parsed = match != null ? int.tryParse(match.group(1)!) : null;
+        seqNum = parsed ?? nextNum;
+        nextNum = (parsed != null && parsed >= nextNum) ? parsed + 1 : nextNum + 1;
+      } else {
+        invoiceNumber = prefix.isNotEmpty ? '$prefix$nextNum' : '$nextNum';
+        seqNum = nextNum;
+        nextNum = nextNum + 1;
+      }
+
+      // Persist the incremented counter in app_settings
+      await txn.insert(
+        'app_settings',
+        {'key': 'next_temporary_number', 'value': nextNum.toString()},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      return {
+        'invoiceNumber': invoiceNumber,
+        'sequenceNumber': seqNum,
+        'financialYear': fy,
+      };
+    });
   }
 
   // Summary figures for Home Dashboard

@@ -2,10 +2,12 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'package:sqflite/sqflite.dart';
 import '../data/database/app_database.dart';
 import '../data/models/customer_model.dart';
 import '../data/models/invoice_item_model.dart';
 import '../data/models/invoice_model.dart';
+import '../data/models/payment_model.dart';
 import '../data/repositories/invoice_repository.dart';
 import '../data/repositories/customer_repository.dart';
 import '../data/repositories/product_repository.dart';
@@ -141,7 +143,9 @@ class BillingNotifier extends StateNotifier<BillingState> {
 
   Future<void> loadNextInvoiceNumber() async {
     try {
-      final nextNum = await _invoiceRepo.getNextInvoiceNumberPreview(state.invoiceDate);
+      final nextNum = state.isTemporary
+          ? await _invoiceRepo.getNextTemporaryInvoiceNumberPreview(state.invoiceDate)
+          : await _invoiceRepo.getNextInvoiceNumberPreview(state.invoiceDate);
       state = state.copyWith(invoiceNumber: nextNum);
     } catch (_) {}
   }
@@ -160,6 +164,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
     String? phone,
     String? gstin,
     String? address,
+    String? city,
     String? stateName,
     String? stateCode,
   }) {
@@ -169,6 +174,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
         phone: phone,
         gstin: gstin,
         address: address,
+        city: city,
         state: stateName,
         stateCode: stateCode,
       ),
@@ -194,6 +200,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
     state = state.copyWith(invoiceType: type);
 
     if (wasTemp != isNowTemp) {
+      loadNextInvoiceNumber();
       final isInter = state.isInterState;
       final updated = state.items.map((old) {
         final taxable = old.taxableValue;
@@ -405,7 +412,12 @@ class BillingNotifier extends StateNotifier<BillingState> {
     state = state.copyWith(items: updated);
   }
 
-  Future<InvoiceModel?> saveAndIssueInvoice({String invoiceType = 'gst'}) async {
+  Future<InvoiceModel?> saveAndIssueInvoice({
+    String invoiceType = 'gst',
+    String paymentStatus = 'unpaid',
+    double initialPayment = 0.0,
+    String paymentMethod = 'Cash',
+  }) async {
     if (state.customer.name.trim().isEmpty) {
       state = state.copyWith(errorMessage: 'Please enter customer name');
       return null;
@@ -419,9 +431,12 @@ class BillingNotifier extends StateNotifier<BillingState> {
 
     try {
       final isTemp = invoiceType == 'temporary';
-      // 1. Allocate invoice number (temporary bills get internal temp id without touching GST sequence)
+      // 1. Allocate invoice number (separate counters for Temporary vs GST)
       final alloc = isTemp
-          ? await _invoiceRepo.allocateTemporaryInvoiceNumber(state.invoiceDate)
+          ? await _invoiceRepo.allocateTemporaryInvoiceNumber(
+              state.invoiceDate,
+              customInvoiceNumber: state.invoiceNumber,
+            )
           : await _invoiceRepo.allocateNextLocalInvoiceNumber(
               state.invoiceDate,
               customInvoiceNumber: state.invoiceNumber,
@@ -432,19 +447,56 @@ class BillingNotifier extends StateNotifier<BillingState> {
 
       final invoiceUuid = const Uuid().v4();
 
-      // 2. Save / update customer
-      final customerToSave = isTemp
-          ? state.customer.copyWith(
-              uuid: state.customer.uuid.isNotEmpty ? state.customer.uuid : const Uuid().v4(),
-            )
-          : state.customer.copyWith(
-              uuid: state.customer.uuid.isNotEmpty ? state.customer.uuid : const Uuid().v4(),
-              totalBilled: state.customer.totalBilled + state.grandTotal,
-              outstandingBalance: state.customer.outstandingBalance + state.grandTotal,
-            );
-      await _customerRepo.saveCustomer(customerToSave, preserveBalancesIfZero: isTemp);
+      // 2. Accurate Payment Calculations
+      final double totalAmount = state.grandTotal;
+      double paidAmount = 0.0;
+      String finalPaymentStatus = paymentStatus;
 
-      // 3. Assemble InvoiceModel
+      if (finalPaymentStatus == 'paid') {
+        paidAmount = totalAmount;
+      } else if (finalPaymentStatus == 'partial' || finalPaymentStatus == 'partially_paid') {
+        paidAmount = initialPayment.clamp(0.0, totalAmount);
+        if (paidAmount >= totalAmount - 0.01) {
+          paidAmount = totalAmount;
+          finalPaymentStatus = 'paid';
+        } else if (paidAmount <= 0.01) {
+          paidAmount = 0.0;
+          finalPaymentStatus = 'unpaid';
+        } else {
+          finalPaymentStatus = 'partially_paid';
+        }
+      } else {
+        finalPaymentStatus = 'unpaid';
+        paidAmount = 0.0;
+      }
+      final double balanceDueAmount = (totalAmount - paidAmount <= 0.005) ? 0.0 : (totalAmount - paidAmount);
+
+      // 3. Match customer and update balances accurately without overwriting previous dues
+      CustomerModel? matched;
+      if (state.customer.uuid.isNotEmpty) {
+        matched = await _customerRepo.getCustomerByUuid(state.customer.uuid);
+      }
+      if (matched == null && state.customer.phone.trim().isNotEmpty) {
+        matched = await _customerRepo.findCustomerByPhone(state.customer.phone.trim());
+      }
+      if (matched == null && state.customer.name.trim().isNotEmpty) {
+        matched = await _customerRepo.getCustomerByName(state.customer.name.trim());
+      }
+
+      final custUuid = matched != null ? matched.uuid : (state.customer.uuid.isNotEmpty ? state.customer.uuid : const Uuid().v4());
+      final priorBilled = matched?.totalBilled ?? 0.0;
+      final priorPaid = matched?.totalPaid ?? 0.0;
+      final priorDue = matched?.outstandingBalance ?? 0.0;
+
+      final customerToSave = state.customer.copyWith(
+        uuid: custUuid,
+        totalBilled: priorBilled + totalAmount,
+        totalPaid: priorPaid + paidAmount,
+        outstandingBalance: (priorDue + balanceDueAmount).clamp(0.0, double.infinity),
+      );
+      await _customerRepo.saveCustomer(customerToSave);
+
+      // 4. Assemble InvoiceModel
       final prefs = await SharedPreferences.getInstance();
       final loggedInName = prefs.getString('user_name') ?? 'Admin';
 
@@ -470,18 +522,40 @@ class BillingNotifier extends StateNotifier<BillingState> {
         grandTotal: state.grandTotal,
         amountInWords: state.amountInWords,
         status: 'finalized',
-        paymentStatus: 'unpaid',
-        totalPaid: 0.0,
-        balanceDue: state.grandTotal,
+        paymentStatus: finalPaymentStatus,
+        totalPaid: paidAmount,
+        balanceDue: balanceDueAmount,
         createdBy: loggedInName,
         syncStatus: 'waiting_for_internet',
         invoiceType: invoiceType,
       );
 
-      // 4. Save to local SQLite
+      // 5. Save to local SQLite
       await _invoiceRepo.saveInvoice(invoice);
 
-      // 5. Automatically save all products and HSN codes to catalogue for future bills
+      // 6. Record payment in PaymentRepository if customer paid upfront
+      if (paidAmount > 0) {
+        final paymentRecord = PaymentModel(
+          uuid: const Uuid().v4(),
+          invoiceId: invoiceUuid,
+          invoiceNumber: invoiceNumber,
+          customerId: custUuid,
+          customerName: customerToSave.name,
+          amount: paidAmount,
+          paymentMethod: paymentMethod,
+          referenceNumber: 'Initial payment at bill creation',
+          paymentDate: state.invoiceDate,
+          notes: 'Received upfront when bill was generated',
+          receivedBy: loggedInName,
+        );
+        final payDb = await AppDatabase.instance.database;
+        await payDb.insert('payments', paymentRecord.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+
+      // 7. Recalculate customer balances accurately
+      await _customerRepo.recalculateCustomerBalances(targetCustomerUuid: custUuid);
+
+      // 8. Automatically save all products and HSN codes to catalogue for future bills
       final prodRepo = ProductRepository();
       for (final itm in state.items) {
         if (itm.description.trim().isNotEmpty) {
@@ -495,7 +569,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
         }
       }
 
-      // 6. Trigger background sync attempt and refresh pending queue count
+      // 9. Trigger background sync attempt and refresh pending queue count
       await SyncService.instance.checkPendingQueue();
       unawaited(SyncService.instance.synchronize());
 

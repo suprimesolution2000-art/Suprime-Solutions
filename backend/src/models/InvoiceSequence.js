@@ -11,6 +11,11 @@ const invoiceSequenceSchema = new mongoose.Schema({
     required: true,
     default: 0
   },
+  currentTemporaryNumber: {
+    type: Number,
+    required: true,
+    default: 0
+  },
   reservedBlocks: [{
     deviceId: { type: String, required: true },
     deviceName: { type: String },

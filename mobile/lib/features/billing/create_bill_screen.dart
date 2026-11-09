@@ -8,6 +8,7 @@ import '../../providers/billing_provider.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/repositories/customer_repository.dart';
+import '../../data/repositories/invoice_repository.dart';
 import 'add_item_dialog.dart';
 import '../invoices/invoice_detail_screen.dart';
 
@@ -45,6 +46,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
   List<CustomerModel> _recentCustomers = [];
   bool _showPoDetails = false;
 
+  String _selectedPaymentStatus = 'unpaid';
+  final _receivedAmountController = TextEditingController();
+  String _selectedPaymentMethod = 'Cash';
+
   @override
   void initState() {
     super.initState();
@@ -61,6 +66,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
       _poController.text = inv.poNumber;
       _challanController.text = inv.challanNumber;
       _showPoDetails = inv.poNumber.isNotEmpty || inv.challanNumber.isNotEmpty;
+      _selectedPaymentStatus = inv.paymentStatus == 'partially_paid' ? 'partial' : inv.paymentStatus;
+      if (inv.totalPaid > 0) {
+        _receivedAmountController.text = inv.totalPaid.toStringAsFixed(2);
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.read(billingProvider.notifier).initForEdit(inv);
         ref.read(billingProvider.notifier).setInvoiceType(_currentBillType);
@@ -75,6 +84,9 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
       _challanController.clear();
       _selectedState = 'Chhattisgarh';
       _showPoDetails = false;
+      _selectedPaymentStatus = 'unpaid';
+      _receivedAmountController.clear();
+      _selectedPaymentMethod = 'Cash';
       _formVersion++;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         await ref.read(billingProvider.notifier).resetForm();
@@ -107,6 +119,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
     _invoiceNumberController.dispose();
     _poController.dispose();
     _challanController.dispose();
+    _receivedAmountController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -172,6 +185,9 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 _invoiceNumberController.clear();
                 _poController.clear();
                 _challanController.clear();
+                _receivedAmountController.clear();
+                _selectedPaymentStatus = 'unpaid';
+                _selectedPaymentMethod = 'Cash';
                 setState(() {
                   _formVersion++;
                   _selectedState = 'Chhattisgarh';
@@ -205,9 +221,14 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 children: [
                   Expanded(
                     child: InkWell(
-                      onTap: () {
+                      onTap: () async {
                         setState(() => _currentBillType = 'gst');
                         ref.read(billingProvider.notifier).setInvoiceType('gst');
+                        if (widget.invoiceToEdit == null) {
+                          final preview = await InvoiceRepository().getNextInvoiceNumberPreview(ref.read(billingProvider).invoiceDate);
+                          _invoiceNumberController.text = preview;
+                          ref.read(billingProvider.notifier).setCustomInvoiceNumber(preview);
+                        }
                       },
                       borderRadius: BorderRadius.circular(10),
                       child: Container(
@@ -241,9 +262,14 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                   const SizedBox(width: 4),
                   Expanded(
                     child: InkWell(
-                      onTap: () {
+                      onTap: () async {
                         setState(() => _currentBillType = 'temporary');
                         ref.read(billingProvider.notifier).setInvoiceType('temporary');
+                        if (widget.invoiceToEdit == null) {
+                          final preview = await InvoiceRepository().getNextTemporaryInvoiceNumberPreview(ref.read(billingProvider).invoiceDate);
+                          _invoiceNumberController.text = preview;
+                          ref.read(billingProvider.notifier).setCustomInvoiceNumber(preview);
+                        }
                       },
                       borderRadius: BorderRadius.circular(10),
                       child: Container(
@@ -506,28 +532,26 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _currentBillType == 'temporary' ? 'Bill Date' : 'Invoice Details',
+                      _currentBillType == 'temporary' ? 'Temporary Bill Details' : 'Invoice Details',
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                     ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        if (_currentBillType != 'temporary') ...[
-                          Expanded(
-                            child: TextField(
-                              controller: _invoiceNumberController,
-                              decoration: const InputDecoration(
-                                labelText: 'Invoice Number',
-                                hintText: 'e.g. 1, 2, 3',
-                                prefixIcon: Icon(Icons.tag),
-                              ),
-                              onChanged: (val) {
-                                billingNotifier.setCustomInvoiceNumber(val);
-                              },
+                        Expanded(
+                          child: TextField(
+                            controller: _invoiceNumberController,
+                            decoration: InputDecoration(
+                              labelText: _currentBillType == 'temporary' ? 'Bill Number (NO.) *' : 'Invoice Number *',
+                              hintText: 'e.g. 1, 2, 3',
+                              prefixIcon: const Icon(Icons.tag),
                             ),
+                            onChanged: (val) {
+                              billingNotifier.setCustomInvoiceNumber(val);
+                            },
                           ),
-                          const SizedBox(width: 12),
-                        ],
+                        ),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
@@ -537,7 +561,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                             icon: const Icon(Icons.calendar_today, size: 16),
                             label: Text(
                               _currentBillType == 'temporary'
-                                  ? 'Bill Date: ${DateFormatter.format(billState.invoiceDate)}'
+                                  ? 'Date: ${DateFormatter.format(billState.invoiceDate)}'
                                   : DateFormatter.format(billState.invoiceDate),
                             ),
                             onPressed: () async {
@@ -859,6 +883,99 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
             ),
             const SizedBox(height: 24),
 
+                        // 4. Payment Status & Settlement Card
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Customer Payment Status',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _selectedPaymentStatus == 'paid'
+                                ? AppColors.paidContainer
+                                : _selectedPaymentStatus == 'partial'
+                                    ? AppColors.partialContainer
+                                    : AppColors.unpaidContainer,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            _selectedPaymentStatus == 'paid'
+                                ? 'FULLY PAID'
+                                : _selectedPaymentStatus == 'partial'
+                                    ? 'PARTIAL PAYMENT'
+                                    : 'UNPAID (CREDIT)',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: _selectedPaymentStatus == 'paid'
+                                  ? AppColors.paid
+                                  : _selectedPaymentStatus == 'partial'
+                                      ? AppColors.partial
+                                      : AppColors.unpaid,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        _buildPaymentStatusOption('unpaid', 'Unpaid (Due)', Icons.schedule),
+                        const SizedBox(width: 8),
+                        _buildPaymentStatusOption('paid', 'Paid in Full', Icons.check_circle_outline),
+                        const SizedBox(width: 8),
+                        _buildPaymentStatusOption('partial', 'Partial', Icons.pie_chart_outline),
+                      ],
+                    ),
+                    if (_selectedPaymentStatus == 'partial') ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _receivedAmountController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: 'Amount Received (₹) *',
+                          hintText: 'Enter amount customer paid',
+                          prefixText: '₹ ',
+                          helperText: 'Remaining Balance Due: ${CurrencyFormatter.format((billState.grandTotal - (double.tryParse(_receivedAmountController.text) ?? 0.0)).clamp(0.0, double.infinity))}',
+                        ),
+                        onChanged: (val) => setState(() {}),
+                      ),
+                    ],
+                    if (_selectedPaymentStatus != 'unpaid') ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: _selectedPaymentMethod,
+                        decoration: const InputDecoration(
+                          labelText: 'Payment Mode',
+                          prefixIcon: Icon(Icons.payment),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Cash', child: Text('Cash')),
+                          DropdownMenuItem(value: 'UPI', child: Text('UPI / QR Code')),
+                          DropdownMenuItem(value: 'Bank Transfer', child: Text('Bank Transfer (NEFT/RTGS)')),
+                          DropdownMenuItem(value: 'Cheque', child: Text('Cheque')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _selectedPaymentMethod = val);
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
             // 5. THE BIG SAVE & ISSUE BUTTON
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -1078,10 +1195,8 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                 child: Column(
                   children: [
                     _buildDialogRow('Format:', isTemporary ? 'Temporary Bill' : 'GST Tax Invoice', isBold: true, highlightColor: primaryThemeColor),
-                    if (!isTemporary) ...[
-                      const Divider(height: 16),
-                      _buildDialogRow('Bill Number:', invNum, isHighlight: true, isBold: true, highlightColor: primaryThemeColor),
-                    ],
+                    const Divider(height: 16),
+                    _buildDialogRow('Bill Number:', invNum, isHighlight: true, isBold: true, highlightColor: primaryThemeColor),
                     const Divider(height: 16),
                     _buildDialogRow('Bill Date:', invDateStr, isHighlight: true, isBold: true, highlightColor: primaryThemeColor),
                     const Divider(height: 16),
@@ -1104,6 +1219,29 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                       isHighlight: true,
                       highlightColor: primaryThemeColor,
                     ),
+                    const Divider(height: 16),
+                    _buildDialogRow(
+                      'Payment Status:',
+                      _selectedPaymentStatus == 'paid'
+                          ? 'Paid in Full'
+                          : (_selectedPaymentStatus == 'partial' ? 'Partially Paid' : 'Unpaid (Due)'),
+                      isBold: true,
+                      highlightColor: _selectedPaymentStatus == 'paid'
+                          ? AppColors.paid
+                          : (_selectedPaymentStatus == 'partial' ? AppColors.partial : AppColors.unpaid),
+                    ),
+                    if (_selectedPaymentStatus != 'unpaid') ...[
+                      const Divider(height: 16),
+                      _buildDialogRow(
+                        'Amount Received:',
+                        CurrencyFormatter.format(_selectedPaymentStatus == 'paid'
+                            ? billState.grandTotal
+                            : (double.tryParse(_receivedAmountController.text) ?? 0.0)),
+                        isBold: true,
+                      ),
+                      const Divider(height: 16),
+                      _buildDialogRow('Payment Mode:', _selectedPaymentMethod),
+                    ],
                   ],
                 ),
               ),
@@ -1152,7 +1290,18 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
         }
       }
     } else {
-      final invoice = await billingNotifier.saveAndIssueInvoice(invoiceType: _currentBillType);
+      final initialPayment = _selectedPaymentStatus == 'paid'
+          ? billState.grandTotal
+          : (_selectedPaymentStatus == 'partial'
+              ? (double.tryParse(_receivedAmountController.text) ?? 0.0).clamp(0.0, billState.grandTotal)
+              : 0.0);
+
+      final invoice = await billingNotifier.saveAndIssueInvoice(
+        invoiceType: _currentBillType,
+        paymentStatus: _selectedPaymentStatus,
+        initialPayment: initialPayment,
+        paymentMethod: _selectedPaymentMethod,
+      );
       if (!mounted) return;
       if (invoice != null) {
         Navigator.pushReplacement(
@@ -1211,6 +1360,55 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
             child: Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
           ),
         ],
+      ),
+    );
+  }
+  Widget _buildPaymentStatusOption(String value, String label, IconData icon) {
+    final isSelected = _selectedPaymentStatus == value;
+    final color = value == 'paid'
+        ? AppColors.paid
+        : (value == 'partial' ? AppColors.partial : AppColors.unpaid);
+
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedPaymentStatus = value;
+            if (value == 'paid') {
+              _receivedAmountController.clear();
+            }
+          });
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withValues(alpha: 0.12) : AppColors.surfaceLight,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected ? color : AppColors.border,
+              width: isSelected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 20, color: isSelected ? color : AppColors.textSecondary),
+              const SizedBox(height: 4),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected ? color : AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

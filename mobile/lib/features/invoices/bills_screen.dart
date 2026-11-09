@@ -313,7 +313,57 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
               ],
             ),
           ),
-          const Divider(height: 16),
+
+          // Layered Sorting Selector
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: [
+                const Icon(Icons.swap_vert, size: 18, color: AppColors.textSecondary),
+                const SizedBox(width: 6),
+                const Text(
+                  'Sort by:',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: invoiceState.sortBy,
+                        isExpanded: true,
+                        icon: const Icon(Icons.arrow_drop_down, size: 20),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                        items: const [
+                          DropdownMenuItem(value: 'city_unpaid_first', child: Text('City ➔ Unpaid First')),
+                          DropdownMenuItem(value: 'city_paid_first', child: Text('City ➔ Paid First')),
+                          DropdownMenuItem(value: 'unpaid_city', child: Text('Unpaid First ➔ City')),
+                          DropdownMenuItem(value: 'paid_city', child: Text('Paid First ➔ City')),
+                          DropdownMenuItem(value: 'date_desc', child: Text('Date: Newest First')),
+                          DropdownMenuItem(value: 'date_asc', child: Text('Date: Oldest First')),
+                          DropdownMenuItem(value: 'amount_desc', child: Text('Amount: High to Low')),
+                          DropdownMenuItem(value: 'amount_asc', child: Text('Amount: Low to High')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            notifier.setSortBy(val);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 12),
 
           // Offline bills banner if pendingCount > 0
           ListenableBuilder(
@@ -629,7 +679,9 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
-                          inv.invoiceType == 'temporary' ? 'Temporary Bill' : inv.invoiceNumber,
+                          inv.invoiceType == 'temporary'
+                              ? 'Temp Bill #${inv.invoiceNumber.isNotEmpty ? inv.invoiceNumber : inv.sequenceNumber}'
+                              : inv.invoiceNumber,
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -768,18 +820,45 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
             ),
               const SizedBox(height: 6),
 
-              // Row 2: Customer Name & Date
+              // Row 2: Customer Name, City Tag & Date
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
-                    child: Text(
-                      inv.customer.name,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            inv.customer.name,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.grey.shade300, width: 0.8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.location_on_outlined, size: 10, color: AppColors.textMuted),
+                              const SizedBox(width: 2),
+                              Text(
+                                (inv.customer.city.isNotEmpty ? inv.customer.city : 'Bilaspur').trim(),
+                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Text(
                     DateFormatter.format(inv.invoiceDate),
                     style: const TextStyle(fontSize: 13, color: AppColors.textMuted),

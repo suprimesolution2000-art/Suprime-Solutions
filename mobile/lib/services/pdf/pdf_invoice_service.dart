@@ -56,6 +56,18 @@ class PdfInvoiceService {
                 child: pw.Image(templateImage, fit: pw.BoxFit.fill),
               ),
 
+              // 1.5. BILL NO. Box (Drawn directly inside the top-right "NO." box above the underline)
+              pw.Positioned(
+                left: 468.0,
+                top: 74.0,
+                child: pw.Text(
+                  invoice.sequenceNumber > 0
+                      ? invoice.sequenceNumber.toString()
+                      : invoice.invoiceNumber.replaceAll(RegExp(r'^TEMP-'), ''),
+                  style: pw.TextStyle(font: fontBold, fontSize: 13.0, color: espressoColor),
+                ),
+              ),
+
               // 2. BILLED TO Box (Only Customer Name, positioned directly above the line)
               pw.Positioned(
                 left: 58.0,

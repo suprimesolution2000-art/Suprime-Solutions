@@ -168,6 +168,41 @@ void main() {
     expect(tempState.invoiceType, 'temporary');
   });
 
+  test('InvoiceListState supports layered sorting (city_unpaid_first, city_paid_first, unpaid_city, paid_city)', () {
+    final state = InvoiceListState();
+    expect(state.sortBy, 'date_desc');
+
+    final cityUnpaid = state.copyWith(sortBy: 'city_unpaid_first');
+    expect(cityUnpaid.sortBy, 'city_unpaid_first');
+
+    final unpaidCity = state.copyWith(sortBy: 'unpaid_city');
+    expect(unpaidCity.sortBy, 'unpaid_city');
+
+    final paidCity = state.copyWith(sortBy: 'paid_city');
+    expect(paidCity.sortBy, 'paid_city');
+  });
+
+  test('Customer payment status logic handles float epsilon accurately', () {
+    final double grandTotal = 1500.00;
+    final double totalPaid = 1499.995;
+    final double rawDue = grandTotal - totalPaid;
+    final isClear = rawDue <= 0.01;
+    expect(isClear, isTrue);
+
+    final double balanceDue = isClear ? 0.0 : rawDue;
+    expect(balanceDue, 0.0);
+
+    final customer = CustomerModel(
+      uuid: 'cust-test',
+      name: 'Ramesh Patel',
+      phone: '9876543210',
+      totalBilled: 1500.0,
+      totalPaid: 1500.0,
+      outstandingBalance: 0.0,
+    );
+    expect(customer.outstandingBalance <= 0.005, isTrue);
+  });
+
   test('SyncService pendingCount and isSyncing state test', () {
     final sync = SyncService.instance;
     expect(sync.pendingCount, isA<int>());

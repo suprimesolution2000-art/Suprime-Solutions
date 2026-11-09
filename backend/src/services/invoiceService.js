@@ -51,6 +51,28 @@ async function allocateInvoiceNumber(date = new Date(), prefix = '') {
 }
 
 /**
+ * Allocate next sequential Temporary Bill number atomically (completely separate counter)
+ */
+async function allocateTemporaryInvoiceNumber(date = new Date(), prefix = '') {
+  const fy = getFinancialYear(date);
+
+  const sequence = await InvoiceSequence.findOneAndUpdate(
+    { financialYear: fy },
+    { $inc: { currentTemporaryNumber: 1 } },
+    { new: true, upsert: true }
+  );
+
+  const seqNo = sequence.currentTemporaryNumber;
+  const invoiceNumber = prefix ? `${prefix}${seqNo}` : `${seqNo}`;
+
+  return {
+    financialYear: fy,
+    sequenceNumber: seqNo,
+    invoiceNumber
+  };
+}
+
+/**
  * Reserve a block of sequential invoice numbers for an offline device
  * Example: device requests a block of 50 numbers.
  */
@@ -88,5 +110,6 @@ async function reserveNumberBlockForDevice(deviceId, deviceName = 'Android Mobil
 module.exports = {
   getFinancialYear,
   allocateInvoiceNumber,
+  allocateTemporaryInvoiceNumber,
   reserveNumberBlockForDevice
 };

@@ -103,6 +103,19 @@ class CustomerRepository {
     return CustomerModel.fromMap(results.first);
   }
 
+  Future<CustomerModel?> getCustomerByName(String name) async {
+    if (name.trim().isEmpty) return null;
+    final db = await _db.database;
+    final results = await db.query(
+      'customers',
+      where: 'LOWER(name) = ?',
+      whereArgs: [name.trim().toLowerCase()],
+      limit: 1,
+    );
+    if (results.isEmpty) return null;
+    return CustomerModel.fromMap(results.first);
+  }
+
   Future<void> saveCustomer(CustomerModel customer, {bool preserveInactive = true, bool preserveBalancesIfZero = false}) async {
     final db = await _db.database;
     if (customer.uuid.isNotEmpty) {
@@ -190,11 +203,11 @@ class CustomerRepository {
   Future<void> recalculateCustomerBalances({String? targetCustomerUuid}) async {
     final db = await _db.database;
 
-    // Fetch all active invoices (excluding cancelled and temporary bills)
+    // Fetch all active invoices (all active bills where goods/services were delivered)
     final invoices = await db.query(
       'invoices',
       columns: ['customer_json', 'grand_total', 'total_paid', 'balance_due', 'status'],
-      where: "status != 'cancelled' AND (invoice_type IS NULL OR invoice_type != 'temporary')",
+      where: "status != 'cancelled'",
     );
 
     final Map<String, double> billedByUuid = {};
@@ -241,7 +254,7 @@ class CustomerRepository {
     }
 
     final totalLocalInvoices = Sqflite.firstIntValue(
-      await db.rawQuery("SELECT COUNT(*) FROM invoices WHERE status != 'cancelled' AND (invoice_type IS NULL OR invoice_type != 'temporary')"),
+      await db.rawQuery("SELECT COUNT(*) FROM invoices WHERE status != 'cancelled'"),
     ) ?? 0;
 
     final customerRows = targetCustomerUuid != null
@@ -273,12 +286,13 @@ class CustomerRepository {
       }
 
       if (liveDue != null) {
+        final cleanDue = (liveDue <= 0.005 ? 0.0 : liveDue).clamp(0.0, double.infinity);
         batch.update(
           'customers',
           {
             'total_billed': (liveBilled ?? 0.0).clamp(0.0, double.infinity),
             'total_paid': (livePaid ?? 0.0).clamp(0.0, double.infinity),
-            'outstanding_balance': (liveDue).clamp(0.0, double.infinity),
+            'outstanding_balance': cleanDue,
           },
           where: 'uuid = ?',
           whereArgs: [uuid],
