@@ -205,11 +205,6 @@ exports.createInvoice = async (req, res, next) => {
 
       if (existingCustomer) {
         customerUuid = existingCustomer.uuid;
-        if (!isTemporary) {
-          existingCustomer.totalBilled = (existingCustomer.totalBilled || 0) + financials.grandTotal;
-          existingCustomer.outstandingBalance = (existingCustomer.outstandingBalance || 0) + financials.grandTotal;
-          await existingCustomer.save();
-        }
       } else {
         customerUuid = uuidv4();
         await Customer.create({
@@ -222,8 +217,9 @@ exports.createInvoice = async (req, res, next) => {
           city: customer.city || 'Bilaspur',
           state: customer.state || 'Chhattisgarh',
           stateCode: customer.stateCode || '22',
-          totalBilled: isTemporary ? 0 : financials.grandTotal,
-          outstandingBalance: isTemporary ? 0 : financials.grandTotal
+          totalBilled: 0,
+          totalPaid: 0,
+          outstandingBalance: 0
         });
       }
     const clientTotalPaid = Number(req.body.totalPaid) || 0;
@@ -266,9 +262,9 @@ exports.createInvoice = async (req, res, next) => {
       financialYear: fy,
       invoiceDate: new Date(invoiceDate),
       dueDate: dueDate ? new Date(dueDate) : null,
-      poNumber: poNumber || '',
+      poNumber: poNumber ? String(poNumber).trim() : '',
       poDate: poDate ? new Date(poDate) : null,
-      challanNumber: challanNumber || '',
+      challanNumber: challanNumber ? String(challanNumber).trim() : '',
       challanDate: challanDate ? new Date(challanDate) : null,
       customer: customerSnapshot,
       isInterState: financials.isInterState,
@@ -454,9 +450,9 @@ exports.updateInvoice = async (req, res, next) => {
 
     if (invoiceDate) invoice.invoiceDate = new Date(invoiceDate);
     if (dueDate !== undefined) invoice.dueDate = dueDate ? new Date(dueDate) : null;
-    if (poNumber !== undefined) invoice.poNumber = poNumber.trim();
+    if (poNumber !== undefined) invoice.poNumber = poNumber !== null ? String(poNumber).trim() : '';
     if (poDate !== undefined) invoice.poDate = poDate ? new Date(poDate) : null;
-    if (challanNumber !== undefined) invoice.challanNumber = challanNumber.trim();
+    if (challanNumber !== undefined) invoice.challanNumber = challanNumber !== null ? String(challanNumber).trim() : '';
     if (challanDate !== undefined) invoice.challanDate = challanDate ? new Date(challanDate) : null;
 
     invoice.isInterState = financials.isInterState;

@@ -781,14 +781,12 @@ async function generateTemporaryBillsRegisterPdf(invoices = [], fromDate = new D
   // Table Columns - Total width = 789.89
   const cols = [
     { name: 'S.NO.', w: 35, align: 'center' },
-    { name: 'BILL NO.', w: 70, align: 'center' },
-    { name: 'DATE', w: 70, align: 'center' },
-    { name: 'PARTY NAME', w: 210, align: 'left' },
-    { name: 'CITY / LOCATION', w: 105, align: 'center' },
-    { name: 'PHONE', w: 90, align: 'center' },
-    { name: 'BILL AMOUNT (Rs.)', w: 80, align: 'right' },
-    { name: 'PAID (Rs.)', w: 65, align: 'right' },
-    { name: 'BALANCE (Rs.)', w: 64.89, align: 'right' }
+    { name: 'BILL NO.', w: 75, align: 'center' },
+    { name: 'DATE', w: 75, align: 'center' },
+    { name: 'PARTY NAME', w: 260, align: 'left' },
+    { name: 'CITY / LOCATION', w: 125, align: 'center' },
+    { name: 'PHONE', w: 105, align: 'center' },
+    { name: 'BILL AMOUNT (Rs.)', w: 114.89, align: 'right' }
   ];
 
   const tblY = startY + 92.0;
@@ -826,7 +824,7 @@ async function generateTemporaryBillsRegisterPdf(invoices = [], fromDate = new D
   let rowY = tblY + hdrH;
   const rowH = 22.0;
 
-  let sumTotal = 0, sumPaid = 0, sumBalance = 0;
+  let sumTotal = 0;
 
   invoices.forEach((inv, idx) => {
     const isOdd = idx % 2 === 1;
@@ -843,12 +841,7 @@ async function generateTemporaryBillsRegisterPdf(invoices = [], fromDate = new D
     });
 
     const total = inv.grandTotal || 0;
-    const paid = inv.totalPaid || 0;
-    const balance = inv.balanceDue !== undefined ? inv.balanceDue : (total - paid);
-
     sumTotal += total;
-    sumPaid += paid;
-    sumBalance += balance;
 
     const rowData = [
       String(idx + 1),
@@ -857,16 +850,14 @@ async function generateTemporaryBillsRegisterPdf(invoices = [], fromDate = new D
       String(inv.customer ? (inv.customer.name || '') : ''),
       String(inv.customer ? (inv.customer.city || inv.customer.address || '-') : '-'),
       String(inv.customer ? (inv.customer.phone || '-') : '-'),
-      total.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
-      paid.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
-      balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })
+      total.toLocaleString('en-IN', { minimumFractionDigits: 2 })
     ];
 
     let cellX = marginX;
     cols.forEach((c, colIdx) => {
       let val = rowData[colIdx];
-      if (colIdx === 3 && val.length > 32) val = val.substring(0, 30) + '..';
-      if (colIdx === 4 && val.length > 18) val = val.substring(0, 16) + '..';
+      if (colIdx === 3 && val.length > 38) val = val.substring(0, 36) + '..';
+      if (colIdx === 4 && val.length > 20) val = val.substring(0, 18) + '..';
 
       const isBold = colIdx === 0 || colIdx === 1 || colIdx === 6;
       const f = isBold ? fontBold : font;
@@ -915,9 +906,7 @@ async function generateTemporaryBillsRegisterPdf(invoices = [], fromDate = new D
 
   const totCols = cols.slice(6);
   const totVals = [
-    sumTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
-    sumPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
-    sumBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })
+    sumTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })
   ];
 
   let totX = marginX + cols.slice(0, 6).reduce((acc, c) => acc + c.w, 0);

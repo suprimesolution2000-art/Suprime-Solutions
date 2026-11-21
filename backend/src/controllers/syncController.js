@@ -299,14 +299,10 @@ exports.pushSync = async (req, res, next) => {
                     updatedAt: new Date()
                   },
                   $setOnInsert: {
-                    active: true
-                  },
-                  ...(isTemporary ? {} : {
-                    $inc: {
-                      totalBilled: financials.grandTotal,
-                      outstandingBalance: financials.grandTotal
-                    }
-                  })
+                    active: true,
+                    totalBilled: isTemporary ? 0 : financials.grandTotal,
+                    outstandingBalance: isTemporary ? 0 : financials.grandTotal
+                  }
                 },
                 { upsert: true, new: true }
               );

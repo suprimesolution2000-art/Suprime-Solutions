@@ -1609,7 +1609,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                               });
                               return;
                             }
-                            await PdfInvoiceService.shareCombinedBillsPdf(invoices, fromDate, toDate);
+                            await PdfInvoiceService.shareCombinedBillsPdf(invoices, fromDate, toDate, isTemporary: isTemp);
                             if (context.mounted) Navigator.pop(context);
                           } catch (e) {
                             setModalState(() {

@@ -34,6 +34,44 @@ class PdfInvoiceService {
     final fontRegular = await PdfGoogleFonts.robotoRegular();
     final fontMedium = await PdfGoogleFonts.robotoMedium();
 
+    pdf.addPage(buildTemporaryBillPage(invoice, templateImage, fontBold, fontRegular, fontMedium));
+    return pdf.save();
+  }
+
+  /// Feature 1.5: Generate 1 single combined PDF containing all Temporary Bills on the authentic wooden plank template in sequential date order
+  static Future<Uint8List> generateCombinedTemporaryBillsPdf(List<InvoiceModel> invoices) async {
+    final pdf = pw.Document();
+
+    final templateImageBytes = await rootBundle.load('assets/invoice-template/temporary_bill_template_300dpi.jpg');
+    final templateImage = pw.MemoryImage(templateImageBytes.buffer.asUint8List());
+
+    final fontBold = await PdfGoogleFonts.robotoBold();
+    final fontRegular = await PdfGoogleFonts.robotoRegular();
+    final fontMedium = await PdfGoogleFonts.robotoMedium();
+
+    // Sort chronologically ascending
+    final sorted = List<InvoiceModel>.from(invoices)
+      ..sort((a, b) {
+        final cmp = a.invoiceDate.compareTo(b.invoiceDate);
+        if (cmp != 0) return cmp;
+        return a.sequenceNumber.compareTo(b.sequenceNumber);
+      });
+
+    for (final inv in sorted) {
+      pdf.addPage(buildTemporaryBillPage(inv, templateImage, fontBold, fontRegular, fontMedium));
+    }
+
+    return pdf.save();
+  }
+
+  /// Builds a single full-bleed Temporary Bill page on the authentic wooden plank template
+  static pw.Page buildTemporaryBillPage(
+    InvoiceModel invoice,
+    pw.MemoryImage templateImage,
+    pw.Font fontBold,
+    pw.Font fontRegular,
+    pw.Font fontMedium,
+  ) {
     // Theme Colors
     const espressoColor = PdfColor.fromInt(0xFF2A160A);
     const goldCreamColor = PdfColor.fromInt(0xFFFAF0D1);
@@ -41,8 +79,7 @@ class PdfInvoiceService {
     String custName = invoice.customer.name.trim().toUpperCase();
     if (custName.isEmpty) custName = 'CUSTOMER';
 
-    pdf.addPage(
-      pw.Page(
+    return pw.Page(
         pageFormat: const PdfPageFormat(595.28, 841.89, marginAll: 0),
         build: (pw.Context context) {
           return pw.Stack(
@@ -193,11 +230,9 @@ class PdfInvoiceService {
             ],
           );
         },
-      ),
-    );
-
-    return pdf.save();
+      );
   }
+
   static Future<Uint8List> generateGstInvoicePdfBytes(InvoiceModel invoice) async {
     final pdf = pw.Document();
     final templateImageBytes = await rootBundle.load('assets/invoice-template/template_hq_300dpi.jpg');
@@ -426,11 +461,19 @@ class PdfInvoiceService {
     return pdf.save();
   }
 
-  static Future<void> shareCombinedBillsPdf(List<InvoiceModel> invoices, DateTime from, DateTime to) async {
-    final bytes = await generateCombinedGstBillsPdf(invoices);
+  static Future<void> shareCombinedBillsPdf(
+    List<InvoiceModel> invoices,
+    DateTime from,
+    DateTime to, {
+    bool isTemporary = false,
+  }) async {
+    final bytes = isTemporary
+        ? await generateCombinedTemporaryBillsPdf(invoices)
+        : await generateCombinedGstBillsPdf(invoices);
     final fromStr = DateFormatter.format(from).replaceAll('/', '-');
     final toStr = DateFormatter.format(to).replaceAll('/', '-');
-    final filename = 'Suprime_Solutions_Combined_Bills_${fromStr}_to_${toStr}.pdf';
+    final prefix = isTemporary ? 'Suprime_Solutions_Combined_Temp_Bills' : 'Suprime_Solutions_Combined_Bills';
+    final filename = '${prefix}_${fromStr}_to_${toStr}.pdf';
     await Printing.sharePdf(bytes: bytes, filename: filename);
   }
 
@@ -461,8 +504,6 @@ class PdfInvoiceService {
       });
 
     final double sumTotal = sorted.fold(0.0, (acc, i) => acc + i.grandTotal);
-    final double sumPaid = sorted.fold(0.0, (acc, i) => acc + i.totalPaid);
-    final double sumBalance = sorted.fold(0.0, (acc, i) => acc + i.balanceDue);
 
     final List<List<String>> tableData = [];
     for (var i = 0; i < sorted.length; i++) {
@@ -480,8 +521,6 @@ class PdfInvoiceService {
         cityOrAddress,
         phone,
         CurrencyFormatter.formatWithoutSymbol(inv.grandTotal),
-        CurrencyFormatter.formatWithoutSymbol(inv.totalPaid),
-        CurrencyFormatter.formatWithoutSymbol(inv.balanceDue),
       ]);
     }
 
@@ -494,8 +533,6 @@ class PdfInvoiceService {
       '',
       '',
       CurrencyFormatter.formatWithoutSymbol(sumTotal),
-      CurrencyFormatter.formatWithoutSymbol(sumPaid),
-      CurrencyFormatter.formatWithoutSymbol(sumBalance),
     ]);
 
     // Wooden & Parchment palette matching Temporary Bill theme
@@ -574,9 +611,7 @@ class PdfInvoiceService {
               'PARTY NAME',
               'CITY / LOCATION',
               'PHONE',
-              'TOTAL (Rs.)',
-              'PAID (Rs.)',
-              'BALANCE (Rs.)',
+              'BILL AMOUNT (Rs.)',
             ],
             data: tableData,
             headerStyle: pw.TextStyle(font: fontBold, fontSize: 8.0, color: amberGold),
@@ -591,19 +626,15 @@ class PdfInvoiceService {
               4: pw.Alignment.center,
               5: pw.Alignment.center,
               6: pw.Alignment.centerRight,
-              7: pw.Alignment.centerRight,
-              8: pw.Alignment.centerRight,
             },
             columnWidths: {
               0: const pw.FixedColumnWidth(35),
-              1: const pw.FixedColumnWidth(70),
-              2: const pw.FixedColumnWidth(70),
-              3: const pw.FlexColumnWidth(3.0),
-              4: const pw.FixedColumnWidth(110),
-              5: const pw.FixedColumnWidth(95),
-              6: const pw.FixedColumnWidth(85),
-              7: const pw.FixedColumnWidth(75),
-              8: const pw.FixedColumnWidth(75),
+              1: const pw.FixedColumnWidth(80),
+              2: const pw.FixedColumnWidth(75),
+              3: const pw.FlexColumnWidth(3.5),
+              4: const pw.FixedColumnWidth(135),
+              5: const pw.FixedColumnWidth(105),
+              6: const pw.FixedColumnWidth(105),
             },
             rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
             oddRowDecoration: const pw.BoxDecoration(color: zebraBg),
