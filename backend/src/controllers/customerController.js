@@ -65,9 +65,9 @@ exports.getCustomers = async (req, res, next) => {
       if (agg) {
         return {
           ...c,
-          totalBilled: Math.max(c.totalBilled || 0, agg.totalBilled || 0),
-          totalPaid: Math.max(c.totalPaid || 0, agg.totalPaid || 0),
-          outstandingBalance: Math.max(c.outstandingBalance || 0, agg.outstandingBalance || 0)
+          totalBilled: agg.totalBilled !== undefined ? agg.totalBilled : (c.totalBilled || 0),
+          totalPaid: agg.totalPaid !== undefined ? agg.totalPaid : (c.totalPaid || 0),
+          outstandingBalance: agg.outstandingBalance !== undefined ? agg.outstandingBalance : (c.outstandingBalance || 0)
         };
       }
       return c;
@@ -187,7 +187,12 @@ exports.updateCustomer = async (req, res, next) => {
     } = req.body;
 
     const updateFields = { updatedAt: new Date() };
-    if (name !== undefined) updateFields.name = name.trim();
+    if (name !== undefined) {
+      if (!name || !name.trim()) {
+        return res.status(400).json({ success: false, message: 'Customer name cannot be empty.' });
+      }
+      updateFields.name = name.trim();
+    }
     if (businessName !== undefined) updateFields.businessName = businessName ? businessName.trim() : '';
     if (phone !== undefined) updateFields.phone = phone ? phone.trim() : '';
     if (email !== undefined) updateFields.email = email ? email.trim() : '';

@@ -25,7 +25,11 @@ const userSchema = new mongoose.Schema({
   },
   phone: {
     type: String,
-    trim: true
+    trim: true,
+    validate: {
+      validator: (v) => !v || /^[0-9+\-\s()]{7,15}$/.test(v),
+      message: 'Please provide a valid phone number'
+    }
   },
   plainPassword: {
     type: String,

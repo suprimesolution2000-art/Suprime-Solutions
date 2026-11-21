@@ -60,8 +60,8 @@ class ProductModel {
       description: (map['description'] ?? '').toString(),
       hsnCode: (map['hsn_code'] ?? map['hsnCode'] ?? '').toString(),
       unit: (map['unit'] ?? 'PCS').toString(),
-      defaultRate: parseNum(map['default_rate'] ?? map['defaultRate']),
-      gstRate: parseNum(map['gst_rate'] ?? map['gstRate'] ?? 18.0),
+      defaultRate: parseNum(map['default_rate'] ?? map['defaultRate']).clamp(0.0, double.infinity),
+      gstRate: parseNum(map['gst_rate'] ?? map['gstRate'] ?? 18.0).clamp(0.0, 28.0),
       active: isActive,
     );
   }

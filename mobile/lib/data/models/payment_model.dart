@@ -59,7 +59,7 @@ class PaymentModel {
       invoiceNumber: (map['invoice_number'] ?? map['invoiceNumber'] ?? '').toString(),
       customerId: (map['customer_id'] ?? map['customerId'] ?? '').toString(),
       customerName: (map['customer_name'] ?? map['customerName'] ?? '').toString(),
-      amount: parseNum(map['amount']),
+      amount: parseNum(map['amount']).clamp(0.0, double.infinity),
       paymentMethod: (map['payment_method'] ?? map['paymentMethod'] ?? 'UPI').toString(),
       referenceNumber: (map['reference_number'] ?? map['referenceNumber'] ?? '').toString(),
       paymentDate: DateTime.tryParse(map['payment_date'] ?? map['paymentDate'] ?? '') ?? DateTime.now(),

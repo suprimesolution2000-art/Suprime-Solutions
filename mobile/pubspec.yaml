@@ -1,7 +1,7 @@
 name: mobile_billing
 description: "Suprime Solutions - Mobile Billing Management System"
 publish_to: 'none'
-version: 1.0.35+35
+version: 1.0.36+36
 
 environment:
   sdk: ^3.11.5

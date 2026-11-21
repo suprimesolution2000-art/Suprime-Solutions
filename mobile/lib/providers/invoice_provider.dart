@@ -40,6 +40,7 @@ class InvoiceListState {
     String? selectedCity,
     DateTime? startDate,
     DateTime? endDate,
+    bool clearDates = false,
     String? errorMessage,
   }) {
     return InvoiceListState(
@@ -50,8 +51,8 @@ class InvoiceListState {
       invoiceType: invoiceType ?? this.invoiceType,
       sortBy: sortBy ?? this.sortBy,
       selectedCity: selectedCity ?? this.selectedCity,
-      startDate: startDate ?? this.startDate,
-      endDate: endDate ?? this.endDate,
+      startDate: clearDates ? null : (startDate ?? this.startDate),
+      endDate: clearDates ? null : (endDate ?? this.endDate),
       errorMessage: errorMessage,
     );
   }
@@ -140,8 +141,7 @@ class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
     state = state.copyWith(
       searchQuery: '',
       filterChip: 'all',
-      startDate: null,
-      endDate: null,
+      clearDates: true,
     );
     fetchInvoices();
   }

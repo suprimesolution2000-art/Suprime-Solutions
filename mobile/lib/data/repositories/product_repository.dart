@@ -136,19 +136,18 @@ class ProductRepository {
 
   Future<void> deleteProduct(String productUuid) async {
     final db = await _db.database;
-    try {
-      await db.insert(
+    await db.transaction((txn) async {
+      await txn.insert(
         'app_settings',
         {'key': 'deleted_product_$productUuid', 'value': DateTime.now().toIso8601String()},
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-    } catch (_) {}
-
-    await db.update(
-      'products',
-      {'active': 0},
-      where: 'uuid = ?',
-      whereArgs: [productUuid],
-    );
+      await txn.update(
+        'products',
+        {'active': 0},
+        where: 'uuid = ?',
+        whereArgs: [productUuid],
+      );
+    });
   }
 }

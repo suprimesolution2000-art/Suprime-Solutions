@@ -335,25 +335,26 @@ class InvoiceRepository {
   Future<void> deleteInvoice(String invoiceUuid) async {
     final db = await _db.database;
     final inv = await getInvoiceByUuid(invoiceUuid);
-    if (inv != null && inv.status != 'cancelled' && inv.invoiceType != 'temporary') {
-      // Revert customer outstanding balance and payments
-      try {
+
+    await db.transaction((txn) async {
+      if (inv != null && inv.status != 'cancelled' && inv.invoiceType != 'temporary') {
+        // Revert customer outstanding balance and payments
         List<Map<String, dynamic>> custRows = [];
         if (inv.customer.uuid.isNotEmpty) {
-          custRows = await db.query('customers', where: 'uuid = ?', whereArgs: [inv.customer.uuid], limit: 1);
+          custRows = await txn.query('customers', where: 'uuid = ?', whereArgs: [inv.customer.uuid], limit: 1);
         }
         if (custRows.isEmpty && inv.customer.phone.isNotEmpty) {
-          custRows = await db.query('customers', where: 'phone = ?', whereArgs: [inv.customer.phone], limit: 1);
+          custRows = await txn.query('customers', where: 'phone = ?', whereArgs: [inv.customer.phone], limit: 1);
         }
         if (custRows.isEmpty && inv.customer.name.trim().isNotEmpty) {
-          custRows = await db.query('customers', where: 'LOWER(name) = ?', whereArgs: [inv.customer.name.trim().toLowerCase()], limit: 1);
+          custRows = await txn.query('customers', where: 'LOWER(name) = ?', whereArgs: [inv.customer.name.trim().toLowerCase()], limit: 1);
         }
         if (custRows.isNotEmpty) {
           final matchedCustUuid = custRows.first['uuid'] as String;
           final currentBilled = (custRows.first['total_billed'] as num?)?.toDouble() ?? 0.0;
           final currentPaid = (custRows.first['total_paid'] as num?)?.toDouble() ?? 0.0;
           final currentDue = (custRows.first['outstanding_balance'] as num?)?.toDouble() ?? 0.0;
-          await db.update(
+          await txn.update(
             'customers',
             {
               'total_billed': (currentBilled - inv.grandTotal).clamp(0.0, double.infinity),
@@ -364,32 +365,28 @@ class InvoiceRepository {
             whereArgs: [matchedCustUuid],
           );
         }
-      } catch (_) {}
-    }
+      }
 
-    // Clean up any payments associated with this deleted invoice
-    try {
-      await db.delete(
+      // Clean up any payments associated with this deleted invoice
+      await txn.delete(
         'payments',
         where: 'invoice_id = ?',
         whereArgs: [invoiceUuid],
       );
-    } catch (_) {}
 
-    // Record tombstone so cloud pullSync does not resurrect this deleted invoice
-    try {
-      await db.insert(
+      // Record tombstone so cloud pullSync does not resurrect this deleted invoice
+      await txn.insert(
         'app_settings',
         {'key': 'deleted_invoice_$invoiceUuid', 'value': DateTime.now().toIso8601String()},
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-    } catch (_) {}
 
-    await db.delete(
-      'invoices',
-      where: 'uuid = ?',
-      whereArgs: [invoiceUuid],
-    );
+      await txn.delete(
+        'invoices',
+        where: 'uuid = ?',
+        whereArgs: [invoiceUuid],
+      );
+    });
 
     try {
       await CustomerRepository().recalculateCustomerBalances();

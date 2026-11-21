@@ -88,16 +88,21 @@ async function reserveNumberBlockForDevice(deviceId, deviceName = 'Android Mobil
   const to = sequence.currentNumber;
   const from = to - blockSize + 1;
 
-  sequence.reservedBlocks.push({
-    deviceId,
-    deviceName,
-    fromNumber: from,
-    toNumber: to,
-    reservedAt: new Date(),
-    isExhausted: false
-  });
-
-  await sequence.save();
+  await InvoiceSequence.updateOne(
+    { financialYear: fy },
+    {
+      $push: {
+        reservedBlocks: {
+          deviceId,
+          deviceName,
+          fromNumber: from,
+          toNumber: to,
+          reservedAt: new Date(),
+          isExhausted: false
+        }
+      }
+    }
+  );
 
   return {
     financialYear: fy,

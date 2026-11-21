@@ -10,8 +10,8 @@ module.exports = {
   MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost:27017/ss_supreme_solutions',
   JWT_SECRET: process.env.JWT_SECRET || 'ss_supreme_solutions_super_secure_jwt_secret_2026',
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'ss_supreme_solutions_refresh_jwt_secret_2026',
-  JWT_EXPIRES_IN: '7d',
-  JWT_REFRESH_EXPIRES_IN: '30d',
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
+  JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
   COMPANY: {
     name: process.env.COMPANY_NAME || 'Suprime Solutions',
     gstin: process.env.COMPANY_GSTIN || '22FWDPD2626D1Z7',

@@ -161,13 +161,16 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                                   child: ListTile(
                                     title: Row(
                                       children: [
-                                        Text(
-                                          inv.invoiceType == 'temporary'
-                                              ? 'Temp Bill #${inv.invoiceNumber.isNotEmpty ? inv.invoiceNumber : inv.sequenceNumber}'
-                                              : inv.invoiceNumber,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: inv.invoiceType == 'temporary' ? const Color(0xFF8B5A2B) : null,
+                                        Expanded(
+                                          child: Text(
+                                            inv.invoiceType == 'temporary'
+                                                ? 'Temp Bill #${inv.invoiceNumber.isNotEmpty ? inv.invoiceNumber : inv.sequenceNumber}'
+                                                : inv.invoiceNumber,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: inv.invoiceType == 'temporary' ? const Color(0xFF8B5A2B) : null,
+                                            ),
                                           ),
                                         ),
                                         if (inv.invoiceType == 'temporary') ...[

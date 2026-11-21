@@ -28,6 +28,7 @@ class PaymentRepository {
   }
 
   Future<void> savePayment(PaymentModel payment) async {
+    if (payment.amount <= 0) return;
     final db = await _db.database;
     await db.transaction((txn) async {
       // 1. Insert or replace payment record

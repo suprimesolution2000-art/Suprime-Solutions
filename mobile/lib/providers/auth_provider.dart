@@ -23,12 +23,13 @@ class AuthState {
 
   AuthState copyWith({
     UserModel? user,
+    bool clearUser = false,
     bool? isLoading,
     String? errorMessage,
     bool? isAuthenticated,
   }) {
     return AuthState(
-      user: user ?? this.user,
+      user: clearUser ? null : (user ?? this.user),
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage,
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
@@ -203,6 +204,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await prefs.remove('user_name');
     await prefs.remove('user_role');
     await prefs.remove('user_username');
+    ApiClient.instance.updateCachedToken(null);
     state = AuthState(isAuthenticated: false, user: null);
   }
 }

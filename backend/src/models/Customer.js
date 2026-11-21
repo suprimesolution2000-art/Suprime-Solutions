@@ -27,13 +27,21 @@ const customerSchema = new mongoose.Schema({
   email: {
     type: String,
     trim: true,
-    lowercase: true
+    lowercase: true,
+    validate: {
+      validator: (v) => !v || /^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$/.test(v),
+      message: 'Please provide a valid email address'
+    }
   },
   gstin: {
     type: String,
     trim: true,
     uppercase: true,
-    index: true
+    index: true,
+    validate: {
+      validator: (v) => !v || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(v),
+      message: 'Please provide a valid 15-character GSTIN format'
+    }
   },
   address: {
     type: String,

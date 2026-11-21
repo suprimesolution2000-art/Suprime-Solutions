@@ -64,11 +64,14 @@ exports.getInvoices = async (req, res, next) => {
       }
     }
 
-    // 4. Amount Filters
-    if (minAmount !== undefined || maxAmount !== undefined) {
-      query.grandTotal = {};
-      if (minAmount !== undefined) query.grandTotal.$gte = Number(minAmount);
-      if (maxAmount !== undefined) query.grandTotal.$lte = Number(maxAmount);
+    // 4. Amount Filters (with NaN guard)
+    if (minAmount !== undefined && !isNaN(Number(minAmount))) {
+      query.grandTotal = query.grandTotal || {};
+      query.grandTotal.$gte = Number(minAmount);
+    }
+    if (maxAmount !== undefined && !isNaN(Number(maxAmount))) {
+      query.grandTotal = query.grandTotal || {};
+      query.grandTotal.$lte = Number(maxAmount);
     }
 
     // 5. Customer Filter
@@ -89,9 +92,10 @@ exports.getInvoices = async (req, res, next) => {
       query.isInterState = isInterState === 'true';
     }
 
-    // Sorting
-    const sort = {};
-    sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
+    // Sorting (whitelist allowed sort columns)
+    const allowedSortFields = ['invoiceDate', 'grandTotal', 'invoiceNumber', 'sequenceNumber', 'createdAt'];
+    const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'invoiceDate';
+    const sort = { [safeSortBy]: sortOrder === 'asc' ? 1 : -1 };
 
     const safePage = Math.max(1, parseInt(page, 10) || 1);
     const safeLimit = Math.min(Math.max(1, parseInt(limit, 10) || 25), 200);
@@ -352,6 +356,7 @@ exports.cancelInvoice = async (req, res, next) => {
         {
           $inc: {
             totalBilled: -invoice.grandTotal,
+            totalPaid: -(invoice.totalPaid || 0),
             outstandingBalance: -invoice.balanceDue
           }
         }
@@ -469,13 +474,14 @@ exports.updateInvoice = async (req, res, next) => {
     invoice.updatedAt = new Date();
     await invoice.save();
 
-    // Auto-catalog any products in updated invoice items
-    if (Array.isArray(financials.items)) {
-      for (const itm of financials.items) {
-        if (itm.description && itm.description.trim()) {
-          await Product.findOneAndUpdate(
-            { description: itm.description.trim() },
-            {
+    // Auto-catalog any products in updated invoice items in a single bulk roundtrip
+    if (Array.isArray(financials.items) && financials.items.length > 0) {
+      const validItems = financials.items.filter(itm => itm.description && itm.description.trim());
+      if (validItems.length > 0) {
+        const ops = validItems.map(itm => ({
+          updateOne: {
+            filter: { description: itm.description.trim() },
+            update: {
               $set: {
                 description: itm.description.trim(),
                 hsnCode: itm.hsnCode || '',
@@ -488,9 +494,10 @@ exports.updateInvoice = async (req, res, next) => {
                 active: true
               }
             },
-            { upsert: true }
-          );
-        }
+            upsert: true
+          }
+        }));
+        await Product.bulkWrite(ops);
       }
     }
 

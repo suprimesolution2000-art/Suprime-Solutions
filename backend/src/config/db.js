@@ -9,8 +9,12 @@ const connectDB = async () => {
       autoIndex: env.NODE_ENV !== 'production' ? true : false, // Don't build indexes in high-traffic prod on every boot
     });
 
-    console.log(`[MongoDB Atlas] Successfully connected to: ${conn.connection.host}`);
-    console.log(`[MongoDB Atlas] Database Name: ${conn.connection.name}`);
+    if (env.NODE_ENV !== 'production') {
+      console.log(`[MongoDB Atlas] Successfully connected to: ${conn.connection.host}`);
+      console.log(`[MongoDB Atlas] Database Name: ${conn.connection.name}`);
+    } else {
+      console.log('[MongoDB Atlas] Connected successfully to production cluster.');
+    }
 
     mongoose.connection.on('error', (err) => {
       console.error(`[MongoDB Atlas] Runtime error: ${err.message}`);

@@ -81,6 +81,9 @@ class AppDatabase {
     try {
       await db.execute("ALTER TABLE invoices ADD COLUMN invoice_type TEXT DEFAULT 'gst'");
     } catch (_) {}
+    try {
+      await db.execute("ALTER TABLE payments ADD COLUMN sync_status TEXT DEFAULT 'synced'");
+    } catch (_) {}
     return db;
   }
 
@@ -174,7 +177,8 @@ class AppDatabase {
         payment_date TEXT NOT NULL,
         notes TEXT,
         received_by TEXT,
-        device_id TEXT
+        device_id TEXT,
+        sync_status TEXT DEFAULT 'pending'
       )
     ''');
 
@@ -231,7 +235,10 @@ class AppDatabase {
   }
 
   Future<void> close() async {
-    final db = await instance.database;
-    db.close();
+    final db = _database;
+    if (db != null && db.isOpen) {
+      await db.close();
+    }
+    _database = null;
   }
 }

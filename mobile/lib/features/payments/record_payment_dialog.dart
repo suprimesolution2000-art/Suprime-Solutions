@@ -266,7 +266,11 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
               ElevatedButton(
                 onPressed: _isSaving ? null : _submitPayment,
                 child: _isSaving
-                    ? const CircularProgressIndicator(color: Colors.white)
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
                     : const Text('Save Payment & Update Balance'),
               ),
             ],

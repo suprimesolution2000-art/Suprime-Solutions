@@ -135,8 +135,9 @@ function calculateInvoiceFinancials(items, customerStateCode = '22', businessSta
   const unroundedGrandTotal = isTemporary ? netAmount : Math.round((netAmount + cgstTotal + sgstTotal + igstTotal) * 100) / 100;
   const roundedGrandTotal = Math.round(unroundedGrandTotal);
   const roundOff = isTemporary ? 0 : Math.round((roundedGrandTotal - unroundedGrandTotal) * 100) / 100;
+  const finalGrandTotal = isTemporary ? netAmount : roundedGrandTotal;
 
-  const amountInWords = numberToIndianWords(roundedGrandTotal);
+  const amountInWords = numberToIndianWords(Math.round(finalGrandTotal));
 
   return {
     isInterState,
@@ -146,7 +147,7 @@ function calculateInvoiceFinancials(items, customerStateCode = '22', businessSta
     sgstTotal,
     igstTotal,
     roundOff,
-    grandTotal: roundedGrandTotal,
+    grandTotal: finalGrandTotal,
     amountInWords
   };
 }

@@ -7,7 +7,7 @@ const invoiceItemSchema = new mongoose.Schema({
   quantity: { type: Number, required: true, min: 0 },
   unit: { type: String, required: true, default: 'PCS' },
   rate: { type: Number, required: true, min: 0 },
-  discount: { type: Number, default: 0 },
+  discount: { type: Number, default: 0, min: 0 },
   taxableValue: { type: Number, required: true },
   gstRate: { type: Number, required: true, default: 18.0 },
   cgstRate: { type: Number, default: 0 },
@@ -157,6 +157,21 @@ const invoiceSchema = new mongoose.Schema({
   }
 }, {
   timestamps: true
+});
+
+// Pre-save hook to ensure consistent payment status and non-negative balances
+invoiceSchema.pre('save', function (next) {
+  if (this.balanceDue !== undefined) {
+    if (this.balanceDue <= 0.005) {
+      this.balanceDue = 0;
+      this.paymentStatus = 'paid';
+    } else if ((this.totalPaid || 0) > 0) {
+      this.paymentStatus = 'partially_paid';
+    } else {
+      this.paymentStatus = 'unpaid';
+    }
+  }
+  next();
 });
 
 // Unique scoped per invoice type and financial year

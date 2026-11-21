@@ -79,22 +79,22 @@ class InvoiceItemModel {
 
   factory InvoiceItemModel.fromMap(Map<String, dynamic> map) {
     return InvoiceItemModel(
-      sno: (map['sno'] ?? 1) as int,
+      sno: ((map['sno'] ?? 1) as num).toInt(),
       description: map['description'] ?? '',
       hsnCode: map['hsn_code'] ?? map['hsnCode'] ?? '',
-      quantity: (map['quantity'] ?? 0.0).toDouble(),
+      quantity: ((map['quantity'] ?? 0.0) as num).toDouble(),
       unit: map['unit'] ?? 'PCS',
-      rate: (map['rate'] ?? 0.0).toDouble(),
-      discount: (map['discount'] ?? 0.0).toDouble(),
-      taxableValue: (map['taxable_value'] ?? map['taxableValue'] ?? 0.0).toDouble(),
-      gstRate: (map['gst_rate'] ?? map['gstRate'] ?? 18.0).toDouble(),
-      cgstRate: (map['cgst_rate'] ?? map['cgstRate'] ?? 0.0).toDouble(),
-      cgstAmount: (map['cgst_amount'] ?? map['cgstAmount'] ?? 0.0).toDouble(),
-      sgstRate: (map['sgst_rate'] ?? map['sgstRate'] ?? 0.0).toDouble(),
-      sgstAmount: (map['sgst_amount'] ?? map['sgstAmount'] ?? 0.0).toDouble(),
-      igstRate: (map['igst_rate'] ?? map['igstRate'] ?? 0.0).toDouble(),
-      igstAmount: (map['igst_amount'] ?? map['igstAmount'] ?? 0.0).toDouble(),
-      totalAmount: (map['total_amount'] ?? map['totalAmount'] ?? 0.0).toDouble(),
+      rate: ((map['rate'] ?? 0.0) as num).toDouble(),
+      discount: ((map['discount'] ?? 0.0) as num).toDouble(),
+      taxableValue: ((map['taxable_value'] ?? map['taxableValue'] ?? 0.0) as num).toDouble(),
+      gstRate: ((map['gst_rate'] ?? map['gstRate'] ?? 18.0) as num).toDouble(),
+      cgstRate: ((map['cgst_rate'] ?? map['cgstRate'] ?? 0.0) as num).toDouble(),
+      cgstAmount: ((map['cgst_amount'] ?? map['cgstAmount'] ?? 0.0) as num).toDouble(),
+      sgstRate: ((map['sgst_rate'] ?? map['sgstRate'] ?? 0.0) as num).toDouble(),
+      sgstAmount: ((map['sgst_amount'] ?? map['sgstAmount'] ?? 0.0) as num).toDouble(),
+      igstRate: ((map['igst_rate'] ?? map['igstRate'] ?? 0.0) as num).toDouble(),
+      igstAmount: ((map['igst_amount'] ?? map['igstAmount'] ?? 0.0) as num).toDouble(),
+      totalAmount: ((map['total_amount'] ?? map['totalAmount'] ?? 0.0) as num).toDouble(),
     );
   }
 }

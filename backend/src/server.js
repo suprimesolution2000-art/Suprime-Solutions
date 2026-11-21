@@ -3,6 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const mongoose = require('mongoose');
 const env = require('./config/env');
 const connectDB = require('./config/db');
 const errorHandler = require('./middleware/errorHandler');
@@ -22,9 +23,18 @@ const app = express();
 
 // Security and middleware
 app.use(helmet({
-  crossOriginResourcePolicy: false
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
-app.use(cors());
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : '*';
+app.use(cors({
+  origin: allowedOrigins === '*' ? '*' : (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS policy: Not allowed by Access-Control-Allow-Origin'));
+    }
+  }
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -35,7 +45,7 @@ if (env.NODE_ENV !== 'test') {
 // Rate limiting for auth routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 50,
   message: { success: false, message: 'Too many requests, please try again later.' }
 });
 app.use('/api/auth', authLimiter);
@@ -43,7 +53,7 @@ app.use('/api/auth', authLimiter);
 // Health check endpoints
 const sendHealth = (req, res) => {
   const isDbConnected = mongoose.connection.readyState === 1;
-  res.status(isDbConnected ? 200 : 200).json({
+  res.status(isDbConnected ? 200 : 503).json({
     status: isDbConnected ? 'ok' : 'degraded',
     database: isDbConnected ? 'connected' : 'connecting',
     service: 'SS Supreme Solutions Mobile Billing API',

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
@@ -19,6 +20,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   List<ProductModel> _products = [];
   bool _isLoading = true;
   VoidCallback? _syncListener;
+  Timer? _searchDebounceTimer;
 
   @override
   void initState() {
@@ -34,6 +36,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
     if (_syncListener != null) {
       SyncService.instance.removeListener(_syncListener!);
@@ -76,7 +79,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
               children: [
                 Icon(isEditing ? Icons.edit_note : Icons.add_box, color: AppColors.primary),
                 const SizedBox(width: 8),
-                Text(isEditing ? 'Edit Product' : 'Add New Product'),
+                Expanded(
+                  child: Text(
+                    isEditing ? 'Edit Product' : 'Add New Product',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
             content: SingleChildScrollView(
@@ -306,6 +314,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     ? IconButton(
                         icon: const Icon(Icons.clear),
                         onPressed: () {
+                          _searchDebounceTimer?.cancel();
                           _searchController.clear();
                           setState(() {});
                           _loadProducts();
@@ -316,7 +325,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
               ),
               onChanged: (_) {
                 setState(() {});
-                _loadProducts();
+                _searchDebounceTimer?.cancel();
+                _searchDebounceTimer = Timer(const Duration(milliseconds: 250), () {
+                  _loadProducts();
+                });
               },
             ),
           ),

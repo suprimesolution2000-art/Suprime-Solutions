@@ -37,4 +37,7 @@ const auditLogSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Auto-clean audit logs older than 1 year (TTL index)
+auditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 365 * 24 * 60 * 60 });
+
 module.exports = mongoose.model('AuditLog', auditLogSchema);

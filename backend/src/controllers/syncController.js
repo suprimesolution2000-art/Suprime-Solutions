@@ -223,8 +223,9 @@ exports.pushSync = async (req, res, next) => {
 
         if (!existing) {
           try {
+            const { _id, __v, createdAt, ...cleanInv } = inv;
             await Invoice.create({
-              ...inv,
+              ...cleanInv,
               customer: safeCustomer,
               invoiceNumber: safeInvNumber,
               sequenceNumber: safeSeq,
@@ -394,7 +395,7 @@ exports.pushSync = async (req, res, next) => {
 
           // Update invoice balance
           const targetInvoice = await Invoice.findOne({ uuid: p.invoiceId });
-          if (targetInvoice) {
+          if (targetInvoice && targetInvoice.status !== 'cancelled') {
             targetInvoice.totalPaid = Math.round(((targetInvoice.totalPaid || 0) + p.amount) * 100) / 100;
             targetInvoice.balanceDue = Math.max(0, Math.round((targetInvoice.grandTotal - targetInvoice.totalPaid) * 100) / 100);
             targetInvoice.paymentStatus = targetInvoice.balanceDue === 0 ? 'paid' : 'partially_paid';
@@ -481,13 +482,13 @@ exports.pullSync = async (req, res, next) => {
           ]
         };
 
-    // For invoices, ALWAYS return all active invoices to ensure 100% multi-device sync
+    // For incremental sync, pull only invoices modified since the last sync timestamp
     const invQuery = isFullSync
       ? {}
       : {
           $or: [
-            { status: { $ne: 'cancelled' } },
-            { updatedAt: { $gt: sinceDate } }
+            { updatedAt: { $gt: sinceDate } },
+            { updatedAt: { $exists: false } }
           ]
         };
     const payQuery = isFullSync ? {} : { updatedAt: { $gt: sinceDate } };

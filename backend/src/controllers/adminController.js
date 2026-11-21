@@ -4,7 +4,7 @@ const User = require('../models/User');
 exports.getAllUsers = async (req, res, next) => {
   try {
     const users = await User.find({})
-      .select('-passwordHash')
+      .select('-passwordHash -plainPassword')
       .sort({ createdAt: -1 });
 
     res.json({

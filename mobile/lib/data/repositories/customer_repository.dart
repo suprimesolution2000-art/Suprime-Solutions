@@ -17,7 +17,7 @@ class CustomerRepository {
         .map((r) => (r['key'] as String).replaceFirst('deleted_customer_', ''))
         .toSet();
 
-    final invoices = await db.query('invoices');
+    final invoices = await db.query('invoices', columns: ['customer_json']);
     int recovered = 0;
     for (final invRow in invoices) {
       try {
@@ -33,8 +33,11 @@ class CustomerRepository {
             if (existing.isNotEmpty && (existing.first['active'] == 0 || existing.first['active'] == 'false')) {
               continue;
             }
+            final isNew = existing.isEmpty;
             await saveCustomer(cust);
-            recovered++;
+            if (isNew) {
+              recovered++;
+            }
           }
         }
       } catch (_) {}
@@ -328,20 +331,20 @@ class CustomerRepository {
 
   Future<void> deleteCustomer(String customerUuid) async {
     final db = await _db.database;
-    try {
-      await db.insert(
+    await db.transaction((txn) async {
+      await txn.insert(
         'app_settings',
         {'key': 'deleted_customer_$customerUuid', 'value': DateTime.now().toIso8601String()},
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-    } catch (_) {}
 
-    await db.update(
-      'customers',
-      {'active': 0},
-      where: 'uuid = ?',
-      whereArgs: [customerUuid],
-    );
+      await txn.update(
+        'customers',
+        {'active': 0},
+        where: 'uuid = ?',
+        whereArgs: [customerUuid],
+      );
+    });
 
     try {
       unawaited(SyncService.instance.synchronize(forceFullSync: false));

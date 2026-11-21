@@ -690,6 +690,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
           'poDate': state.poDate?.toIso8601String(),
           'challanNumber': state.challanNumber,
           'challanDate': state.challanDate?.toIso8601String(),
+          'invoiceType': updatedInvoice.invoiceType,
           'deviceId': deviceId,
         };
         final res = await ApiClient.instance.updateInvoice(updatedInvoice.uuid, body);

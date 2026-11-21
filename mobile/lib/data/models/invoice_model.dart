@@ -98,21 +98,27 @@ class InvoiceModel {
 
   factory InvoiceModel.fromMap(Map<String, dynamic> map) {
     CustomerModel customerObj;
-    if (map['customer_json'] != null) {
-      customerObj = CustomerModel.fromMap(jsonDecode(map['customer_json']));
-    } else if (map['customer'] != null && map['customer'] is Map) {
-      customerObj = CustomerModel.fromMap(Map<String, dynamic>.from(map['customer']));
-    } else {
+    try {
+      if (map['customer_json'] != null) {
+        customerObj = CustomerModel.fromMap(jsonDecode(map['customer_json']));
+      } else if (map['customer'] != null && map['customer'] is Map) {
+        customerObj = CustomerModel.fromMap(Map<String, dynamic>.from(map['customer']));
+      } else {
+        customerObj = CustomerModel(uuid: '', name: 'Customer', phone: '');
+      }
+    } catch (_) {
       customerObj = CustomerModel(uuid: '', name: 'Customer', phone: '');
     }
 
     List<InvoiceItemModel> itemsList = [];
-    if (map['items_json'] != null) {
-      final List decoded = jsonDecode(map['items_json']);
-      itemsList = decoded.map((e) => InvoiceItemModel.fromMap(Map<String, dynamic>.from(e))).toList();
-    } else if (map['items'] != null && map['items'] is List) {
-      itemsList = (map['items'] as List).map((e) => InvoiceItemModel.fromMap(Map<String, dynamic>.from(e))).toList();
-    }
+    try {
+      if (map['items_json'] != null) {
+        final List decoded = jsonDecode(map['items_json']);
+        itemsList = decoded.map((e) => InvoiceItemModel.fromMap(Map<String, dynamic>.from(e))).toList();
+      } else if (map['items'] != null && map['items'] is List) {
+        itemsList = (map['items'] as List).map((e) => InvoiceItemModel.fromMap(Map<String, dynamic>.from(e))).toList();
+      }
+    } catch (_) {}
 
     return InvoiceModel(
       uuid: map['uuid'] ?? '',

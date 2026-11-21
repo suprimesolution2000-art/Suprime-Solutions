@@ -25,11 +25,14 @@ const productSchema = new mongoose.Schema({
   defaultRate: {
     type: Number,
     required: true,
+    min: 0,
     default: 0
   },
   gstRate: {
     type: Number,
     required: true,
+    min: 0,
+    max: 28,
     default: 18.0
   },
   active: {

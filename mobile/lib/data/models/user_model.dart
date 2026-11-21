@@ -28,7 +28,7 @@ class UserModel {
       id: map['id'] ?? map['_id'] ?? '',
       name: map['name'] ?? '',
       username: map['username'] ?? '',
-      role: map['role'] ?? 'owner',
+      role: map['role'] ?? 'employee',
     );
   }
 }

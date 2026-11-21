@@ -74,13 +74,13 @@ class DashboardNotifier extends StateNotifier<DashboardSummary> {
     try {
       final res = await _repo.getDashboardSummary();
       state = DashboardSummary(
-        todaySales: res['todaySales'],
-        todayCount: res['todayCount'],
-        monthlySales: res['monthlySales'],
-        monthlyCount: res['monthlyCount'],
-        pendingPayments: res['pendingPayments'],
-        pendingCount: res['pendingCount'],
-        customerCount: res['customerCount'],
+        todaySales: (res['todaySales'] as num?)?.toDouble() ?? 0.0,
+        todayCount: (res['todayCount'] as num?)?.toInt() ?? 0,
+        monthlySales: (res['monthlySales'] as num?)?.toDouble() ?? 0.0,
+        monthlyCount: (res['monthlyCount'] as num?)?.toInt() ?? 0,
+        pendingPayments: (res['pendingPayments'] as num?)?.toDouble() ?? 0.0,
+        pendingCount: (res['pendingCount'] as num?)?.toInt() ?? 0,
+        customerCount: (res['customerCount'] as num?)?.toInt() ?? 0,
         isLoading: false,
       );
     } catch (_) {

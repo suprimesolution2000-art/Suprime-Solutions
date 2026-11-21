@@ -870,8 +870,9 @@ class PdfInvoiceService {
                   final y = 227.0 + (idx * 19.5);
 
                   final amount = itm.taxableValue > 0 ? itm.taxableValue : itm.totalAmount;
-                  final rupees = amount.floor();
-                  final paise = ((amount - rupees) * 100).round();
+                  final totalCents = (amount * 100).round();
+                  final rupees = totalCents ~/ 100;
+                  final paise = totalCents % 100;
 
                   return pw.Stack(
                     children: [
@@ -1084,8 +1085,9 @@ class PdfInvoiceService {
   static List<pw.Widget> _buildRupeesPaiseRow(double val, double y, pw.Font font, {double fontSize = 11.0}) {
     final isNegative = val < 0;
     final absVal = val.abs();
-    final r = absVal.truncate();
-    final p = ((absVal - r) * 100).round();
+    final totalCents = (absVal * 100).round();
+    final r = totalCents ~/ 100;
+    final p = totalCents % 100;
     final rText = isNegative && r == 0 ? '-0' : (isNegative ? '-$r' : '$r');
 
     return [

@@ -13,7 +13,7 @@ const authMiddleware = async (req, res, next) => {
     const decoded = jwt.verify(token, env.JWT_SECRET);
 
     // Verify user exists and is active in database
-    const user = await User.findById(decoded.id).select('-passwordHash');
+    const user = await User.findById(decoded.id).select('-passwordHash -plainPassword');
     if (!user) {
       return res.status(401).json({ success: false, message: 'User account not found.' });
     }
@@ -24,7 +24,7 @@ const authMiddleware = async (req, res, next) => {
 
     next();
   } catch (error) {
-    return res.status(401).json({ success: false, message: 'Invalid or expired token.', error: error.message });
+    return res.status(401).json({ success: false, message: 'Invalid or expired token.' });
   }
 };
 

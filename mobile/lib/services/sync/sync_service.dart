@@ -338,7 +338,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
 
           for (final row in pendingInvoicesData) {
             final uuid = row['uuid'] as String;
-            if (syncedList.contains(uuid) || (resData['success'] == true && syncedList.isEmpty)) {
+            if (syncedList.contains(uuid)) {
               await db.update(
                 'invoices',
                 {'sync_status': 'synced'},

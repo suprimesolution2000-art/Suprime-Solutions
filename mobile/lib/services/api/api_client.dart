@@ -61,6 +61,8 @@ class ApiClient {
                     method: opts.method,
                     headers: opts.headers,
                     extra: opts.extra,
+                    responseType: opts.responseType,
+                    contentType: opts.contentType,
                   ),
                   data: opts.data,
                   queryParameters: opts.queryParameters,
@@ -80,7 +82,9 @@ class ApiClient {
   }
 
   Future<void> init() async {
-    _baseUrl = defaultBaseUrl;
+    final prefs = await SharedPreferences.getInstance();
+    final customUrl = prefs.getString('custom_backend_url');
+    _baseUrl = (customUrl != null && customUrl.isNotEmpty) ? customUrl : defaultBaseUrl;
     dio.options.baseUrl = _baseUrl;
   }
 
@@ -158,14 +162,16 @@ class ApiClient {
 
   // Admin: Reset user password
   Future<Response> resetAdminUserPassword(String userId, String newPassword) async {
-    return await dio.put('/admin/users/$userId/password', data: {
+    final encodedId = Uri.encodeComponent(userId);
+    return await dio.put('/admin/users/$encodedId/password', data: {
       'newPassword': newPassword,
     });
   }
 
   // Admin: Delete user
   Future<Response> deleteAdminUser(String userId) async {
-    return await dio.delete('/admin/users/$userId');
+    final encodedId = Uri.encodeComponent(userId);
+    return await dio.delete('/admin/users/$encodedId');
   }
 
   // Device registration
