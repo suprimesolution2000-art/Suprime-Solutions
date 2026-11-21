@@ -19,7 +19,7 @@ class AppDatabase {
 
     final db = await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -28,6 +28,51 @@ class AppDatabase {
         if (oldVersion < 2) {
           try {
             await db.execute("ALTER TABLE invoices ADD COLUMN invoice_type TEXT DEFAULT 'gst'");
+          } catch (_) {}
+        }
+        if (oldVersion < 3) {
+          try {
+            // Rebuild invoices table to remove single-column UNIQUE constraint on invoice_number
+            await db.execute('ALTER TABLE invoices RENAME TO invoices_old_v2;');
+            await db.execute('''
+              CREATE TABLE invoices (
+                uuid TEXT PRIMARY KEY,
+                invoice_number TEXT NOT NULL,
+                sequence_number INTEGER NOT NULL,
+                financial_year TEXT NOT NULL,
+                invoice_date TEXT NOT NULL,
+                due_date TEXT,
+                po_number TEXT,
+                po_date TEXT,
+                challan_number TEXT,
+                challan_date TEXT,
+                customer_json TEXT NOT NULL,
+                is_inter_state INTEGER DEFAULT 0,
+                items_json TEXT NOT NULL,
+                net_amount REAL NOT NULL,
+                cgst_total REAL DEFAULT 0,
+                sgst_total REAL DEFAULT 0,
+                igst_total REAL DEFAULT 0,
+                round_off REAL DEFAULT 0,
+                grand_total REAL NOT NULL,
+                amount_in_words TEXT NOT NULL,
+                status TEXT DEFAULT 'finalized',
+                payment_status TEXT DEFAULT 'unpaid',
+                total_paid REAL DEFAULT 0,
+                balance_due REAL NOT NULL,
+                device_id TEXT,
+                created_by TEXT,
+                sync_status TEXT DEFAULT 'synced',
+                invoice_type TEXT DEFAULT 'gst'
+              )
+            ''');
+            await db.execute('INSERT OR IGNORE INTO invoices SELECT * FROM invoices_old_v2;');
+            await db.execute('DROP TABLE invoices_old_v2;');
+            await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_number ON invoices(invoice_number);');
+            await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_date ON invoices(invoice_date);');
+            await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);');
+            await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_payment ON invoices(payment_status);');
+            await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_type ON invoices(invoice_type);');
           } catch (_) {}
         }
       },
@@ -78,7 +123,7 @@ class AppDatabase {
     await db.execute('''
       CREATE TABLE invoices (
         uuid TEXT PRIMARY KEY,
-        invoice_number TEXT NOT NULL UNIQUE,
+        invoice_number TEXT NOT NULL,
         sequence_number INTEGER NOT NULL,
         financial_year TEXT NOT NULL,
         invoice_date TEXT NOT NULL,
@@ -113,6 +158,7 @@ class AppDatabase {
     await db.execute('CREATE INDEX idx_invoices_date ON invoices(invoice_date);');
     await db.execute('CREATE INDEX idx_invoices_status ON invoices(status);');
     await db.execute('CREATE INDEX idx_invoices_payment ON invoices(payment_status);');
+    await db.execute('CREATE INDEX idx_invoices_type ON invoices(invoice_type);');
 
     // 4. Payments table
     await db.execute('''

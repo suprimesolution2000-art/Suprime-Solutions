@@ -640,6 +640,306 @@ async function generateGstSalesRegisterPdf(invoices = [], fromDate = new Date(),
   return Buffer.from(pdfBytes);
 }
 
+/**
+ * Generate Excel-Style Sales Register Statement PDF for Temporary Bills (CA / Record format - No GST)
+ */
+async function generateTemporaryBillsRegisterPdf(invoices = [], fromDate = new Date(), toDate = new Date()) {
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([841.89, 595.28]); // A4 Landscape
+  const { width, height } = page.getSize();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  // Exact Wooden & Parchment palette matching Temporary Bill theme
+  const darkWood = rgb(46 / 255, 26 / 255, 12 / 255);       // #2E1A0C
+  const mediumWood = rgb(90 / 255, 50 / 255, 26 / 255);     // #5A321A
+  const lightGold = rgb(240 / 255, 212 / 255, 136 / 255);   // #F0D488
+  const antiqueGold = rgb(217 / 255, 178 / 255, 95 / 255);  // #D9B25F
+  const creamText = rgb(248 / 255, 239 / 255, 220 / 255);   // #F8EFDC
+  const parchmentBg = rgb(251 / 255, 248 / 255, 241 / 255); // #FBF8F1
+  const zebraBg = rgb(243 / 255, 234 / 255, 220 / 255);     // #F3EADC
+  const gridBorder = rgb(191 / 255, 166 / 255, 136 / 255);  // #BFA688
+  const darkText = rgb(42 / 255, 23 / 255, 11 / 255);       // #2A170B
+
+  const marginX = 26.0;
+  const startY = 22.0;
+
+  // 1. Warm Parchment Base Background
+  page.drawRectangle({
+    x: 0,
+    y: 0,
+    width: width,
+    height: height,
+    color: parchmentBg
+  });
+
+  // Perimeter Frame in wood tone
+  page.drawRectangle({
+    x: 10,
+    y: 10,
+    width: width - 20,
+    height: height - 20,
+    borderColor: gridBorder,
+    borderWidth: 1.0
+  });
+
+  // 2. Header Box in Rich Dark Wood
+  const headerH = 80.0;
+  page.drawRectangle({
+    x: marginX,
+    y: height - (startY + headerH),
+    width: width - (marginX * 2),
+    height: headerH,
+    color: darkWood,
+    borderColor: antiqueGold,
+    borderWidth: 1.5
+  });
+
+  page.drawRectangle({
+    x: marginX,
+    y: height - (startY + 4),
+    width: width - (marginX * 2),
+    height: 3,
+    color: antiqueGold
+  });
+
+  page.drawText('SUPRIME SOLUTIONS', {
+    x: marginX + 16,
+    y: height - (startY + 24),
+    size: 16,
+    font: fontBold,
+    color: lightGold
+  });
+
+  page.drawText('Industrial Gaskets, Hydraulics & Industrial Supplies', {
+    x: marginX + 16,
+    y: height - (startY + 39),
+    size: 8.5,
+    font: font,
+    color: antiqueGold
+  });
+
+  page.drawText('Mahalaxmi Bole, Beside Yashoda Dairy, Tikrapara, Bilaspur (C.G.) 495001 | Ph: 9981365878', {
+    x: marginX + 16,
+    y: height - (startY + 52),
+    size: 8.0,
+    font: font,
+    color: creamText
+  });
+
+  page.drawText('Internal Sales & Temporary Bills Register | Bilaspur (C.G.)', {
+    x: marginX + 16,
+    y: height - (startY + 67),
+    size: 8.5,
+    font: fontBold,
+    color: lightGold
+  });
+
+  // Right Side Header
+  const titleText = 'TEMPORARY BILLS REGISTER (FOR RECORD / AUDIT)';
+  const titleW = fontBold.widthOfTextAtSize(titleText, 11.5);
+  page.drawText(titleText, {
+    x: width - marginX - titleW - 16,
+    y: height - (startY + 24),
+    size: 11.5,
+    font: fontBold,
+    color: lightGold
+  });
+
+  const fromStr = fromDate ? new Date(fromDate).toLocaleDateString('en-GB') : '';
+  const toStr = toDate ? new Date(toDate).toLocaleDateString('en-GB') : '';
+  const periodText = `Period: ${fromStr} To ${toStr}`;
+  const periodW = fontBold.widthOfTextAtSize(periodText, 9.5);
+  page.drawText(periodText, {
+    x: width - marginX - periodW - 16,
+    y: height - (startY + 42),
+    size: 9.5,
+    font: fontBold,
+    color: antiqueGold
+  });
+
+  const countText = `Total Temporary Bills: ${invoices.length}`;
+  const countW = font.widthOfTextAtSize(countText, 8.5);
+  page.drawText(countText, {
+    x: width - marginX - countW - 16,
+    y: height - (startY + 56),
+    size: 8.5,
+    font: font,
+    color: creamText
+  });
+
+  const genText = `Generated: ${new Date().toLocaleDateString('en-GB')}`;
+  const genW = font.widthOfTextAtSize(genText, 7.5);
+  page.drawText(genText, {
+    x: width - marginX - genW - 16,
+    y: height - (startY + 69),
+    size: 7.5,
+    font: font,
+    color: antiqueGold
+  });
+
+  // Table Columns - Total width = 789.89
+  const cols = [
+    { name: 'S.NO.', w: 35, align: 'center' },
+    { name: 'BILL NO.', w: 70, align: 'center' },
+    { name: 'DATE', w: 70, align: 'center' },
+    { name: 'PARTY NAME', w: 210, align: 'left' },
+    { name: 'CITY / LOCATION', w: 105, align: 'center' },
+    { name: 'PHONE', w: 90, align: 'center' },
+    { name: 'BILL AMOUNT (Rs.)', w: 80, align: 'right' },
+    { name: 'PAID (Rs.)', w: 65, align: 'right' },
+    { name: 'BALANCE (Rs.)', w: 64.89, align: 'right' }
+  ];
+
+  const tblY = startY + 92.0;
+  const hdrH = 24.0;
+
+  // Draw Table Header
+  page.drawRectangle({
+    x: marginX,
+    y: height - (tblY + hdrH),
+    width: width - (marginX * 2),
+    height: hdrH,
+    color: mediumWood,
+    borderColor: antiqueGold,
+    borderWidth: 1.0
+  });
+
+  let currX = marginX;
+  for (const c of cols) {
+    const textW = fontBold.widthOfTextAtSize(c.name, 8.0);
+    let xPos = currX + 6;
+    if (c.align === 'center') xPos = currX + (c.w - textW) / 2;
+    if (c.align === 'right') xPos = currX + c.w - textW - 6;
+
+    page.drawText(c.name, {
+      x: xPos,
+      y: height - (tblY + 16),
+      size: 8.0,
+      font: fontBold,
+      color: lightGold
+    });
+    currX += c.w;
+  }
+
+  // Draw Table Rows
+  let rowY = tblY + hdrH;
+  const rowH = 22.0;
+
+  let sumTotal = 0, sumPaid = 0, sumBalance = 0;
+
+  invoices.forEach((inv, idx) => {
+    const isOdd = idx % 2 === 1;
+    const rowColor = isOdd ? zebraBg : rgb(1, 1, 1);
+
+    page.drawRectangle({
+      x: marginX,
+      y: height - (rowY + rowH),
+      width: width - (marginX * 2),
+      height: rowH,
+      color: rowColor,
+      borderColor: gridBorder,
+      borderWidth: 0.5
+    });
+
+    const total = inv.grandTotal || 0;
+    const paid = inv.totalPaid || 0;
+    const balance = inv.balanceDue !== undefined ? inv.balanceDue : (total - paid);
+
+    sumTotal += total;
+    sumPaid += paid;
+    sumBalance += balance;
+
+    const rowData = [
+      String(idx + 1),
+      String(inv.invoiceNumber || ''),
+      inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-GB') : '',
+      String(inv.customer ? (inv.customer.name || '') : ''),
+      String(inv.customer ? (inv.customer.city || inv.customer.address || '-') : '-'),
+      String(inv.customer ? (inv.customer.phone || '-') : '-'),
+      total.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+      paid.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+      balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })
+    ];
+
+    let cellX = marginX;
+    cols.forEach((c, colIdx) => {
+      let val = rowData[colIdx];
+      if (colIdx === 3 && val.length > 32) val = val.substring(0, 30) + '..';
+      if (colIdx === 4 && val.length > 18) val = val.substring(0, 16) + '..';
+
+      const isBold = colIdx === 0 || colIdx === 1 || colIdx === 6;
+      const f = isBold ? fontBold : font;
+      const textW = f.widthOfTextAtSize(val, 8.0);
+      let xPos = cellX + 6;
+      if (c.align === 'center') xPos = cellX + (c.w - textW) / 2;
+      if (c.align === 'right') xPos = cellX + c.w - textW - 6;
+
+      let textColor = darkText;
+      if (colIdx === 0) textColor = mediumWood;
+      if (colIdx === 1) textColor = darkWood;
+      if (colIdx === 6) textColor = darkWood;
+
+      page.drawText(val, {
+        x: xPos,
+        y: height - (rowY + 15),
+        size: 8.0,
+        font: f,
+        color: textColor
+      });
+      cellX += c.w;
+    });
+
+    rowY += rowH;
+  });
+
+  // Grand Total Summary Row (Deep Walnut with Gold Numbers)
+  const totH = 26.0;
+  page.drawRectangle({
+    x: marginX,
+    y: height - (rowY + totH),
+    width: width - (marginX * 2),
+    height: totH,
+    color: darkWood,
+    borderColor: antiqueGold,
+    borderWidth: 1.2
+  });
+
+  page.drawText(`GRAND TOTAL (${invoices.length} TEMPORARY BILLS)`, {
+    x: marginX + 14,
+    y: height - (rowY + 17),
+    size: 9.0,
+    font: fontBold,
+    color: lightGold
+  });
+
+  const totCols = cols.slice(6);
+  const totVals = [
+    sumTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+    sumPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+    sumBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })
+  ];
+
+  let totX = marginX + cols.slice(0, 6).reduce((acc, c) => acc + c.w, 0);
+  totCols.forEach((c, idx) => {
+    const val = totVals[idx];
+    const textW = fontBold.widthOfTextAtSize(val, 9.0);
+    const xPos = totX + c.w - textW - 6;
+
+    page.drawText(val, {
+      x: xPos,
+      y: height - (rowY + 17),
+      size: 9.0,
+      font: fontBold,
+      color: lightGold
+    });
+    totX += c.w;
+  });
+
+  const pdfBytes = await pdfDoc.save();
+  return Buffer.from(pdfBytes);
+}
+
 async function generateInvoicePdf(invoice) {
   if (invoice && invoice.invoiceType === 'temporary') {
     return generateTemporaryBillPdf(invoice);
@@ -651,5 +951,6 @@ module.exports = {
   generateInvoicePdf,
   generateGstInvoicePdf,
   generateTemporaryBillPdf,
-  generateGstSalesRegisterPdf
+  generateGstSalesRegisterPdf,
+  generateTemporaryBillsRegisterPdf
 };

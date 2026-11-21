@@ -1286,6 +1286,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
   }
 
   void _showCaReportsDialog(BuildContext context) {
+    final currentInvoiceType = ref.read(invoiceListProvider).invoiceType;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1297,9 +1298,11 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
         DateTime toDate = DateTime.now();
         bool isGenerating = false;
         String statusText = '';
+        String exportType = currentInvoiceType == 'temporary' ? 'temporary' : 'gst';
 
         return StatefulBuilder(
           builder: (context, setModalState) {
+            final isTemp = exportType == 'temporary';
             return SingleChildScrollView(
               child: Padding(
                 padding: EdgeInsets.only(
@@ -1318,23 +1321,29 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryContainer,
+                          color: isTemp ? const Color(0xFFFAF0E6) : AppColors.primaryContainer,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Icon(Icons.assessment, color: AppColors.primary, size: 24),
+                        child: Icon(
+                          isTemp ? Icons.history_edu : Icons.assessment,
+                          color: isTemp ? const Color(0xFF8B5A2B) : AppColors.primary,
+                          size: 24,
+                        ),
                       ),
                       const SizedBox(width: 12),
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'CA & Audit GST Export',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              isTemp ? 'CA & Audit Temporary Bills Export' : 'CA & Audit GST Export',
+                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                             ),
                             Text(
-                              'Official GST Tax Invoices only (No temporary bills)',
-                              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                              isTemp
+                                  ? 'Sales statement for temporary bills (No GST included)'
+                                  : 'Official GST Tax Invoices only (No temporary bills)',
+                              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                             ),
                           ],
                         ),
@@ -1345,7 +1354,66 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                       ),
                     ],
                   ),
-                  const Divider(height: 24),
+                  const Divider(height: 20),
+
+                  // Bill Type Toggle (GST Invoices vs Temporary Bills)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => setModalState(() => exportType = 'gst'),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: exportType == 'gst' ? AppColors.primary : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'GST Tax Invoices',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color: exportType == 'gst' ? Colors.white : AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => setModalState(() => exportType = 'temporary'),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: exportType == 'temporary' ? const Color(0xFF8B5A2B) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'Temporary Bills',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color: exportType == 'temporary' ? Colors.white : AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
                   // Quick Date Preset Chips
                   SingleChildScrollView(
@@ -1423,7 +1491,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                                 const SizedBox(height: 2),
                                 Row(
                                   children: [
-                                    const Icon(Icons.calendar_today, size: 14, color: AppColors.primary),
+                                    Icon(Icons.calendar_today, size: 14, color: isTemp ? const Color(0xFF8B5A2B) : AppColors.primary),
                                     const SizedBox(width: 6),
                                     Text(
                                       DateFormatter.format(fromDate),
@@ -1468,7 +1536,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                                 const SizedBox(height: 2),
                                 Row(
                                   children: [
-                                    const Icon(Icons.calendar_today, size: 14, color: AppColors.primary),
+                                    Icon(Icons.calendar_today, size: 14, color: isTemp ? const Color(0xFF8B5A2B) : AppColors.primary),
                                     const SizedBox(width: 6),
                                     Text(
                                       DateFormatter.format(toDate),
@@ -1496,14 +1564,19 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                     ),
 
                   if (isGenerating)
-                    const Center(
+                    Center(
                       child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 20),
+                        padding: const EdgeInsets.symmetric(vertical: 20),
                         child: Column(
                           children: [
-                            CircularProgressIndicator(),
-                            SizedBox(height: 12),
-                            Text('Generating CA PDF Document...', style: TextStyle(fontSize: 13)),
+                            CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(isTemp ? const Color(0xFF8B5A2B) : AppColors.primary),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              isTemp ? 'Generating Temporary Bills PDF...' : 'Generating CA PDF Document...',
+                              style: const TextStyle(fontSize: 13),
+                            ),
                           ],
                         ),
                       ),
@@ -1514,7 +1587,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                       elevation: 1,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: Colors.blue.shade200),
+                        side: BorderSide(color: isTemp ? const Color(0xFFD8BD91) : Colors.blue.shade200),
                       ),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(12),
@@ -1524,11 +1597,15 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                             statusText = '';
                           });
                           try {
-                            final invoices = await InvoiceRepository().getGstInvoicesForDateRange(fromDate, toDate);
+                            final invoices = isTemp
+                                ? await InvoiceRepository().getTemporaryInvoicesForDateRange(fromDate, toDate)
+                                : await InvoiceRepository().getGstInvoicesForDateRange(fromDate, toDate);
                             if (invoices.isEmpty) {
                               setModalState(() {
                                 isGenerating = false;
-                                statusText = 'No GST invoices found in selected date range.';
+                                statusText = isTemp
+                                    ? 'No temporary bills found in selected date range.'
+                                    : 'No GST invoices found in selected date range.';
                               });
                               return;
                             }
@@ -1548,24 +1625,30 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                               Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
+                                  color: isTemp ? const Color(0xFFFAF0E6) : Colors.blue.shade50,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Icon(Icons.picture_as_pdf, color: AppColors.primary, size: 28),
+                                child: Icon(
+                                  Icons.picture_as_pdf,
+                                  color: isTemp ? const Color(0xFF8B5A2B) : AppColors.primary,
+                                  size: 28,
+                                ),
                               ),
                               const SizedBox(width: 14),
-                              const Expanded(
+                              Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Combined Bills (Single PDF)',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                      isTemp ? 'Combined Temporary Bills (Single PDF)' : 'Combined Bills (Single PDF)',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                     ),
-                                    SizedBox(height: 2),
+                                    const SizedBox(height: 2),
                                     Text(
-                                      '1 multi-page PDF of all full GST bills sequentially date-wise',
-                                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                      isTemp
+                                          ? '1 multi-page PDF of all full Temporary bills sequentially date-wise'
+                                          : '1 multi-page PDF of all full GST bills sequentially date-wise',
+                                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                                     ),
                                   ],
                                 ),
@@ -1578,12 +1661,12 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                     ),
                     const SizedBox(height: 10),
 
-                    // Option 2: Excel-Style GST Statement PDF
+                    // Option 2: Excel-Style Sales Statement PDF
                     Card(
                       elevation: 1,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: Colors.green.shade200),
+                        side: BorderSide(color: isTemp ? const Color(0xFF8B5A2B) : Colors.green.shade200),
                       ),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(12),
@@ -1593,20 +1676,28 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                             statusText = '';
                           });
                           try {
-                            final invoices = await InvoiceRepository().getGstInvoicesForDateRange(fromDate, toDate);
+                            final invoices = isTemp
+                                ? await InvoiceRepository().getTemporaryInvoicesForDateRange(fromDate, toDate)
+                                : await InvoiceRepository().getGstInvoicesForDateRange(fromDate, toDate);
                             if (invoices.isEmpty) {
                               setModalState(() {
                                 isGenerating = false;
-                                statusText = 'No GST invoices found in selected date range.';
+                                statusText = isTemp
+                                    ? 'No temporary bills found in selected date range.'
+                                    : 'No GST invoices found in selected date range.';
                               });
                               return;
                             }
-                            await PdfInvoiceService.shareGstSalesRegisterPdf(invoices, fromDate, toDate);
+                            if (isTemp) {
+                              await PdfInvoiceService.shareTemporaryBillsRegisterPdf(invoices, fromDate, toDate);
+                            } else {
+                              await PdfInvoiceService.shareGstSalesRegisterPdf(invoices, fromDate, toDate);
+                            }
                             if (context.mounted) Navigator.pop(context);
                           } catch (e) {
                             setModalState(() {
                               isGenerating = false;
-                              statusText = 'Error generating GST statement: $e';
+                              statusText = 'Error generating sales statement: $e';
                             });
                           }
                         },
@@ -1617,24 +1708,30 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                               Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: Colors.green.shade50,
+                                  color: isTemp ? const Color(0xFFFAF0E6) : Colors.green.shade50,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Icon(Icons.table_chart, color: Color(0xFF15803D), size: 28),
+                                child: Icon(
+                                  Icons.table_chart,
+                                  color: isTemp ? const Color(0xFF8B5A2B) : const Color(0xFF15803D),
+                                  size: 28,
+                                ),
                               ),
                               const SizedBox(width: 14),
-                              const Expanded(
+                              Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Excel-Style Sales Statement',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                      isTemp ? 'Excel-Style Temporary Bills Statement' : 'Excel-Style Sales Statement',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                     ),
-                                    SizedBox(height: 2),
+                                    const SizedBox(height: 2),
                                     Text(
-                                      'Tabular statement with Taxable, CGST, SGST, IGST & Totals',
-                                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                      isTemp
+                                          ? 'Tabular statement with Party, City, Phone, Amount, Paid & Balance (No GST)'
+                                          : 'Tabular statement with Taxable, CGST, SGST, IGST & Totals',
+                                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                                     ),
                                   ],
                                 ),

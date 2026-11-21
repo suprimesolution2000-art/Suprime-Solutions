@@ -442,6 +442,207 @@ class PdfInvoiceService {
     await Printing.sharePdf(bytes: bytes, filename: filename);
   }
 
+  /// Feature 3: Generate an Excel-Style Sales Register Statement PDF for Temporary Bills (CA / Record format - No GST)
+  static Future<Uint8List> generateTemporaryBillsRegisterPdf(
+    List<InvoiceModel> invoices,
+    DateTime fromDate,
+    DateTime toDate,
+  ) async {
+    final pdf = pw.Document();
+    final fontBold = await PdfGoogleFonts.robotoBold();
+    final fontRegular = await PdfGoogleFonts.robotoRegular();
+
+    // Sort chronologically ascending
+    final sorted = List<InvoiceModel>.from(invoices)
+      ..sort((a, b) {
+        final cmp = a.invoiceDate.compareTo(b.invoiceDate);
+        if (cmp != 0) return cmp;
+        return a.sequenceNumber.compareTo(b.sequenceNumber);
+      });
+
+    final double sumTotal = sorted.fold(0.0, (acc, i) => acc + i.grandTotal);
+    final double sumPaid = sorted.fold(0.0, (acc, i) => acc + i.totalPaid);
+    final double sumBalance = sorted.fold(0.0, (acc, i) => acc + i.balanceDue);
+
+    final List<List<String>> tableData = [];
+    for (var i = 0; i < sorted.length; i++) {
+      final inv = sorted[i];
+      final cityOrAddress = inv.customer.city.trim().isNotEmpty
+          ? inv.customer.city.trim()
+          : (inv.customer.address.trim().isNotEmpty ? inv.customer.address.trim() : '-');
+      final phone = inv.customer.phone.trim().isNotEmpty ? inv.customer.phone.trim() : '-';
+
+      tableData.add([
+        (i + 1).toString(),
+        inv.invoiceNumber,
+        DateFormatter.format(inv.invoiceDate),
+        inv.customer.name.trim(),
+        cityOrAddress,
+        phone,
+        CurrencyFormatter.formatWithoutSymbol(inv.grandTotal),
+        CurrencyFormatter.formatWithoutSymbol(inv.totalPaid),
+        CurrencyFormatter.formatWithoutSymbol(inv.balanceDue),
+      ]);
+    }
+
+    // Grand Total summary row
+    tableData.add([
+      'TOTAL',
+      '(${sorted.length} Bills)',
+      '',
+      '',
+      '',
+      '',
+      CurrencyFormatter.formatWithoutSymbol(sumTotal),
+      CurrencyFormatter.formatWithoutSymbol(sumPaid),
+      CurrencyFormatter.formatWithoutSymbol(sumBalance),
+    ]);
+
+    // Wooden & Parchment palette matching Temporary Bill theme
+    const darkWood = PdfColor.fromInt(0xFF2E1A0C);
+    const mediumWood = PdfColor.fromInt(0xFF5A321A);
+    const amberGold = PdfColor.fromInt(0xFFF0D488);
+    const antiqueGold = PdfColor.fromInt(0xFFD9B25F);
+    const creamText = PdfColor.fromInt(0xFFF8EFDC);
+    const parchmentBg = PdfColor.fromInt(0xFFFBF8F1);
+    const zebraBg = PdfColor.fromInt(0xFFF3EADC);
+    const gridBorder = PdfColor.fromInt(0xFFC7B397);
+    const darkText = PdfColor.fromInt(0xFF2A170B);
+    const woodNumber = PdfColor.fromInt(0xFF6B4226);
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageTheme: pw.PageTheme(
+          pageFormat: const PdfPageFormat(841.89, 595.28, marginAll: 22),
+          buildBackground: (context) => pw.FullPage(
+            ignoreMargins: true,
+            child: pw.Container(color: parchmentBg),
+          ),
+        ),
+        header: (context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                color: darkWood,
+                border: pw.Border.all(color: antiqueGold, width: 1.5),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('SUPRIME SOLUTIONS', style: pw.TextStyle(font: fontBold, fontSize: 15, color: amberGold)),
+                      pw.SizedBox(height: 2),
+                      pw.Text('Industrial Gaskets, Hydraulics & Industrial Supplies', style: pw.TextStyle(font: fontRegular, fontSize: 8.5, color: antiqueGold)),
+                      pw.Text('Mahalaxmi Bole, Beside Yashoda Dairy, Tikrapara, Bilaspur (C.G.) 495001  |  Ph: 9981365878', style: pw.TextStyle(font: fontRegular, fontSize: 8.0, color: creamText)),
+                      pw.Text('Temporary Bills Register | Bilaspur (C.G.)', style: pw.TextStyle(font: fontBold, fontSize: 8.5, color: amberGold)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('TEMPORARY BILLS REGISTER (FOR RECORD / AUDIT)', style: pw.TextStyle(font: fontBold, fontSize: 12, color: amberGold)),
+                      pw.SizedBox(height: 3),
+                      pw.Text('Period: ${DateFormatter.format(fromDate)}  to  ${DateFormatter.format(toDate)}', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: antiqueGold)),
+                      pw.Text('Total Temporary Bills: ${sorted.length}', style: pw.TextStyle(font: fontRegular, fontSize: 8.5, color: creamText)),
+                      pw.Text('Generated On: ${DateFormatter.format(DateTime.now())}', style: pw.TextStyle(font: fontRegular, fontSize: 8.0, color: antiqueGold)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 8),
+          ],
+        ),
+        footer: (context) => pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('* Verified Temporary Bills Register generated by Suprime Solutions.', style: pw.TextStyle(font: fontRegular, fontSize: 7.5, color: mediumWood)),
+            pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: pw.TextStyle(font: fontRegular, fontSize: 7.5, color: mediumWood)),
+          ],
+        ),
+        build: (context) => [
+          pw.TableHelper.fromTextArray(
+            headers: [
+              'S.NO.',
+              'BILL NO.',
+              'DATE',
+              'PARTY NAME',
+              'CITY / LOCATION',
+              'PHONE',
+              'TOTAL (Rs.)',
+              'PAID (Rs.)',
+              'BALANCE (Rs.)',
+            ],
+            data: tableData,
+            headerStyle: pw.TextStyle(font: fontBold, fontSize: 8.0, color: amberGold),
+            headerDecoration: const pw.BoxDecoration(color: mediumWood),
+            headerAlignment: pw.Alignment.center,
+            cellStyle: pw.TextStyle(font: fontRegular, fontSize: 8.0, color: darkText),
+            cellAlignments: {
+              0: pw.Alignment.center,
+              1: pw.Alignment.center,
+              2: pw.Alignment.center,
+              3: pw.Alignment.centerLeft,
+              4: pw.Alignment.center,
+              5: pw.Alignment.center,
+              6: pw.Alignment.centerRight,
+              7: pw.Alignment.centerRight,
+              8: pw.Alignment.centerRight,
+            },
+            columnWidths: {
+              0: const pw.FixedColumnWidth(35),
+              1: const pw.FixedColumnWidth(70),
+              2: const pw.FixedColumnWidth(70),
+              3: const pw.FlexColumnWidth(3.0),
+              4: const pw.FixedColumnWidth(110),
+              5: const pw.FixedColumnWidth(95),
+              6: const pw.FixedColumnWidth(85),
+              7: const pw.FixedColumnWidth(75),
+              8: const pw.FixedColumnWidth(75),
+            },
+            rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
+            oddRowDecoration: const pw.BoxDecoration(color: zebraBg),
+            cellDecoration: (col, data, rowNum) {
+              if (rowNum == tableData.length) {
+                return const pw.BoxDecoration(color: darkWood);
+              }
+              final isOdd = (rowNum - 1) % 2 != 0;
+              return isOdd ? const pw.BoxDecoration(color: zebraBg) : const pw.BoxDecoration(color: PdfColors.white);
+            },
+            textStyleBuilder: (col, data, rowNum) {
+              if (rowNum == tableData.length) {
+                return pw.TextStyle(font: fontBold, fontSize: 8.5, color: amberGold);
+              }
+              if (col == 0) {
+                return pw.TextStyle(font: fontBold, fontSize: 8.0, color: woodNumber);
+              }
+              if (col == 1 || col == 6) {
+                return pw.TextStyle(font: fontBold, fontSize: 8.0, color: darkWood);
+              }
+              return null;
+            },
+            border: pw.TableBorder.all(color: gridBorder, width: 0.6),
+          ),
+        ],
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  static Future<void> shareTemporaryBillsRegisterPdf(List<InvoiceModel> invoices, DateTime from, DateTime to) async {
+    final bytes = await generateTemporaryBillsRegisterPdf(invoices, from, to);
+    final fromStr = DateFormatter.format(from).replaceAll('/', '-');
+    final toStr = DateFormatter.format(to).replaceAll('/', '-');
+    final filename = 'Suprime_Solutions_Temporary_Bills_Register_${fromStr}_to_${toStr}.pdf';
+    await Printing.sharePdf(bytes: bytes, filename: filename);
+  }
+
   /// Builds a single full-bleed GST Invoice page on the authentic background template
   static pw.Page buildGstInvoicePage(InvoiceModel invoice, pw.MemoryImage templateImage, pw.Font fontBold) {
     // Prepare address lines

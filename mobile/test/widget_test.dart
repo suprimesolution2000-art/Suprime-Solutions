@@ -10,6 +10,7 @@ import 'package:mobile_billing/data/models/customer_model.dart';
 import 'package:mobile_billing/data/models/invoice_item_model.dart';
 import 'package:mobile_billing/services/updater/app_update_service.dart';
 import 'package:mobile_billing/services/sync/sync_service.dart';
+import 'package:mobile_billing/services/pdf/pdf_invoice_service.dart';
 import 'package:mobile_billing/providers/billing_provider.dart';
 import 'package:mobile_billing/providers/invoice_provider.dart';
 
@@ -241,6 +242,52 @@ void main() {
     expect(sync.pendingCount, isA<int>());
     expect(sync.isSyncing, isFalse);
     expect(sync.status, isNot(SyncStatus.syncing));
+  });
+
+  test('PdfInvoiceService.generateTemporaryBillsRegisterPdf creates valid PDF bytes without GST', () async {
+    final mockTempInvoices = [
+      InvoiceModel(
+        uuid: 'inv-temp-1',
+        invoiceNumber: '1',
+        sequenceNumber: 1,
+        financialYear: '26-27',
+        invoiceDate: DateTime(2026, 11, 8),
+        customer: CustomerModel(uuid: 'c1', name: 'Mahendra motors', phone: '9876543210', city: 'Bilaspur'),
+        items: [],
+        netAmount: 7300,
+        grandTotal: 7300,
+        amountInWords: 'Rupees Seven Thousand Three Hundred Only',
+        balanceDue: 0,
+        totalPaid: 7300,
+        invoiceType: 'temporary',
+      ),
+      InvoiceModel(
+        uuid: 'inv-temp-2',
+        invoiceNumber: '2',
+        sequenceNumber: 2,
+        financialYear: '26-27',
+        invoiceDate: DateTime(2026, 11, 7),
+        customer: CustomerModel(uuid: 'c2', name: 'Bhaskar Automobile korba', phone: '9988776655', city: 'Korba'),
+        items: [],
+        netAmount: 6500,
+        grandTotal: 6500,
+        amountInWords: 'Rupees Six Thousand Five Hundred Only',
+        balanceDue: 6500,
+        totalPaid: 0,
+        invoiceType: 'temporary',
+      ),
+    ];
+
+    final pdfBytes = await PdfInvoiceService.generateTemporaryBillsRegisterPdf(
+      mockTempInvoices,
+      DateTime(2026, 11, 1),
+      DateTime(2026, 11, 21),
+    );
+
+    expect(pdfBytes, isNotEmpty);
+    expect(pdfBytes.length, greaterThan(1000));
+    final headerStr = String.fromCharCodes(pdfBytes.sublist(0, 5));
+    expect(headerStr, '%PDF-');
   });
 
   testWidgets('App Launches and displays Login Screen when unauthenticated', (WidgetTester tester) async {

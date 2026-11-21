@@ -230,6 +230,22 @@ class InvoiceRepository {
     return results.map((m) => InvoiceModel.fromMap(m)).toList();
   }
 
+  /// Get all active Temporary Bills for a date range in chronological ascending order
+  Future<List<InvoiceModel>> getTemporaryInvoicesForDateRange(DateTime from, DateTime to) async {
+    final db = await _db.database;
+    final start = DateTime(from.year, from.month, from.day).toIso8601String();
+    final end = DateTime(to.year, to.month, to.day, 23, 59, 59).toIso8601String();
+
+    final results = await db.query(
+      'invoices',
+      where: "status != 'cancelled' AND invoice_type = 'temporary' AND invoice_date >= ? AND invoice_date <= ?",
+      whereArgs: [start, end],
+      orderBy: 'invoice_date ASC, sequence_number ASC',
+    );
+
+    return results.map((m) => InvoiceModel.fromMap(m)).toList();
+  }
+
   Future<void> saveInvoice(InvoiceModel invoice) async {
     final db = await _db.database;
     await db.insert(
@@ -430,19 +446,31 @@ class InvoiceRepository {
     final db = await _db.database;
     final fy = getFinancialYear(date);
 
-    final nextNumRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number']);
+    final maxRes = await db.rawQuery(
+      "SELECT MAX(sequence_number) as max_seq FROM invoices WHERE invoice_type = 'temporary' AND financial_year = ?",
+      [fy],
+    );
+    int maxSeq = 0;
+    if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
+      maxSeq = maxRes.first['max_seq'] as int;
+    }
 
-    int nextNum = 1;
+    final nextNumRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number']);
+    int savedNum = 1;
     if (nextNumRes.isNotEmpty) {
-      nextNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
-    } else {
-      final maxRes = await db.rawQuery(
-        "SELECT MAX(sequence_number) as max_seq FROM invoices WHERE invoice_type = 'temporary' AND financial_year = ?",
-        [fy],
+      savedNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
+    }
+
+    int nextNum = savedNum > (maxSeq + 1) ? savedNum : (maxSeq + 1);
+
+    // Ensure candidate doesn't already exist locally
+    while (true) {
+      final existing = await db.rawQuery(
+        "SELECT 1 FROM invoices WHERE invoice_type = 'temporary' AND (invoice_number = ? OR sequence_number = ?)",
+        [nextNum.toString(), nextNum],
       );
-      if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
-        nextNum = (maxRes.first['max_seq'] as int) + 1;
-      }
+      if (existing.isEmpty) break;
+      nextNum++;
     }
 
     final prefixRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['temporary_invoice_prefix']);
@@ -460,21 +488,22 @@ class InvoiceRepository {
     final fy = getFinancialYear(date);
 
     return await db.transaction<Map<String, dynamic>>((txn) async {
-      final nextNumRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number']);
-
-      int nextNum = 1;
-      if (nextNumRes.isNotEmpty) {
-        nextNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
-      } else {
-        // Find highest existing sequence for GST in this FY
-        final maxRes = await txn.rawQuery(
-          "SELECT MAX(sequence_number) as max_seq FROM invoices WHERE (invoice_type IS NULL OR invoice_type != 'temporary') AND financial_year = ?",
-          [fy],
-        );
-        if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
-          nextNum = (maxRes.first['max_seq'] as int) + 1;
-        }
+      final maxRes = await txn.rawQuery(
+        "SELECT MAX(sequence_number) as max_seq FROM invoices WHERE (invoice_type IS NULL OR invoice_type != 'temporary') AND financial_year = ?",
+        [fy],
+      );
+      int maxSeq = 0;
+      if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
+        maxSeq = maxRes.first['max_seq'] as int;
       }
+
+      final nextNumRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number']);
+      int savedNum = 1;
+      if (nextNumRes.isNotEmpty) {
+        savedNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
+      }
+
+      int nextNum = savedNum > (maxSeq + 1) ? savedNum : (maxSeq + 1);
 
       final prefixRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['invoice_prefix']);
       final prefix = prefixRes.isNotEmpty ? (prefixRes.first['value'] as String? ?? '') : '';
@@ -489,7 +518,6 @@ class InvoiceRepository {
         seqNum = parsed ?? nextNum;
         nextNum = (parsed != null && parsed >= nextNum) ? parsed + 1 : nextNum + 1;
       } else {
-        // Simple format: e.g. "1", "2", "3" or "SS-1"
         invoiceNumber = prefix.isNotEmpty ? '$prefix$nextNum' : '$nextNum';
         seqNum = nextNum;
         nextNum = nextNum + 1;
@@ -519,20 +547,31 @@ class InvoiceRepository {
     final fy = getFinancialYear(date);
 
     return await db.transaction<Map<String, dynamic>>((txn) async {
-      final nextNumRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number']);
+      final maxRes = await txn.rawQuery(
+        "SELECT MAX(sequence_number) as max_seq FROM invoices WHERE invoice_type = 'temporary' AND financial_year = ?",
+        [fy],
+      );
+      int maxSeq = 0;
+      if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
+        maxSeq = maxRes.first['max_seq'] as int;
+      }
 
-      int nextNum = 1;
+      final nextNumRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number']);
+      int savedNum = 1;
       if (nextNumRes.isNotEmpty) {
-        nextNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
-      } else {
-        // Find highest existing sequence for temporary bills in this FY
-        final maxRes = await txn.rawQuery(
-          "SELECT MAX(sequence_number) as max_seq FROM invoices WHERE invoice_type = 'temporary' AND financial_year = ?",
-          [fy],
+        savedNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
+      }
+
+      int nextNum = savedNum > (maxSeq + 1) ? savedNum : (maxSeq + 1);
+
+      // Verify nextNum doesn't collide with existing invoice
+      while (true) {
+        final existing = await txn.rawQuery(
+          "SELECT 1 FROM invoices WHERE invoice_type = 'temporary' AND (invoice_number = ? OR sequence_number = ?)",
+          [nextNum.toString(), nextNum],
         );
-        if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
-          nextNum = (maxRes.first['max_seq'] as int) + 1;
-        }
+        if (existing.isEmpty) break;
+        nextNum++;
       }
 
       final prefixRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['temporary_invoice_prefix']);
@@ -542,11 +581,24 @@ class InvoiceRepository {
       int seqNum;
 
       if (customInvoiceNumber != null && customInvoiceNumber.trim().isNotEmpty) {
-        invoiceNumber = customInvoiceNumber.trim();
-        final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber) ?? RegExp(r'(\d+)').firstMatch(invoiceNumber);
-        final parsed = match != null ? int.tryParse(match.group(1)!) : null;
-        seqNum = parsed ?? nextNum;
-        nextNum = (parsed != null && parsed >= nextNum) ? parsed + 1 : nextNum + 1;
+        final candidateStr = customInvoiceNumber.trim();
+        // Check if candidateStr already exists
+        final existing = await txn.rawQuery(
+          "SELECT 1 FROM invoices WHERE invoice_type = 'temporary' AND invoice_number = ?",
+          [candidateStr],
+        );
+        if (existing.isEmpty) {
+          invoiceNumber = candidateStr;
+          final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber) ?? RegExp(r'(\d+)').firstMatch(invoiceNumber);
+          final parsed = match != null ? int.tryParse(match.group(1)!) : null;
+          seqNum = parsed ?? nextNum;
+          nextNum = (parsed != null && parsed >= nextNum) ? parsed + 1 : nextNum + 1;
+        } else {
+          // If candidateStr was already taken (e.g. preview was stuck or stale), assign next fresh sequential number
+          invoiceNumber = prefix.isNotEmpty ? '$prefix$nextNum' : '$nextNum';
+          seqNum = nextNum;
+          nextNum = nextNum + 1;
+        }
       } else {
         invoiceNumber = prefix.isNotEmpty ? '$prefix$nextNum' : '$nextNum';
         seqNum = nextNum;
@@ -669,20 +721,23 @@ class InvoiceRepository {
         }
       }
 
-      // Renumber the 2 finalized temporary bills to clean plain numbers '1' and '2'
-      batch.rawUpdate(
-        "UPDATE invoices SET invoice_number = '1', sequence_number = 1 WHERE uuid = '04c2189e-6374-441a-8cfa-5438f8dfdba9' OR (invoice_type = 'temporary' AND customer_json LIKE '%Mahendra%')",
+      // Ensure local next_temporary_number counter is aligned with existing invoices
+      final maxTempRes = await db.rawQuery(
+        "SELECT MAX(sequence_number) as max_seq FROM invoices WHERE invoice_type = 'temporary'"
       );
-      batch.rawUpdate(
-        "UPDATE invoices SET invoice_number = '2', sequence_number = 2 WHERE uuid = '179aa966-f1f6-46ce-aeed-3a5f7dd57b18' OR (invoice_type = 'temporary' AND customer_json LIKE '%Bhaskar%')",
-      );
-      // Ensure local counter is at least 3
-      batch.insert(
-        'app_settings',
-        {'key': 'next_temporary_number', 'value': '3'},
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-      needsUpdate = true;
+      if (maxTempRes.isNotEmpty && maxTempRes.first['max_seq'] != null) {
+        final maxSeq = maxTempRes.first['max_seq'] as int;
+        final currentTempRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number']);
+        final currentTemp = currentTempRes.isNotEmpty ? (int.tryParse(currentTempRes.first['value'] as String) ?? 1) : 1;
+        if (maxSeq + 1 > currentTemp) {
+          batch.insert(
+            'app_settings',
+            {'key': 'next_temporary_number', 'value': (maxSeq + 1).toString()},
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          needsUpdate = true;
+        }
+      }
 
       if (needsUpdate) {
         await batch.commit(noResult: true);

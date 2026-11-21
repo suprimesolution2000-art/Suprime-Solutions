@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert');
-const { generateInvoicePdf, generateGstSalesRegisterPdf } = require('../src/services/pdfService');
+const { generateInvoicePdf, generateGstSalesRegisterPdf, generateTemporaryBillsRegisterPdf } = require('../src/services/pdfService');
 
 describe('Backend Services & PDF Overlay Tests', () => {
   it('should generate an invoice PDF buffer from sample data using the master template', async () => {
@@ -106,6 +106,34 @@ describe('Backend Services & PDF Overlay Tests', () => {
     const pdfBuffer = await generateGstSalesRegisterPdf(mockInvoices, new Date('2026-10-01'), new Date('2026-11-08'));
     assert.ok(pdfBuffer instanceof Buffer);
     assert.ok(pdfBuffer.length > 1000, 'Sales register PDF buffer should have valid size');
+
+    const header = pdfBuffer.slice(0, 5).toString('utf8');
+    assert.strictEqual(header, '%PDF-');
+  });
+
+  it('should generate an Excel-Style Temporary Bills Sales Register PDF (No GST)', async () => {
+    const mockTempInvoices = [
+      {
+        invoiceNumber: '1',
+        invoiceDate: new Date('2026-11-08'),
+        customer: { name: 'Mahendra motors', city: 'Bilaspur', phone: '9876543210' },
+        grandTotal: 7300,
+        totalPaid: 7300,
+        balanceDue: 0
+      },
+      {
+        invoiceNumber: '2',
+        invoiceDate: new Date('2026-11-07'),
+        customer: { name: 'Bhaskar Automobile korba', city: 'Bilaspur', phone: '9988776655' },
+        grandTotal: 6500,
+        totalPaid: 0,
+        balanceDue: 6500
+      }
+    ];
+
+    const pdfBuffer = await generateTemporaryBillsRegisterPdf(mockTempInvoices, new Date('2026-11-01'), new Date('2026-11-21'));
+    assert.ok(pdfBuffer instanceof Buffer);
+    assert.ok(pdfBuffer.length > 1000, 'Temporary bills register PDF buffer should have valid size');
 
     const header = pdfBuffer.slice(0, 5).toString('utf8');
     assert.strictEqual(header, '%PDF-');

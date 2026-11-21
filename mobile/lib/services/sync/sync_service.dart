@@ -379,13 +379,18 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
 
         // 2b. Save cloud invoices
         final serverInvoices = data['invoices'] as List? ?? [];
-        int maxServerSeq = 0;
+        int maxServerGstSeq = 0;
+        int maxServerTempSeq = 0;
         for (final item in serverInvoices) {
           final invMap = Map<String, dynamic>.from(item);
           final serverInv = InvoiceModel.fromMap(invMap);
 
           final seq = serverInv.sequenceNumber;
-          if (seq > maxServerSeq) maxServerSeq = seq;
+          if (serverInv.invoiceType == 'temporary') {
+            if (seq > maxServerTempSeq) maxServerTempSeq = seq;
+          } else {
+            if (seq > maxServerGstSeq) maxServerGstSeq = seq;
+          }
 
           if (activeTombstones.contains('deleted_invoice_${serverInv.uuid}') ||
               serverInv.status == 'cancelled' ||
@@ -397,17 +402,17 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
 
           final localExisting = await db.query(
             'invoices',
-            where: 'uuid = ? OR invoice_number = ?',
-            whereArgs: [serverInv.uuid, serverInv.invoiceNumber],
+            where: 'uuid = ?',
+            whereArgs: [serverInv.uuid],
             limit: 1,
           );
           if (localExisting.isNotEmpty) {
-            // Already present in cloud! Ensure local copy is updated and marked synced
+            // Already present in local DB! Ensure copy is updated and marked synced
             await db.update(
               'invoices',
               serverInv.copyWith(syncStatus: 'synced').toMap(),
-              where: 'uuid = ? OR invoice_number = ?',
-              whereArgs: [serverInv.uuid, serverInv.invoiceNumber],
+              where: 'uuid = ?',
+              whereArgs: [serverInv.uuid],
             );
           } else {
             await db.insert(
@@ -418,14 +423,26 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
           }
         }
 
-        // Keep local sequence counter aligned with cloud maximum
-        if (maxServerSeq > 0) {
+        // Keep local sequence counters aligned with cloud maximum
+        if (maxServerGstSeq > 0) {
           final currentNextRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number']);
           final currentNext = currentNextRes.isNotEmpty ? (int.tryParse(currentNextRes.first['value'] as String) ?? 1) : 1;
-          if (maxServerSeq + 1 > currentNext) {
+          if (maxServerGstSeq + 1 > currentNext) {
             await db.insert(
               'app_settings',
-              {'key': 'next_usable_number', 'value': (maxServerSeq + 1).toString()},
+              {'key': 'next_usable_number', 'value': (maxServerGstSeq + 1).toString()},
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          }
+        }
+
+        if (maxServerTempSeq > 0) {
+          final currentTempRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number']);
+          final currentTemp = currentTempRes.isNotEmpty ? (int.tryParse(currentTempRes.first['value'] as String) ?? 1) : 1;
+          if (maxServerTempSeq + 1 > currentTemp) {
+            await db.insert(
+              'app_settings',
+              {'key': 'next_temporary_number', 'value': (maxServerTempSeq + 1).toString()},
               conflictAlgorithm: ConflictAlgorithm.replace,
             );
           }
