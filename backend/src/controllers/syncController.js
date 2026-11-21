@@ -119,9 +119,19 @@ exports.pushSync = async (req, res, next) => {
     // 2. Sync Invoices
     for (const inv of invoices) {
       try {
+        const isTemporary = (inv.invoiceType || inv.invoice_type) === 'temporary';
+
         let existing = await Invoice.findOne({ uuid: inv.uuid });
         if (!existing && inv.invoiceNumber) {
-          existing = await Invoice.findOne({ invoiceNumber: inv.invoiceNumber });
+          existing = await Invoice.findOne({
+            invoiceNumber: inv.invoiceNumber,
+            invoiceType: isTemporary ? 'temporary' : { $ne: 'temporary' }
+          });
+        }
+
+        // Prevent older stale clients from re-cancelling restored server temporary bills
+        if (isTemporary && existing && existing.status === 'finalized' && existing.active === true && (inv.status === 'cancelled' || inv.active === false)) {
+          continue;
         }
 
         // If invoice is marked cancelled or inactive from mobile
