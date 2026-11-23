@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../data/database/app_database.dart';
@@ -10,6 +10,7 @@ import '../../data/models/customer_model.dart';
 import '../../data/models/payment_model.dart';
 import '../../data/models/product_model.dart';
 import '../../data/repositories/customer_repository.dart';
+import '../../data/repositories/invoice_repository.dart';
 import '../../data/repositories/product_repository.dart';
 
 enum SyncStatus {
@@ -98,13 +99,28 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
   Future<int> checkPendingQueue() async {
     try {
       final db = await AppDatabase.instance.database;
-      final res = await db.rawQuery('''
+      // SYNC-02: Count pending invoices, payments, and offline deletion tombstones
+      final invRes = await db.rawQuery('''
         SELECT COUNT(*) as count 
         FROM invoices 
         WHERE sync_status != 'synced' 
           AND (status IS NULL OR status != 'cancelled')
       ''');
-      _pendingCount = (res.first['count'] as int?) ?? 0;
+      final payRes = await db.rawQuery('''
+        SELECT COUNT(*) as count 
+        FROM payments 
+        WHERE sync_status != 'synced' OR sync_status IS NULL
+      ''');
+      final tombRes = await db.rawQuery('''
+        SELECT COUNT(*) as count 
+        FROM app_settings 
+        WHERE key LIKE 'deleted_%'
+      ''');
+
+      final invCount = (invRes.first['count'] as int?) ?? 0;
+      final payCount = (payRes.first['count'] as int?) ?? 0;
+      final tombCount = (tombRes.first['count'] as int?) ?? 0;
+      _pendingCount = invCount + payCount + tombCount;
       notifyListeners();
       return _pendingCount;
     } catch (e) {
@@ -113,9 +129,28 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  void stopSync() {
+    _stopForegroundTimer();
+    _isSyncing = false;
+    _status = SyncStatus.offline;
+    _statusMessage = 'Offline';
+    notifyListeners();
+  }
+
   // Trigger synchronization across bills, customers, products, and payments
   Future<bool> synchronize({bool forceFullSync = false}) async {
     if (_isSyncing) return false;
+
+    // S14: Do not attempt network sync if unauthenticated/logged out
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+    if (token == null || token.isEmpty) {
+      _status = SyncStatus.offline;
+      _statusMessage = 'Offline';
+      notifyListeners();
+      return false;
+    }
+
     _isSyncing = true;
     _status = SyncStatus.syncing;
     _statusMessage = _pendingCount > 0
@@ -173,6 +208,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<bool> _executeSync({bool forceFullSync = false}) async {
     try {
+      if (!_isSyncing) return false;
       final db = await AppDatabase.instance.database;
       final prefs = await SharedPreferences.getInstance();
 
@@ -186,61 +222,19 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
 
       final invoicesToPush = pendingInvoicesData.map((row) {
         final inv = InvoiceModel.fromMap(row);
-        return {
-          'uuid': inv.uuid,
-          'invoiceNumber': inv.invoiceNumber,
-          'sequenceNumber': inv.sequenceNumber,
-          'financialYear': inv.financialYear,
-          'invoiceDate': inv.invoiceDate.toIso8601String(),
-          'dueDate': inv.dueDate?.toIso8601String(),
-          'poNumber': inv.poNumber,
-          'poDate': inv.poDate?.toIso8601String(),
-          'challanNumber': inv.challanNumber,
-          'challanDate': inv.challanDate?.toIso8601String(),
-          'customer': inv.customer.toMap(),
-          'isInterState': inv.isInterState,
-          'items': inv.items.map((e) => e.toApiMap()).toList(),
-          'netAmount': inv.netAmount,
-          'cgstTotal': inv.cgstTotal,
-          'sgstTotal': inv.sgstTotal,
-          'igstTotal': inv.igstTotal,
-          'roundOff': inv.roundOff,
-          'grandTotal': inv.grandTotal,
-          'amountInWords': inv.amountInWords,
-          'status': inv.status,
-          'paymentStatus': inv.paymentStatus,
-          'totalPaid': inv.totalPaid,
-          'balanceDue': inv.balanceDue,
-          'deviceId': deviceId,
-          'createdBy': inv.createdBy.isNotEmpty ? inv.createdBy : 'Administrator',
-          'invoiceType': inv.invoiceType,
-        };
+        final map = inv.toApiMap();
+        map['deviceId'] = deviceId;
+        if ((map['createdBy'] ?? '').toString().isEmpty) {
+          map['createdBy'] = 'Administrator';
+        }
+        return map;
       }).toList();
 
-      // Collect local customers to sync (delta sync vs full sync)
-      final List<Map<String, dynamic>> localCustomers;
-      if (forceFullSync) {
-        localCustomers = await db.query(
-          'customers',
-          where: "active = 1 OR active IS NULL OR active = 'true'",
-        );
-      } else {
-        final pendingCustUuids = invoicesToPush
-            .map((i) => (i['customer'] as Map?)?['uuid'] as String?)
-            .where((u) => u != null && u.isNotEmpty)
-            .cast<String>()
-            .toSet();
-        if (pendingCustUuids.isNotEmpty) {
-          final placeholders = List.filled(pendingCustUuids.length, '?').join(',');
-          localCustomers = await db.query(
-            'customers',
-            where: "uuid IN ($placeholders) AND (active = 1 OR active IS NULL OR active = 'true')",
-            whereArgs: pendingCustUuids.toList(),
-          );
-        } else {
-          localCustomers = [];
-        }
-      }
+      // Collect local customers to sync (include active customers so standalone creations/edits are synced)
+      final List<Map<String, dynamic>> localCustomers = await db.query(
+        'customers',
+        where: "active = 1 OR active IS NULL OR active = 'true'",
+      );
       final customersToPush = localCustomers.map((c) => {
         'uuid': c['uuid'],
         'name': c['name'],
@@ -259,13 +253,11 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
         'active': c['active'] == 1 || c['active'] == true,
       }).toList();
 
-      // Collect products (only push during full sync or when pending items exist)
-      final List<Map<String, dynamic>> localProducts = forceFullSync
-          ? await db.query(
-              'products',
-              where: "active = 1 OR active IS NULL OR active = 'true'",
-            )
-          : [];
+      // Collect products (push active catalogue products so offline additions/edits are synced)
+      final List<Map<String, dynamic>> localProducts = await db.query(
+        'products',
+        where: "active = 1 OR active IS NULL OR active = 'true'",
+      );
       final productsToPush = localProducts.map((p) => {
         'uuid': p['uuid'],
         'description': p['description'],
@@ -276,8 +268,10 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
         'active': p['active'] == 1 || p['active'] == true,
       }).toList();
 
-      // Collect payments
-      final localPayments = await db.query('payments');
+      // Collect payments (only un-synced payments unless forceFullSync)
+      final localPayments = forceFullSync
+          ? await db.query('payments')
+          : await db.query('payments', where: "sync_status != 'synced' OR sync_status IS NULL");
       final paymentsToPush = localPayments.map((p) => {
         'uuid': p['uuid'],
         'invoiceId': p['invoice_id'],
@@ -294,6 +288,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
       }).toList();
 
       // Process pending cloud deletions (tombstones recorded while offline)
+      // If 403 Forbidden (not allowed for role) or 404 (already deleted), delete tombstone to avoid infinite sync loops (S11)
       final allSettings = await db.query('app_settings');
       for (final s in allSettings) {
         final key = s['key'] as String;
@@ -302,18 +297,30 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
           try {
             await ApiClient.instance.deleteInvoice(uuid);
             await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+          } on DioException catch (dioErr) {
+            if (dioErr.response?.statusCode == 403 || dioErr.response?.statusCode == 404) {
+              await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+            }
           } catch (_) {}
         } else if (key.startsWith('deleted_customer_')) {
           final uuid = key.replaceFirst('deleted_customer_', '');
           try {
             await ApiClient.instance.deleteCustomer(uuid);
             await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+          } on DioException catch (dioErr) {
+            if (dioErr.response?.statusCode == 403 || dioErr.response?.statusCode == 404) {
+              await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+            }
           } catch (_) {}
         } else if (key.startsWith('deleted_product_')) {
           final uuid = key.replaceFirst('deleted_product_', '');
           try {
             await ApiClient.instance.deleteProduct(uuid);
             await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+          } on DioException catch (dioErr) {
+            if (dioErr.response?.statusCode == 403 || dioErr.response?.statusCode == 404) {
+              await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+            }
           } catch (_) {}
         }
       }
@@ -335,6 +342,10 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
                   ?.map((e) => e.toString())
                   .toSet() ??
               <String>{};
+          final syncedPaymentsList = (results['syncedPaymentUuids'] as List?)
+                  ?.map((e) => e.toString())
+                  .toSet() ??
+              <String>{};
 
           for (final row in pendingInvoicesData) {
             final uuid = row['uuid'] as String;
@@ -347,11 +358,27 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
               );
             }
           }
+
+          // SYNC-01: Only mark payments as synced if explicitly confirmed by server response
+          for (final pay in paymentsToPush) {
+            final payUuid = pay['uuid'] as String?;
+            if (payUuid != null && payUuid.isNotEmpty && syncedPaymentsList.contains(payUuid)) {
+              await db.update('payments', {'sync_status': 'synced'}, where: 'uuid = ?', whereArgs: [payUuid]);
+            }
+          }
         }
       }
 
-      // Step 2: Always request full sync to eliminate device clock and timezone drift between devices
-      final pullRes = await ApiClient.instance.pullSync(null);
+      if (!_isSyncing) return false;
+      // Step 2: Request delta sync or full sync
+      String? lastSyncTimestamp;
+      if (!forceFullSync) {
+        final lastSyncSetting = await db.query('app_settings', where: 'key = ?', whereArgs: ['last_sync_timestamp']);
+        if (lastSyncSetting.isNotEmpty) {
+          lastSyncTimestamp = lastSyncSetting.first['value'] as String?;
+        }
+      }
+      final pullRes = await ApiClient.instance.pullSync(lastSyncTimestamp);
       if (pullRes.statusCode == 200 && pullRes.data['success'] == true) {
         final data = pullRes.data['data'];
         final custRepo = CustomerRepository();
@@ -373,7 +400,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
             continue;
           }
           if (serverCust.name.trim().isNotEmpty) {
-            await custRepo.saveCustomer(serverCust);
+            await custRepo.saveCustomer(serverCust, preserveInactive: true, preserveBalancesIfZero: true);
           }
         }
 
@@ -381,22 +408,40 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
         final serverInvoices = data['invoices'] as List? ?? [];
         int maxServerGstSeq = 0;
         int maxServerTempSeq = 0;
+        final currentFy = InvoiceRepository.getFinancialYear(DateTime.now());
+
         for (final item in serverInvoices) {
           final invMap = Map<String, dynamic>.from(item);
           final serverInv = InvoiceModel.fromMap(invMap);
 
-          final seq = serverInv.sequenceNumber;
-          if (serverInv.invoiceType == 'temporary') {
-            if (seq > maxServerTempSeq) maxServerTempSeq = seq;
-          } else {
-            if (seq > maxServerGstSeq) maxServerGstSeq = seq;
+          final invFy = serverInv.financialYear.isNotEmpty
+              ? serverInv.financialYear
+              : InvoiceRepository.getFinancialYear(serverInv.invoiceDate);
+
+          // Only track sequence max for the current financial year to avoid past FY corruption (S5)
+          if (invFy == currentFy) {
+            final seq = serverInv.sequenceNumber;
+            if (serverInv.invoiceType == 'temporary') {
+              if (seq > maxServerTempSeq) maxServerTempSeq = seq;
+            } else {
+              if (seq > maxServerGstSeq) maxServerGstSeq = seq;
+            }
           }
 
-          if (activeTombstones.contains('deleted_invoice_${serverInv.uuid}') ||
-              serverInv.status == 'cancelled' ||
-              invMap['active'] == false) {
+          if (activeTombstones.contains('deleted_invoice_${serverInv.uuid}')) {
             await db.delete('invoices', where: 'uuid = ?', whereArgs: [serverInv.uuid]);
             await db.delete('payments', where: 'invoice_id = ?', whereArgs: [serverInv.uuid]);
+            continue;
+          }
+
+          // DATA-17: Cancelled tax invoices must be retained in SQLite for GST audit compliance, not hard-deleted
+          if (serverInv.status == 'cancelled' || invMap['active'] == false) {
+            await db.update(
+              'invoices',
+              {'status': 'cancelled', 'sync_status': 'synced'},
+              where: 'uuid = ?',
+              whereArgs: [serverInv.uuid],
+            );
             continue;
           }
 
@@ -407,6 +452,11 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
             limit: 1,
           );
           if (localExisting.isNotEmpty) {
+            final localSyncStatus = localExisting.first['sync_status'] as String?;
+            if (localSyncStatus == 'waiting_for_internet' || localSyncStatus == 'pending') {
+              // Local offline edits are pending sync — do not overwrite
+              continue;
+            }
             // Already present in local DB! Ensure copy is updated and marked synced
             await db.update(
               'invoices',
@@ -425,9 +475,15 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
 
         // Keep local sequence counters aligned with cloud maximum
         if (maxServerGstSeq > 0) {
-          final currentNextRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number']);
+          final fy = InvoiceRepository.getFinancialYear(DateTime.now());
+          final currentNextRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number_$fy']);
           final currentNext = currentNextRes.isNotEmpty ? (int.tryParse(currentNextRes.first['value'] as String) ?? 1) : 1;
           if (maxServerGstSeq + 1 > currentNext) {
+            await db.insert(
+              'app_settings',
+              {'key': 'next_usable_number_$fy', 'value': (maxServerGstSeq + 1).toString()},
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
             await db.insert(
               'app_settings',
               {'key': 'next_usable_number', 'value': (maxServerGstSeq + 1).toString()},
@@ -452,6 +508,7 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
         final serverPayments = data['payments'] as List? ?? [];
         for (final item in serverPayments) {
           final payMap = Map<String, dynamic>.from(item);
+          payMap['sync_status'] = 'synced';
           final serverPay = PaymentModel.fromMap(payMap);
           if (serverPay.uuid.isNotEmpty && !activeTombstones.contains('deleted_invoice_${serverPay.invoiceId}')) {
             await db.insert(
@@ -459,6 +516,39 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
               serverPay.toMap(),
               conflictAlgorithm: ConflictAlgorithm.replace,
             );
+
+            // SYNC-05: Update invoice total_paid and balance_due in SQLite when new cloud payment arrives
+            if (serverPay.invoiceId.isNotEmpty) {
+              final allInvPayments = await db.query(
+                'payments',
+                columns: ['amount'],
+                where: 'invoice_id = ?',
+                whereArgs: [serverPay.invoiceId],
+              );
+              final totalPaidSum = allInvPayments.fold(0.0, (acc, p) => acc + ((p['amount'] as num?)?.toDouble() ?? 0.0));
+              final invRows = await db.query(
+                'invoices',
+                columns: ['grand_total'],
+                where: 'uuid = ?',
+                whereArgs: [serverPay.invoiceId],
+                limit: 1,
+              );
+              if (invRows.isNotEmpty) {
+                final gt = (invRows.first['grand_total'] as num?)?.toDouble() ?? 0.0;
+                final newBal = (gt - totalPaidSum).clamp(0.0, double.infinity);
+                final newStatus = newBal <= 0.005 ? 'paid' : (totalPaidSum > 0 ? 'partially_paid' : 'unpaid');
+                await db.update(
+                  'invoices',
+                  {
+                    'total_paid': totalPaidSum,
+                    'balance_due': newBal,
+                    'payment_status': newStatus,
+                  },
+                  where: 'uuid = ?',
+                  whereArgs: [serverPay.invoiceId],
+                );
+              }
+            }
           }
         }
 
@@ -485,6 +575,12 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
           await custRepo.recalculateCustomerBalances();
         } catch (_) {}
 
+        // SYNC-03: If server response hit 1,000 item limit, do not advance timestamp so remainder can be pulled
+        final isTruncated = serverCustomers.length >= 1000 ||
+            serverInvoices.length >= 1000 ||
+            serverPayments.length >= 1000 ||
+            serverProducts.length >= 1000;
+
         final serverTime = pullRes.data['timestamp'] as String?;
         if (serverTime != null) {
           _lastSyncTime = DateTime.tryParse(serverTime) ?? DateTime.now();
@@ -492,6 +588,13 @@ class SyncService extends ChangeNotifier with WidgetsBindingObserver {
           _lastSyncTime = DateTime.now();
         }
         await prefs.setString('last_sync_time', _lastSyncTime!.toIso8601String());
+        if (!isTruncated) {
+          await db.insert(
+            'app_settings',
+            {'key': 'last_sync_timestamp', 'value': serverTime ?? _lastSyncTime!.toIso8601String()},
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
       }
       return true;
     } catch (e) {

@@ -52,7 +52,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     }
   }
 
-  void _showAddUserDialog() {
+  Future<void> _showAddUserDialog() async {
     final nameCtrl = TextEditingController();
     final usernameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
@@ -61,7 +61,8 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     bool isSubmitting = false;
     String? dialogError;
 
-    showDialog(
+    try {
+      await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
@@ -120,7 +121,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: selectedRole,
+                    initialValue: selectedRole,
                     decoration: const InputDecoration(
                       labelText: 'Role',
                       border: OutlineInputBorder(),
@@ -184,12 +185,14 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                             if (res.statusCode == 201 && res.data['success'] == true) {
                               Navigator.pop(ctx);
                               _loadUsers();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Staff @$username created successfully!'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Staff @$username created successfully!'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
                             } else {
                               setDialogState(() {
                                 isSubmitting = false;
@@ -215,14 +218,21 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         },
       ),
     );
+    } finally {
+      nameCtrl.dispose();
+      usernameCtrl.dispose();
+      phoneCtrl.dispose();
+      passCtrl.dispose();
+    }
   }
 
-  void _showResetPasswordDialog(Map<String, dynamic> user) {
+  Future<void> _showResetPasswordDialog(Map<String, dynamic> user) async {
     final passCtrl = TextEditingController();
     bool isSubmitting = false;
     String? dialogError;
 
-    showDialog(
+    try {
+      await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
@@ -282,12 +292,14 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                             if (res.statusCode == 200 && res.data['success'] == true) {
                               Navigator.pop(ctx);
                               _loadUsers();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Password for @${user['username']} updated!'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Password for @${user['username']} updated!'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
                             } else {
                               setDialogState(() {
                                 isSubmitting = false;
@@ -313,6 +325,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         },
       ),
     );
+    } finally {
+      passCtrl.dispose();
+    }
   }
 
   void _confirmDeleteUser(Map<String, dynamic> user) {
@@ -478,7 +493,13 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                                       children: [
                                         const Icon(Icons.phone, size: 16, color: Colors.grey),
                                         const SizedBox(width: 6),
-                                        Text('Mobile: ${u['phone']}', style: const TextStyle(fontSize: 13)),
+                                        Expanded(
+                                          child: Text(
+                                            'Mobile: ${u['phone']}',
+                                            style: const TextStyle(fontSize: 13),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                     const SizedBox(height: 6),

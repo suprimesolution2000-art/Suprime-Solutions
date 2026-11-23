@@ -56,6 +56,27 @@ class CustomerModel {
     };
   }
 
+  /// Camel-case representation for Cloud API and Mongo syncing (D4)
+  Map<String, dynamic> toApiMap() {
+    return {
+      'uuid': uuid,
+      'name': name,
+      'businessName': businessName,
+      'phone': phone,
+      'email': email,
+      'gstin': gstin,
+      'address': address,
+      'city': city,
+      'state': state,
+      'stateCode': stateCode,
+      'pincode': pincode,
+      'outstandingBalance': outstandingBalance,
+      'totalBilled': totalBilled,
+      'totalPaid': totalPaid,
+      'active': active,
+    };
+  }
+
   factory CustomerModel.fromMap(Map<String, dynamic> map) {
     double parseNum(dynamic val) {
       if (val == null) return 0.0;

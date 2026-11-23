@@ -78,23 +78,34 @@ class InvoiceItemModel {
   }
 
   factory InvoiceItemModel.fromMap(Map<String, dynamic> map) {
+    double parseDouble(dynamic val, [double def = 0.0]) {
+      if (val == null) return def;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? def;
+    }
+    int parseInt(dynamic val, [int def = 1]) {
+      if (val == null) return def;
+      if (val is num) return val.toInt();
+      return int.tryParse(val.toString()) ?? def;
+    }
+
     return InvoiceItemModel(
-      sno: ((map['sno'] ?? 1) as num).toInt(),
+      sno: parseInt(map['sno'], 1),
       description: map['description'] ?? '',
       hsnCode: map['hsn_code'] ?? map['hsnCode'] ?? '',
-      quantity: ((map['quantity'] ?? 0.0) as num).toDouble(),
+      quantity: parseDouble(map['quantity'], 0.0),
       unit: map['unit'] ?? 'PCS',
-      rate: ((map['rate'] ?? 0.0) as num).toDouble(),
-      discount: ((map['discount'] ?? 0.0) as num).toDouble(),
-      taxableValue: ((map['taxable_value'] ?? map['taxableValue'] ?? 0.0) as num).toDouble(),
-      gstRate: ((map['gst_rate'] ?? map['gstRate'] ?? 18.0) as num).toDouble(),
-      cgstRate: ((map['cgst_rate'] ?? map['cgstRate'] ?? 0.0) as num).toDouble(),
-      cgstAmount: ((map['cgst_amount'] ?? map['cgstAmount'] ?? 0.0) as num).toDouble(),
-      sgstRate: ((map['sgst_rate'] ?? map['sgstRate'] ?? 0.0) as num).toDouble(),
-      sgstAmount: ((map['sgst_amount'] ?? map['sgstAmount'] ?? 0.0) as num).toDouble(),
-      igstRate: ((map['igst_rate'] ?? map['igstRate'] ?? 0.0) as num).toDouble(),
-      igstAmount: ((map['igst_amount'] ?? map['igstAmount'] ?? 0.0) as num).toDouble(),
-      totalAmount: ((map['total_amount'] ?? map['totalAmount'] ?? 0.0) as num).toDouble(),
+      rate: parseDouble(map['rate'], 0.0),
+      discount: parseDouble(map['discount'], 0.0),
+      taxableValue: parseDouble(map['taxable_value'] ?? map['taxableValue'], 0.0),
+      gstRate: parseDouble(map['gst_rate'] ?? map['gstRate'], 18.0),
+      cgstRate: parseDouble(map['cgst_rate'] ?? map['cgstRate'], 0.0),
+      cgstAmount: parseDouble(map['cgst_amount'] ?? map['cgstAmount'], 0.0),
+      sgstRate: parseDouble(map['sgst_rate'] ?? map['sgstRate'], 0.0),
+      sgstAmount: parseDouble(map['sgst_amount'] ?? map['sgstAmount'], 0.0),
+      igstRate: parseDouble(map['igst_rate'] ?? map['igstRate'], 0.0),
+      igstAmount: parseDouble(map['igst_amount'] ?? map['igstAmount'], 0.0),
+      totalAmount: parseDouble(map['total_amount'] ?? map['totalAmount'], 0.0),
     );
   }
 }

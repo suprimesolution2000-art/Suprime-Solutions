@@ -64,11 +64,20 @@ class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
   Timer? _debounceTimer;
 
   InvoiceListNotifier() : super(InvoiceListState()) {
-    unawaited(_repo.autoRepairLegacyCities());
-    fetchInvoices();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      await _repo.autoRepairLegacyCities();
+    } catch (_) {}
+    if (!mounted) return;
+    await fetchInvoices();
+    if (!mounted) return;
     _syncListener = () {
-      if (SyncService.instance.status == SyncStatus.synced) {
-        fetchInvoices();
+      if (SyncService.instance.status == SyncStatus.synced ||
+          SyncService.instance.status == SyncStatus.offline) {
+        if (mounted) fetchInvoices();
       }
     };
     SyncService.instance.addListener(_syncListener!);
@@ -84,6 +93,7 @@ class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
   }
 
   Future<void> fetchInvoices() async {
+    if (!mounted) return;
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
       final list = await _repo.getInvoices(
@@ -95,9 +105,13 @@ class InvoiceListNotifier extends StateNotifier<InvoiceListState> {
         startDate: state.startDate,
         endDate: state.endDate,
       );
-      state = state.copyWith(invoices: list, isLoading: false);
+      if (mounted) {
+        state = state.copyWith(invoices: list, isLoading: false);
+      }
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      if (mounted) {
+        state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      }
     }
   }
 

@@ -119,7 +119,7 @@ class CustomerRepository {
     return CustomerModel.fromMap(results.first);
   }
 
-  Future<void> saveCustomer(CustomerModel customer, {bool preserveInactive = true, bool preserveBalancesIfZero = false}) async {
+  Future<void> saveCustomer(CustomerModel customer, {bool preserveInactive = false, bool preserveBalancesIfZero = false}) async {
     final db = await _db.database;
     if (customer.uuid.isNotEmpty) {
       final existingByUuid = await db.query(
@@ -131,14 +131,18 @@ class CustomerRepository {
       if (existingByUuid.isNotEmpty) {
         final existingActive = existingByUuid.first['active'];
         final map = customer.toMap();
-        if (preserveInactive && (existingActive == 0 || existingActive == 'false')) {
+        final isInactive = (preserveInactive && (existingActive == 0 || existingActive == 'false')) || !customer.active;
+        if (isInactive) {
           map['active'] = 0;
+        } else {
+          map['active'] = 1;
+          await db.delete('app_settings', where: 'key = ?', whereArgs: ['deleted_customer_${customer.uuid}']);
         }
-        // Preserve existing due balance only if explicitly asked
-        final existingDue = (existingByUuid.first['outstanding_balance'] as num?)?.toDouble() ?? 0.0;
-        final existingBilled = (existingByUuid.first['total_billed'] as num?)?.toDouble() ?? 0.0;
-        final existingPaid = (existingByUuid.first['total_paid'] as num?)?.toDouble() ?? 0.0;
-        if (preserveBalancesIfZero && customer.outstandingBalance == 0.0 && existingDue > 0.0) {
+        // DATA-13: Preserve existing balances if caller passed zeroed profile values
+        final existingDue = double.tryParse(existingByUuid.first['outstanding_balance']?.toString() ?? '') ?? 0.0;
+        final existingBilled = double.tryParse(existingByUuid.first['total_billed']?.toString() ?? '') ?? 0.0;
+        final existingPaid = double.tryParse(existingByUuid.first['total_paid']?.toString() ?? '') ?? 0.0;
+        if (customer.totalBilled == 0.0 && customer.totalPaid == 0.0 && customer.outstandingBalance == 0.0) {
           map['outstanding_balance'] = existingDue;
           map['total_billed'] = existingBilled;
           map['total_paid'] = existingPaid;
@@ -162,28 +166,42 @@ class CustomerRepository {
       );
       if (existingByName.isNotEmpty) {
         final existingUuid = existingByName.first['uuid'] as String;
-        final existingActive = existingByName.first['active'];
-        final updatedMap = customer.toMap();
-        updatedMap['uuid'] = existingUuid; // Preserve existing customer UUID for relational integrity
-        if (preserveInactive && (existingActive == 0 || existingActive == 'false')) {
-          updatedMap['active'] = 0;
+        final existingPhone = (existingByName.first['phone'] as String? ?? '').trim();
+        final newPhone = customer.phone.trim();
+        final existingGstin = (existingByName.first['gstin'] as String? ?? '').trim();
+        final newGstin = customer.gstin.trim();
+
+        final bool isMatch = (existingPhone.isNotEmpty && newPhone.isNotEmpty && existingPhone == newPhone) ||
+            (existingGstin.isNotEmpty && newGstin.isNotEmpty && existingGstin.toLowerCase() == newGstin.toLowerCase()) ||
+            (existingPhone.isEmpty && newPhone.isEmpty && existingGstin.isEmpty && newGstin.isEmpty);
+
+        if (isMatch) {
+          final existingActive = existingByName.first['active'];
+          final updatedMap = customer.toMap();
+          updatedMap['uuid'] = existingUuid; // Preserve existing customer UUID for relational integrity
+          final isInactive = (preserveInactive && (existingActive == 0 || existingActive == 'false')) || !customer.active;
+          if (isInactive) {
+            updatedMap['active'] = 0;
+          } else {
+            updatedMap['active'] = 1;
+            await db.delete('app_settings', where: 'key = ?', whereArgs: ['deleted_customer_$existingUuid']);
+          }
+          final existingDue = double.tryParse(existingByName.first['outstanding_balance']?.toString() ?? '') ?? 0.0;
+          final existingBilled = double.tryParse(existingByName.first['total_billed']?.toString() ?? '') ?? 0.0;
+          final existingPaid = double.tryParse(existingByName.first['total_paid']?.toString() ?? '') ?? 0.0;
+          if ((preserveBalancesIfZero || customer.outstandingBalance == 0.0) && existingDue > 0.0) {
+            updatedMap['outstanding_balance'] = existingDue;
+            updatedMap['total_billed'] = existingBilled;
+            updatedMap['total_paid'] = existingPaid;
+          }
+          await db.update(
+            'customers',
+            updatedMap,
+            where: 'uuid = ?',
+            whereArgs: [existingUuid],
+          );
+          return;
         }
-        // Preserve existing due balance only if explicitly asked
-        final existingDue = (existingByName.first['outstanding_balance'] as num?)?.toDouble() ?? 0.0;
-        final existingBilled = (existingByName.first['total_billed'] as num?)?.toDouble() ?? 0.0;
-        final existingPaid = (existingByName.first['total_paid'] as num?)?.toDouble() ?? 0.0;
-        if (preserveBalancesIfZero && customer.outstandingBalance == 0.0 && existingDue > 0.0) {
-          updatedMap['outstanding_balance'] = existingDue;
-          updatedMap['total_billed'] = existingBilled;
-          updatedMap['total_paid'] = existingPaid;
-        }
-        await db.update(
-          'customers',
-          updatedMap,
-          where: 'uuid = ?',
-          whereArgs: [existingUuid],
-        );
-        return;
       }
     }
 
@@ -192,6 +210,9 @@ class CustomerRepository {
     final map = customer.toMap();
     if (preserveInactive && tombstones.isNotEmpty) {
       map['active'] = 0;
+    } else {
+      map['active'] = 1;
+      await db.delete('app_settings', where: 'key = ?', whereArgs: ['deleted_customer_${customer.uuid}']);
     }
 
     await db.insert(
@@ -206,24 +227,21 @@ class CustomerRepository {
   Future<void> recalculateCustomerBalances({String? targetCustomerUuid}) async {
     final db = await _db.database;
 
-    // Fetch all active invoices (all active bills where goods/services were delivered)
+    // Fetch all active invoices (excluding cancelled and temporary bills)
     final invoices = await db.query(
       'invoices',
       columns: ['customer_json', 'grand_total', 'total_paid', 'balance_due', 'status'],
-      where: "status != 'cancelled'",
+      where: "status != 'cancelled' AND (invoice_type IS NULL OR invoice_type != 'temporary')",
     );
 
     final Map<String, double> billedByUuid = {};
     final Map<String, double> paidByUuid = {};
     final Map<String, double> dueByUuid = {};
 
-    final Map<String, double> billedByPhone = {};
-    final Map<String, double> paidByPhone = {};
-    final Map<String, double> dueByPhone = {};
-
-    final Map<String, double> billedByName = {};
-    final Map<String, double> paidByName = {};
-    final Map<String, double> dueByName = {};
+    // Legacy bills without UUID matched strictly by combined phone and name
+    final Map<String, double> billedByLegacy = {};
+    final Map<String, double> paidByLegacy = {};
+    final Map<String, double> dueByLegacy = {};
 
     for (final inv in invoices) {
       final rawCust = inv['customer_json'] as String?;
@@ -234,31 +252,36 @@ class CustomerRepository {
         final phone = (custMap['phone'] ?? '').toString().trim();
         final name = (custMap['name'] ?? '').toString().trim().toLowerCase();
 
-        final grandTotal = (inv['grand_total'] as num?)?.toDouble() ?? 0.0;
-        final totalPaid = (inv['total_paid'] as num?)?.toDouble() ?? 0.0;
-        final balanceDue = (inv['balance_due'] as num?)?.toDouble() ?? 0.0;
+        final grandTotal = double.tryParse(inv['grand_total']?.toString() ?? '') ?? 0.0;
+        final totalPaid = double.tryParse(inv['total_paid']?.toString() ?? '') ?? 0.0;
+        final balanceDue = double.tryParse(inv['balance_due']?.toString() ?? '') ?? 0.0;
 
         if (uuid.isNotEmpty) {
           billedByUuid[uuid] = (billedByUuid[uuid] ?? 0.0) + grandTotal;
           paidByUuid[uuid] = (paidByUuid[uuid] ?? 0.0) + totalPaid;
           dueByUuid[uuid] = (dueByUuid[uuid] ?? 0.0) + balanceDue;
-        }
-        if (phone.isNotEmpty) {
-          billedByPhone[phone] = (billedByPhone[phone] ?? 0.0) + grandTotal;
-          paidByPhone[phone] = (paidByPhone[phone] ?? 0.0) + totalPaid;
-          dueByPhone[phone] = (dueByPhone[phone] ?? 0.0) + balanceDue;
-        }
-        if (name.isNotEmpty) {
-          billedByName[name] = (billedByName[name] ?? 0.0) + grandTotal;
-          paidByName[name] = (paidByName[name] ?? 0.0) + totalPaid;
-          dueByName[name] = (dueByName[name] ?? 0.0) + balanceDue;
+        } else if (phone.isNotEmpty && name.isNotEmpty) {
+          final legKey = '$phone|$name';
+          billedByLegacy[legKey] = (billedByLegacy[legKey] ?? 0.0) + grandTotal;
+          paidByLegacy[legKey] = (paidByLegacy[legKey] ?? 0.0) + totalPaid;
+          dueByLegacy[legKey] = (dueByLegacy[legKey] ?? 0.0) + balanceDue;
         }
       } catch (_) {}
     }
 
-    final totalLocalInvoices = Sqflite.firstIntValue(
-      await db.rawQuery("SELECT COUNT(*) FROM invoices WHERE status != 'cancelled'"),
-    ) ?? 0;
+    // Query recorded payments to account for standalone / direct payments (DATA-12)
+    final paymentRows = await db.query(
+      'payments',
+      columns: ['customer_id', 'amount'],
+    );
+    final Map<String, double> paymentsByCustomer = {};
+    for (final p in paymentRows) {
+      final cId = (p['customer_id'] ?? '').toString().trim();
+      final amt = double.tryParse(p['amount']?.toString() ?? '') ?? 0.0;
+      if (cId.isNotEmpty) {
+        paymentsByCustomer[cId] = (paymentsByCustomer[cId] ?? 0.0) + amt;
+      }
+    }
 
     final customerRows = targetCustomerUuid != null
         ? await db.query('customers', where: 'uuid = ?', whereArgs: [targetCustomerUuid])
@@ -274,45 +297,56 @@ class CustomerRepository {
       double? livePaid;
       double? liveDue;
 
-      if (uuid.isNotEmpty && billedByUuid.containsKey(uuid)) {
+      final hasActiveInvoice = uuid.isNotEmpty && billedByUuid.containsKey(uuid);
+      final hasLegacyInvoice = phone.isNotEmpty && name.isNotEmpty && billedByLegacy.containsKey('$phone|$name');
+
+      if (hasActiveInvoice) {
         liveBilled = billedByUuid[uuid];
         livePaid = paidByUuid[uuid];
         liveDue = dueByUuid[uuid];
-      } else if (phone.isNotEmpty && billedByPhone.containsKey(phone)) {
-        liveBilled = billedByPhone[phone];
-        livePaid = paidByPhone[phone];
-        liveDue = dueByPhone[phone];
-      } else if (name.isNotEmpty && billedByName.containsKey(name)) {
-        liveBilled = billedByName[name];
-        livePaid = paidByName[name];
-        liveDue = dueByName[name];
+      } else if (hasLegacyInvoice) {
+        liveBilled = billedByLegacy['$phone|$name'];
+        livePaid = paidByLegacy['$phone|$name'];
+        liveDue = dueByLegacy['$phone|$name'];
       }
 
-      if (liveDue != null) {
-        final cleanDue = (liveDue <= 0.005 ? 0.0 : liveDue).clamp(0.0, double.infinity);
-        batch.update(
-          'customers',
-          {
-            'total_billed': (liveBilled ?? 0.0).clamp(0.0, double.infinity),
-            'total_paid': (livePaid ?? 0.0).clamp(0.0, double.infinity),
-            'outstanding_balance': cleanDue,
-          },
-          where: 'uuid = ?',
-          whereArgs: [uuid],
+      final hasLocalPayments = uuid.isNotEmpty && paymentsByCustomer.containsKey(uuid);
+
+      // Check if customer ever had invoices on this device
+      bool everHadInvoices = hasActiveInvoice || hasLegacyInvoice;
+      if (!everHadInvoices && uuid.isNotEmpty) {
+        final anyInv = await db.query(
+          'invoices',
+          columns: ['uuid'],
+          where: 'customer_id = ? OR customer_json LIKE ?',
+          whereArgs: [uuid, '%"uuid":"$uuid"%'],
+          limit: 1,
         );
-      } else if (totalLocalInvoices > 0) {
-        // Customer has no active bills remaining on device
-        batch.update(
-          'customers',
-          {
-            'total_billed': 0.0,
-            'total_paid': 0.0,
-            'outstanding_balance': 0.0,
-          },
-          where: 'uuid = ?',
-          whereArgs: [uuid],
-        );
+        everHadInvoices = anyInv.isNotEmpty;
       }
+
+      // DATA-12: If customer has never had invoices or payments on this device,
+      // preserve their existing opening/server balance instead of wiping to 0.0
+      if (!everHadInvoices && !hasLocalPayments) {
+        continue;
+      }
+
+      final cleanBilled = (liveBilled ?? 0.0).clamp(0.0, double.infinity);
+      final rawPaid = paymentsByCustomer[uuid] ?? (livePaid ?? 0.0);
+      final cleanPaid = rawPaid.clamp(0.0, double.infinity);
+      final rawDue = liveDue ?? (cleanBilled - cleanPaid);
+      final cleanDue = (rawDue <= 0.005 ? 0.0 : rawDue).clamp(0.0, double.infinity);
+
+      batch.update(
+        'customers',
+        {
+          'total_billed': cleanBilled,
+          'total_paid': cleanPaid,
+          'outstanding_balance': cleanDue,
+        },
+        where: 'uuid = ?',
+        whereArgs: [uuid],
+      );
     }
     await batch.commit(noResult: true);
   }
@@ -322,9 +356,9 @@ class CustomerRepository {
     await db.rawUpdate('''
       UPDATE customers 
       SET 
-        total_billed = total_billed + ?,
-        total_paid = total_paid + ?,
-        outstanding_balance = outstanding_balance + ? - ?
+        total_billed = MAX(0.0, COALESCE(total_billed, 0) + ?),
+        total_paid = MAX(0.0, COALESCE(total_paid, 0) + ?),
+        outstanding_balance = MAX(0.0, COALESCE(outstanding_balance, 0) + ? - ?)
       WHERE uuid = ?
     ''', [amountAdded, paymentDeducted, amountAdded, paymentDeducted, customerUuid]);
   }

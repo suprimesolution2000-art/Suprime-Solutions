@@ -16,6 +16,8 @@ class PaymentRepository {
     return results.map((m) => PaymentModel.fromMap(m)).toList();
   }
 
+  Future<List<PaymentModel>> getPaymentsForInvoice(String invoiceUuid) => getPaymentsByInvoice(invoiceUuid);
+
   Future<List<PaymentModel>> getPaymentsByCustomer(String customerUuid) async {
     final db = await _db.database;
     final results = await db.query(
@@ -31,7 +33,18 @@ class PaymentRepository {
     if (payment.amount <= 0) return;
     final db = await _db.database;
     await db.transaction((txn) async {
-      // 1. Insert or replace payment record
+      // Check idempotency (D4): if payment with this UUID already exists, do not double credit!
+      final existingPayment = await txn.query(
+        'payments',
+        where: 'uuid = ?',
+        whereArgs: [payment.uuid],
+        limit: 1,
+      );
+      if (existingPayment.isNotEmpty) {
+        return; // Idempotent: payment already recorded
+      }
+
+      // 1. Insert payment record
       await txn.insert(
         'payments',
         payment.toMap(),
@@ -39,18 +52,31 @@ class PaymentRepository {
       );
 
       // 2. Adjust invoice balances atomically
+      bool isTemporary = false;
       if (payment.invoiceId.isNotEmpty) {
         final invRes = await txn.query(
           'invoices',
-          columns: ['grand_total', 'total_paid', 'balance_due'],
+          columns: ['status', 'grand_total', 'total_paid', 'balance_due', 'invoice_type'],
           where: 'uuid = ?',
           whereArgs: [payment.invoiceId],
           limit: 1,
         );
 
         if (invRes.isNotEmpty) {
-          final grandTotal = (invRes.first['grand_total'] as num?)?.toDouble() ?? 0.0;
-          final currentPaid = (invRes.first['total_paid'] as num?)?.toDouble() ?? 0.0;
+          final invoiceStatus = (invRes.first['status'] as String?)?.toLowerCase();
+          if (invoiceStatus == 'cancelled') {
+            throw Exception('Cannot record payment against a cancelled invoice.');
+          }
+
+          isTemporary = (invRes.first['invoice_type'] as String?) == 'temporary';
+          final grandTotal = double.tryParse(invRes.first['grand_total']?.toString() ?? '') ?? 0.0;
+          final currentPaid = double.tryParse(invRes.first['total_paid']?.toString() ?? '') ?? 0.0;
+          final currentDue = double.tryParse(invRes.first['balance_due']?.toString() ?? '') ?? (grandTotal - currentPaid);
+
+          if (currentDue <= 0.005 || payment.amount > (currentDue + 0.01)) {
+            throw Exception('Payment amount (₹${payment.amount}) exceeds outstanding balance due (₹${currentDue.toStringAsFixed(2)}).');
+          }
+
           final newPaid = currentPaid + payment.amount;
           final newBalanceDue = (grandTotal - newPaid).clamp(0.0, double.infinity);
           final newStatus = newBalanceDue <= 0.005
@@ -71,8 +97,8 @@ class PaymentRepository {
         }
       }
 
-      // 3. Adjust customer ledger balance atomically
-      if (payment.customerId.isNotEmpty) {
+      // 3. Adjust customer ledger balance atomically (only for GST bills, not temporary bills)
+      if (!isTemporary && payment.customerId.isNotEmpty) {
         await txn.rawUpdate('''
           UPDATE customers 
           SET total_paid = COALESCE(total_paid, 0) + ?,

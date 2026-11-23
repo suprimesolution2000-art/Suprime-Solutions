@@ -1,7 +1,12 @@
 require('dotenv').config();
 
-if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('super_secure'))) {
-  console.warn('[SECURITY WARNING] Production running with default or insecure JWT_SECRET. Please set a strong custom JWT_SECRET.');
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('super_secure')) {
+    throw new Error('FATAL: Production mode requires a secure custom JWT_SECRET set in environment variables.');
+  }
+  if (!process.env.JWT_REFRESH_SECRET || process.env.JWT_REFRESH_SECRET.includes('refresh_jwt_secret')) {
+    throw new Error('FATAL: Production mode requires a secure custom JWT_REFRESH_SECRET set in environment variables.');
+  }
 }
 
 module.exports = {

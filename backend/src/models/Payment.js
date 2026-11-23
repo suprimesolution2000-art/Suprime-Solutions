@@ -33,6 +33,7 @@ const paymentSchema = new mongoose.Schema({
   paymentMethod: {
     type: String,
     enum: ['cash', 'upi', 'bank_transfer', 'cheque', 'other'],
+    set: (v) => (v ? v.toString().toLowerCase().trim().replace(/\s+/g, '_') : 'upi'),
     required: true,
     default: 'upi'
   },

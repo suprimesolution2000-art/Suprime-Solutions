@@ -11,6 +11,7 @@ class PaymentModel {
   final String notes;
   final String receivedBy;
   final String deviceId;
+  final String syncStatus;
 
   PaymentModel({
     required this.uuid,
@@ -25,6 +26,7 @@ class PaymentModel {
     this.notes = '',
     this.receivedBy = 'Admin',
     this.deviceId = '',
+    this.syncStatus = 'waiting_for_internet',
   });
 
   Map<String, dynamic> toMap() {
@@ -41,6 +43,7 @@ class PaymentModel {
       'notes': notes,
       'received_by': receivedBy,
       'device_id': deviceId,
+      'sync_status': syncStatus,
     };
   }
 
@@ -66,6 +69,7 @@ class PaymentModel {
       notes: (map['notes'] ?? '').toString(),
       receivedBy: (map['received_by'] ?? map['receivedBy'] ?? 'Admin').toString(),
       deviceId: (map['device_id'] ?? map['deviceId'] ?? '').toString(),
+      syncStatus: (map['sync_status'] ?? map['syncStatus'] ?? 'synced').toString(),
     );
   }
 }

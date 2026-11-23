@@ -23,16 +23,25 @@ class InvoiceRepository {
     String? customerUuid,
     String sortBy = 'invoice_date',
     bool ascending = false,
-    int limit = 50,
+    int? limit,
     int offset = 0,
   }) async {
     final db = await _db.database;
     final whereClauses = <String>[];
     final whereArgs = <dynamic>[];
 
-    // 1. Universal Search (Case-insensitive across invoice #, customer name, phone, gstin, items)
+    // 1. Universal Search (D20: search term safely matching content values)
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
       final term = '%${searchQuery.trim()}%';
+      final cleanTerm = searchQuery.trim().toLowerCase();
+      final jsonKeys = {
+        'name', 'rate', 'city', 'unit', 'gst', 'phone', 'items', 'state',
+        'address', 'amount', 'status', 'description', 'hsn', 'total',
+        'code', 'balance', 'uuid', 'pincode', 'email', 'price', 'quantity', 'qty'
+      };
+      final isJsonKey = jsonKeys.contains(cleanTerm);
+      final jsonPattern = isJsonKey ? '%:"%$cleanTerm%"%' : term;
+
       whereClauses.add('''
         (
           invoice_number LIKE ? OR
@@ -42,7 +51,7 @@ class InvoiceRepository {
           challan_number LIKE ?
         )
       ''');
-      whereArgs.addAll([term, term, term, term, term]);
+      whereArgs.addAll([term, jsonPattern, jsonPattern, term, term]);
     }
 
     // 2. Invoice Type filter (GST vs Temporary)
@@ -52,6 +61,12 @@ class InvoiceRepository {
       } else if (invoiceType == 'gst') {
         whereClauses.add("(invoice_type IS NULL OR invoice_type != 'temporary')");
       }
+    }
+
+    // 2.5 City filter applied directly in SQL before LIMIT/OFFSET (D7 / S7)
+    if (cityFilter != null && cityFilter.isNotEmpty && cityFilter != 'all') {
+      whereClauses.add('LOWER(customer_json) LIKE ?');
+      whereArgs.add('%"city":"${cityFilter.trim().toLowerCase()}"%');
     }
 
     // 3. Payment status filter
@@ -71,7 +86,7 @@ class InvoiceRepository {
       whereArgs.add(startDate.toIso8601String());
     }
     if (endDate != null) {
-      final end = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+      final end = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59, 999);
       whereClauses.add('invoice_date <= ?');
       whereArgs.add(end.toIso8601String());
     }
@@ -88,22 +103,30 @@ class InvoiceRepository {
 
     // 5. Customer UUID
     if (customerUuid != null && customerUuid.isNotEmpty) {
-      whereClauses.add('customer_json LIKE ?');
-      whereArgs.add('%"uuid":"$customerUuid"%');
+      whereClauses.add('(customer_id = ? OR customer_json LIKE ?)');
+      whereArgs.addAll([customerUuid, '%"uuid":"$customerUuid"%']);
     }
 
     final whereString = whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null;
 
-    // Determine initial SQL orderBy based on requested sort
+    // Determine initial SQL orderBy based on requested sort (S7 / D8)
     String sqlOrderBy = 'sequence_number DESC';
-    if (sortBy == 'date_asc') {
+    if (sortBy == 'unpaid_first') {
+      sqlOrderBy = "CASE LOWER(payment_status) WHEN 'unpaid' THEN 0 WHEN 'partially_paid' THEN 1 WHEN 'partial' THEN 1 WHEN 'overdue' THEN 1 WHEN 'paid' THEN 2 ELSE 3 END, invoice_date DESC, sequence_number DESC";
+    } else if (sortBy == 'paid_first') {
+      sqlOrderBy = "CASE LOWER(payment_status) WHEN 'paid' THEN 0 WHEN 'partially_paid' THEN 1 WHEN 'partial' THEN 1 WHEN 'overdue' THEN 1 WHEN 'unpaid' THEN 2 ELSE 3 END, invoice_date DESC, sequence_number DESC";
+    } else if (sortBy == 'date_asc') {
       sqlOrderBy = 'invoice_date ASC, sequence_number ASC';
-    } else if (sortBy == 'date_desc') {
+    } else if (sortBy == 'date_desc' || sortBy == 'invoice_date') {
       sqlOrderBy = 'invoice_date DESC, sequence_number DESC';
     } else if (sortBy == 'amount_asc') {
-      sqlOrderBy = 'grand_total ASC';
+      sqlOrderBy = 'grand_total ASC, invoice_date DESC';
     } else if (sortBy == 'amount_desc') {
-      sqlOrderBy = 'grand_total DESC';
+      sqlOrderBy = 'grand_total DESC, invoice_date DESC';
+    } else if (sortBy == 'city_unpaid_first') {
+      sqlOrderBy = "LOWER(COALESCE(json_extract(customer_json, '\$.city'), '')) ASC, CASE LOWER(payment_status) WHEN 'unpaid' THEN 0 WHEN 'partially_paid' THEN 1 WHEN 'partial' THEN 1 WHEN 'overdue' THEN 1 WHEN 'paid' THEN 2 ELSE 3 END, invoice_date DESC, sequence_number DESC";
+    } else if (sortBy == 'city_paid_first') {
+      sqlOrderBy = "LOWER(COALESCE(json_extract(customer_json, '\$.city'), '')) ASC, CASE LOWER(payment_status) WHEN 'paid' THEN 0 WHEN 'partially_paid' THEN 1 WHEN 'partial' THEN 1 WHEN 'overdue' THEN 1 WHEN 'unpaid' THEN 2 ELSE 3 END, invoice_date DESC, sequence_number DESC";
     }
 
     final results = await db.query(
@@ -116,10 +139,6 @@ class InvoiceRepository {
     );
 
     var invoices = results.map((m) => InvoiceModel.fromMap(m)).toList();
-
-    if (cityFilter != null && cityFilter.isNotEmpty && cityFilter != 'all') {
-      invoices = invoices.where((inv) => inv.customer.city.trim().toLowerCase() == cityFilter.trim().toLowerCase()).toList();
-    }
 
     int paymentPriority(String status, {bool unpaidFirst = true}) {
       final s = status.toLowerCase();
@@ -137,7 +156,7 @@ class InvoiceRepository {
     }
 
     // Explicit in-memory sorting: guarantees 100% accurate ordering for all 6 options
-    if (sortBy == 'date_desc') {
+    if (sortBy == 'date_desc' || sortBy == 'invoice_date') {
       invoices.sort((a, b) {
         final dCmp = b.invoiceDate.compareTo(a.invoiceDate);
         if (dCmp != 0) return dCmp;
@@ -218,7 +237,7 @@ class InvoiceRepository {
   Future<List<InvoiceModel>> getGstInvoicesForDateRange(DateTime from, DateTime to) async {
     final db = await _db.database;
     final start = DateTime(from.year, from.month, from.day).toIso8601String();
-    final end = DateTime(to.year, to.month, to.day, 23, 59, 59).toIso8601String();
+    final end = DateTime(to.year, to.month, to.day, 23, 59, 59, 999).toIso8601String();
 
     final results = await db.query(
       'invoices',
@@ -234,7 +253,7 @@ class InvoiceRepository {
   Future<List<InvoiceModel>> getTemporaryInvoicesForDateRange(DateTime from, DateTime to) async {
     final db = await _db.database;
     final start = DateTime(from.year, from.month, from.day).toIso8601String();
-    final end = DateTime(to.year, to.month, to.day, 23, 59, 59).toIso8601String();
+    final end = DateTime(to.year, to.month, to.day, 23, 59, 59, 999).toIso8601String();
 
     final results = await db.query(
       'invoices',
@@ -256,7 +275,7 @@ class InvoiceRepository {
     try {
       await CustomerRepository().recalculateCustomerBalances(targetCustomerUuid: invoice.customer.uuid);
       await SyncService.instance.checkPendingQueue();
-      await SyncService.instance.synchronize(forceFullSync: true);
+      unawaited(SyncService.instance.synchronize(forceFullSync: false));
     } catch (_) {}
   }
 
@@ -268,6 +287,7 @@ class InvoiceRepository {
         'total_paid': newTotalPaid,
         'balance_due': newBalanceDue,
         'payment_status': paymentStatus,
+        'sync_status': 'waiting_for_internet',
       },
       where: 'uuid = ?',
       whereArgs: [invoiceUuid],
@@ -275,7 +295,7 @@ class InvoiceRepository {
     try {
       await CustomerRepository().recalculateCustomerBalances();
       await SyncService.instance.checkPendingQueue();
-      await SyncService.instance.synchronize(forceFullSync: true);
+      unawaited(SyncService.instance.synchronize(forceFullSync: false));
     } catch (_) {}
   }
 
@@ -283,14 +303,17 @@ class InvoiceRepository {
     final db = await _db.database;
     await db.update(
       'invoices',
-      {'status': 'cancelled'},
+      {
+        'status': 'cancelled',
+        'sync_status': 'waiting_for_internet',
+      },
       where: 'uuid = ?',
       whereArgs: [invoiceUuid],
     );
     try {
       await CustomerRepository().recalculateCustomerBalances();
       await SyncService.instance.checkPendingQueue();
-      await SyncService.instance.synchronize(forceFullSync: true);
+      unawaited(SyncService.instance.synchronize(forceFullSync: false));
     } catch (_) {}
   }
 
@@ -300,20 +323,20 @@ class InvoiceRepository {
     double deltaBalanceDue = 0.0,
   }) async {
     final db = await _db.database;
-    await db.update(
-      'invoices',
-      invoice.toMap(),
-      where: 'uuid = ?',
-      whereArgs: [invoice.uuid],
-    );
+    await db.transaction((txn) async {
+      await txn.update(
+        'invoices',
+        invoice.toMap(),
+        where: 'uuid = ?',
+        whereArgs: [invoice.uuid],
+      );
 
-    // Adjust customer ledger balance
-    try {
-      final custRows = await db.query('customers', where: 'uuid = ?', whereArgs: [invoice.customer.uuid], limit: 1);
+      // Adjust customer ledger balance
+      final custRows = await txn.query('customers', where: 'uuid = ?', whereArgs: [invoice.customer.uuid], limit: 1);
       if (custRows.isNotEmpty) {
-        final currentBilled = (custRows.first['total_billed'] as num?)?.toDouble() ?? 0.0;
-        final currentDue = (custRows.first['outstanding_balance'] as num?)?.toDouble() ?? 0.0;
-        await db.update(
+        final currentBilled = double.tryParse(custRows.first['total_billed']?.toString() ?? '') ?? 0.0;
+        final currentDue = double.tryParse(custRows.first['outstanding_balance']?.toString() ?? '') ?? 0.0;
+        await txn.update(
           'customers',
           {
             'total_billed': (currentBilled + deltaGrandTotal).clamp(0.0, double.infinity),
@@ -323,7 +346,7 @@ class InvoiceRepository {
           whereArgs: [invoice.customer.uuid],
         );
       }
-    } catch (_) {}
+    });
 
     try {
       await CustomerRepository().recalculateCustomerBalances(targetCustomerUuid: invoice.customer.uuid);
@@ -351,9 +374,9 @@ class InvoiceRepository {
         }
         if (custRows.isNotEmpty) {
           final matchedCustUuid = custRows.first['uuid'] as String;
-          final currentBilled = (custRows.first['total_billed'] as num?)?.toDouble() ?? 0.0;
-          final currentPaid = (custRows.first['total_paid'] as num?)?.toDouble() ?? 0.0;
-          final currentDue = (custRows.first['outstanding_balance'] as num?)?.toDouble() ?? 0.0;
+          final currentBilled = double.tryParse(custRows.first['total_billed']?.toString() ?? '') ?? 0.0;
+          final currentPaid = double.tryParse(custRows.first['total_paid']?.toString() ?? '') ?? 0.0;
+          final currentDue = double.tryParse(custRows.first['outstanding_balance']?.toString() ?? '') ?? 0.0;
           await txn.update(
             'customers',
             {
@@ -391,7 +414,7 @@ class InvoiceRepository {
     try {
       await CustomerRepository().recalculateCustomerBalances();
       await SyncService.instance.checkPendingQueue();
-      await SyncService.instance.synchronize(forceFullSync: true);
+      unawaited(SyncService.instance.synchronize(forceFullSync: false));
     } catch (_) {}
   }
 
@@ -417,19 +440,36 @@ class InvoiceRepository {
     final db = await _db.database;
     final fy = getFinancialYear(date);
 
-    final nextNumRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number']);
+    final maxRes = await db.rawQuery(
+      "SELECT MAX(sequence_number) as max_seq FROM invoices WHERE (invoice_type IS NULL OR invoice_type != 'temporary') AND financial_year = ?",
+      [fy],
+    );
+    int maxSeq = 0;
+    if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
+      maxSeq = int.tryParse(maxRes.first['max_seq']?.toString() ?? '') ?? 0;
+    }
 
-    int nextNum = 1;
+    final nextNumRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number_$fy']);
+    int savedNum = 1;
     if (nextNumRes.isNotEmpty) {
-      nextNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
-    } else {
-      final maxRes = await db.rawQuery(
-        "SELECT MAX(sequence_number) as max_seq FROM invoices WHERE (invoice_type IS NULL OR invoice_type != 'temporary') AND financial_year = ?",
-        [fy],
-      );
-      if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
-        nextNum = (maxRes.first['max_seq'] as int) + 1;
+      savedNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
+    } else if (fy == '26-27') {
+      final legacyRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number']);
+      if (legacyRes.isNotEmpty) {
+        savedNum = int.tryParse(legacyRes.first['value'] as String) ?? 1;
       }
+    }
+
+    int nextNum = savedNum > (maxSeq + 1) ? savedNum : (maxSeq + 1);
+
+    // Collision check preview
+    while (true) {
+      final existing = await db.rawQuery(
+        "SELECT 1 FROM invoices WHERE (invoice_type IS NULL OR invoice_type != 'temporary') AND financial_year = ? AND sequence_number = ?",
+        [fy, nextNum],
+      );
+      if (existing.isEmpty) break;
+      nextNum++;
     }
 
     final prefixRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['invoice_prefix']);
@@ -449,22 +489,28 @@ class InvoiceRepository {
     );
     int maxSeq = 0;
     if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
-      maxSeq = maxRes.first['max_seq'] as int;
+      maxSeq = int.tryParse(maxRes.first['max_seq']?.toString() ?? '') ?? 0;
     }
 
-    final nextNumRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number']);
+    // DATA-15: Financial-year partitioned temporary bill counter
+    final nextNumRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number_$fy']);
     int savedNum = 1;
     if (nextNumRes.isNotEmpty) {
       savedNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
+    } else if (fy == '26-27') {
+      final legacyRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number']);
+      if (legacyRes.isNotEmpty) {
+        savedNum = int.tryParse(legacyRes.first['value'] as String) ?? 1;
+      }
     }
 
     int nextNum = savedNum > (maxSeq + 1) ? savedNum : (maxSeq + 1);
 
-    // Ensure candidate doesn't already exist locally
+    // Ensure candidate doesn't already exist locally in this FY
     while (true) {
       final existing = await db.rawQuery(
-        "SELECT 1 FROM invoices WHERE invoice_type = 'temporary' AND (invoice_number = ? OR sequence_number = ?)",
-        [nextNum.toString(), nextNum],
+        "SELECT 1 FROM invoices WHERE invoice_type = 'temporary' AND financial_year = ? AND (invoice_number = ? OR sequence_number = ?)",
+        [fy, nextNum.toString(), nextNum],
       );
       if (existing.isEmpty) break;
       nextNum++;
@@ -491,16 +537,31 @@ class InvoiceRepository {
       );
       int maxSeq = 0;
       if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
-        maxSeq = maxRes.first['max_seq'] as int;
+        maxSeq = int.tryParse(maxRes.first['max_seq']?.toString() ?? '') ?? 0;
       }
 
-      final nextNumRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number']);
+      final nextNumRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number_$fy']);
       int savedNum = 1;
       if (nextNumRes.isNotEmpty) {
         savedNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
+      } else if (fy == '26-27') {
+        final legacyRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number']);
+        if (legacyRes.isNotEmpty) {
+          savedNum = int.tryParse(legacyRes.first['value'] as String) ?? 1;
+        }
       }
 
       int nextNum = savedNum > (maxSeq + 1) ? savedNum : (maxSeq + 1);
+
+      // Ensure candidate doesn't already exist locally
+      while (true) {
+        final existing = await txn.rawQuery(
+          "SELECT 1 FROM invoices WHERE (invoice_type IS NULL OR invoice_type != 'temporary') AND financial_year = ? AND sequence_number = ?",
+          [fy, nextNum],
+        );
+        if (existing.isEmpty) break;
+        nextNum++;
+      }
 
       final prefixRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['invoice_prefix']);
       final prefix = prefixRes.isNotEmpty ? (prefixRes.first['value'] as String? ?? '') : '';
@@ -509,18 +570,39 @@ class InvoiceRepository {
       int seqNum;
 
       if (customInvoiceNumber != null && customInvoiceNumber.trim().isNotEmpty) {
-        invoiceNumber = customInvoiceNumber.trim();
+        final candidate = customInvoiceNumber.trim();
+        final duplicate = await txn.rawQuery(
+          "SELECT 1 FROM invoices WHERE invoice_number = ? AND financial_year = ? AND (invoice_type IS NULL OR invoice_type != 'temporary')",
+          [candidate, fy],
+        );
+        if (duplicate.isNotEmpty) {
+          throw Exception('Invoice number "$candidate" already exists for financial year $fy.');
+        }
+        invoiceNumber = candidate;
         final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber) ?? RegExp(r'(\d+)').firstMatch(invoiceNumber);
         final parsed = match != null ? int.tryParse(match.group(1)!) : null;
-        seqNum = parsed ?? nextNum;
-        nextNum = (parsed != null && parsed >= nextNum) ? parsed + 1 : nextNum + 1;
+        if (parsed != null) {
+          final seqDuplicate = await txn.rawQuery(
+            "SELECT 1 FROM invoices WHERE sequence_number = ? AND financial_year = ? AND (invoice_type IS NULL OR invoice_type != 'temporary')",
+            [parsed, fy],
+          );
+          seqNum = seqDuplicate.isEmpty ? parsed : nextNum;
+        } else {
+          seqNum = nextNum;
+        }
+        nextNum = (seqNum >= nextNum) ? seqNum + 1 : nextNum + 1;
       } else {
         invoiceNumber = prefix.isNotEmpty ? '$prefix$nextNum' : '$nextNum';
         seqNum = nextNum;
         nextNum = nextNum + 1;
       }
 
-      // Increment and save next usable number
+      // Increment and save next usable number partitioned by financial year
+      await txn.insert(
+        'app_settings',
+        {'key': 'next_usable_number_$fy', 'value': nextNum.toString()},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
       await txn.insert(
         'app_settings',
         {'key': 'next_usable_number', 'value': nextNum.toString()},
@@ -550,22 +632,27 @@ class InvoiceRepository {
       );
       int maxSeq = 0;
       if (maxRes.isNotEmpty && maxRes.first['max_seq'] != null) {
-        maxSeq = maxRes.first['max_seq'] as int;
+        maxSeq = int.tryParse(maxRes.first['max_seq']?.toString() ?? '') ?? 0;
       }
 
-      final nextNumRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number']);
+      final nextNumRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number_$fy']);
       int savedNum = 1;
       if (nextNumRes.isNotEmpty) {
         savedNum = int.tryParse(nextNumRes.first['value'] as String) ?? 1;
+      } else if (fy == '26-27') {
+        final legacyRes = await txn.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number']);
+        if (legacyRes.isNotEmpty) {
+          savedNum = int.tryParse(legacyRes.first['value'] as String) ?? 1;
+        }
       }
 
       int nextNum = savedNum > (maxSeq + 1) ? savedNum : (maxSeq + 1);
 
-      // Verify nextNum doesn't collide with existing invoice
+      // Verify nextNum doesn't collide with existing invoice in this FY
       while (true) {
         final existing = await txn.rawQuery(
-          "SELECT 1 FROM invoices WHERE invoice_type = 'temporary' AND (invoice_number = ? OR sequence_number = ?)",
-          [nextNum.toString(), nextNum],
+          "SELECT 1 FROM invoices WHERE invoice_type = 'temporary' AND financial_year = ? AND (invoice_number = ? OR sequence_number = ?)",
+          [fy, nextNum.toString(), nextNum],
         );
         if (existing.isEmpty) break;
         nextNum++;
@@ -579,19 +666,27 @@ class InvoiceRepository {
 
       if (customInvoiceNumber != null && customInvoiceNumber.trim().isNotEmpty) {
         final candidateStr = customInvoiceNumber.trim();
-        // Check if candidateStr already exists
+        // Check if candidateStr already exists in this FY
         final existing = await txn.rawQuery(
-          "SELECT 1 FROM invoices WHERE invoice_type = 'temporary' AND invoice_number = ?",
-          [candidateStr],
+          "SELECT 1 FROM invoices WHERE invoice_type = 'temporary' AND financial_year = ? AND invoice_number = ?",
+          [fy, candidateStr],
         );
         if (existing.isEmpty) {
           invoiceNumber = candidateStr;
           final match = RegExp(r'(\d+)$').firstMatch(invoiceNumber) ?? RegExp(r'(\d+)').firstMatch(invoiceNumber);
           final parsed = match != null ? int.tryParse(match.group(1)!) : null;
-          seqNum = parsed ?? nextNum;
-          nextNum = (parsed != null && parsed >= nextNum) ? parsed + 1 : nextNum + 1;
+          if (parsed != null) {
+            final seqDuplicate = await txn.rawQuery(
+              "SELECT 1 FROM invoices WHERE invoice_type = 'temporary' AND financial_year = ? AND sequence_number = ?",
+              [parsed, fy],
+            );
+            seqNum = seqDuplicate.isEmpty ? parsed : nextNum;
+          } else {
+            seqNum = nextNum;
+          }
+          nextNum = (seqNum >= nextNum) ? seqNum + 1 : nextNum + 1;
         } else {
-          // If candidateStr was already taken (e.g. preview was stuck or stale), assign next fresh sequential number
+          // If candidateStr was already taken, assign next fresh sequential number
           invoiceNumber = prefix.isNotEmpty ? '$prefix$nextNum' : '$nextNum';
           seqNum = nextNum;
           nextNum = nextNum + 1;
@@ -602,7 +697,12 @@ class InvoiceRepository {
         nextNum = nextNum + 1;
       }
 
-      // Persist the incremented counter in app_settings
+      // Persist the incremented counter partitioned by financial year
+      await txn.insert(
+        'app_settings',
+        {'key': 'next_temporary_number_$fy', 'value': nextNum.toString()},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
       await txn.insert(
         'app_settings',
         {'key': 'next_temporary_number', 'value': nextNum.toString()},
@@ -622,21 +722,23 @@ class InvoiceRepository {
     final db = await _db.database;
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
+    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59, 999).toIso8601String();
     final monthStart = DateTime(now.year, now.month, 1).toIso8601String();
+    final monthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59, 999).toIso8601String();
 
-    // Today's sales (Excludes cancelled & temporary bills)
+    // Today's sales (Excludes cancelled & temporary bills; upper bounded to prevent future-dated bill inflation)
     final todayRes = await db.rawQuery('''
       SELECT SUM(grand_total) as total, COUNT(*) as count 
       FROM invoices 
-      WHERE invoice_date >= ? AND status != 'cancelled' AND (invoice_type IS NULL OR invoice_type != 'temporary')
-    ''', [todayStart]);
+      WHERE invoice_date >= ? AND invoice_date <= ? AND status != 'cancelled' AND (invoice_type IS NULL OR invoice_type != 'temporary')
+    ''', [todayStart, todayEnd]);
 
-    // Month's sales (Excludes cancelled & temporary bills)
+    // Month's sales (Excludes cancelled & temporary bills; upper bounded to prevent future-dated bill inflation)
     final monthRes = await db.rawQuery('''
       SELECT SUM(grand_total) as total, COUNT(*) as count 
       FROM invoices 
-      WHERE invoice_date >= ? AND status != 'cancelled' AND (invoice_type IS NULL OR invoice_type != 'temporary')
-    ''', [monthStart]);
+      WHERE invoice_date >= ? AND invoice_date <= ? AND status != 'cancelled' AND (invoice_type IS NULL OR invoice_type != 'temporary')
+    ''', [monthStart, monthEnd]);
 
     // Pending payments (Excludes cancelled & temporary bills)
     final pendingRes = await db.rawQuery('''
@@ -649,13 +751,13 @@ class InvoiceRepository {
     final custRes = await db.rawQuery("SELECT COUNT(*) as count FROM customers WHERE (active = 1 OR active IS NULL OR active = 'true')");
 
     return {
-      'todaySales': (todayRes.first['total'] as num?)?.toDouble() ?? 0.0,
-      'todayCount': (todayRes.first['count'] as int?) ?? 0,
-      'monthlySales': (monthRes.first['total'] as num?)?.toDouble() ?? 0.0,
-      'monthlyCount': (monthRes.first['count'] as int?) ?? 0,
-      'pendingPayments': (pendingRes.first['total'] as num?)?.toDouble() ?? 0.0,
-      'pendingCount': (pendingRes.first['count'] as int?) ?? 0,
-      'customerCount': (custRes.first['count'] as int?) ?? 0,
+      'todaySales': double.tryParse(todayRes.first['total']?.toString() ?? '') ?? 0.0,
+      'todayCount': int.tryParse(todayRes.first['count']?.toString() ?? '') ?? 0,
+      'monthlySales': double.tryParse(monthRes.first['total']?.toString() ?? '') ?? 0.0,
+      'monthlyCount': int.tryParse(monthRes.first['count']?.toString() ?? '') ?? 0,
+      'pendingPayments': double.tryParse(pendingRes.first['total']?.toString() ?? '') ?? 0.0,
+      'pendingCount': int.tryParse(pendingRes.first['count']?.toString() ?? '') ?? 0,
+      'customerCount': int.tryParse(custRes.first['count']?.toString() ?? '') ?? 0,
     };
   }
   /// Automatically extracts and repairs city data for legacy bills and customers
@@ -686,7 +788,10 @@ class InvoiceRepository {
             custMap['city'] = extracted;
             batch.update(
               'invoices',
-              {'customer_json': jsonEncode(custMap)},
+              {
+                'customer_json': jsonEncode(custMap),
+                'sync_status': 'waiting_for_internet',
+              },
               where: 'uuid = ?',
               whereArgs: [uuid],
             );
@@ -723,7 +828,7 @@ class InvoiceRepository {
         "SELECT MAX(sequence_number) as max_seq FROM invoices WHERE invoice_type = 'temporary'"
       );
       if (maxTempRes.isNotEmpty && maxTempRes.first['max_seq'] != null) {
-        final maxSeq = maxTempRes.first['max_seq'] as int;
+        final maxSeq = int.tryParse(maxTempRes.first['max_seq']?.toString() ?? '') ?? 0;
         final currentTempRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_temporary_number']);
         final currentTemp = currentTempRes.isNotEmpty ? (int.tryParse(currentTempRes.first['value'] as String) ?? 1) : 1;
         if (maxSeq + 1 > currentTemp) {

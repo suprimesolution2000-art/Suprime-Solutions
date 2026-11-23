@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
@@ -8,20 +9,21 @@ import '../../data/models/payment_model.dart';
 import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/invoice_repository.dart';
 import '../../data/repositories/payment_repository.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/api/api_client.dart';
 import '../../services/sync/sync_service.dart';
 import '../invoices/invoice_detail_screen.dart';
 
-class CustomerLedgerScreen extends StatefulWidget {
+class CustomerLedgerScreen extends ConsumerStatefulWidget {
   final CustomerModel customer;
 
   const CustomerLedgerScreen({super.key, required this.customer});
 
   @override
-  State<CustomerLedgerScreen> createState() => _CustomerLedgerScreenState();
+  ConsumerState<CustomerLedgerScreen> createState() => _CustomerLedgerScreenState();
 }
 
-class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with SingleTickerProviderStateMixin {
+class _CustomerLedgerScreenState extends ConsumerState<CustomerLedgerScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<InvoiceModel> _invoices = [];
   List<PaymentModel> _payments = [];
@@ -36,15 +38,27 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
 
   Future<void> _loadLedgerData() async {
     setState(() => _isLoading = true);
-    final invList = await InvoiceRepository().getInvoices(customerUuid: widget.customer.uuid);
-    final payList = await PaymentRepository().getPaymentsByCustomer(widget.customer.uuid);
+    try {
+      final invList = await InvoiceRepository().getInvoices(customerUuid: widget.customer.uuid);
+      final payList = await PaymentRepository().getPaymentsByCustomer(widget.customer.uuid);
 
-    if (mounted) {
-      setState(() {
-        _invoices = invList;
-        _payments = payList;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _invoices = invList;
+          _payments = payList;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading customer ledger: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load ledger: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -66,11 +80,12 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
       appBar: AppBar(
         title: Text(c.name),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-            tooltip: 'Delete Customer',
-            onPressed: () => _confirmDeleteCustomer(context, c),
-          ),
+          if (ref.watch(authProvider).isOwner)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              tooltip: 'Delete Customer',
+              onPressed: () => _confirmDeleteCustomer(context, c),
+            ),
         ],
       ),
       body: _isLoading
@@ -239,7 +254,7 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                                     ),
                                     subtitle: Text(
                                       'Against: ${p.invoiceNumber}  •  ${DateFormatter.format(p.paymentDate)}${p.referenceNumber.isNotEmpty ? "\nRef: ${p.referenceNumber}" : ""}',
-                                      maxLines: 2,
+                                      maxLines: 3,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
@@ -267,11 +282,14 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
         children: [
           Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color),
+              maxLines: 1,
+            ),
           ),
         ],
       ),
@@ -279,6 +297,15 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
   }
 
   Future<void> _confirmDeleteCustomer(BuildContext context, CustomerModel customer) async {
+    if (!ref.read(authProvider).isOwner) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Only business owners can delete customer accounts.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -354,9 +381,10 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
         await ApiClient.instance.deleteCustomer(customer.uuid);
       } catch (_) {}
       SyncService.instance.synchronize();
-      if (mounted) {
+      if (context.mounted) {
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Customer "${customer.name}" deleted.'),
             backgroundColor: Colors.black87,

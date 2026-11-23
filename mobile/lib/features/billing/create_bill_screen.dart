@@ -10,6 +10,7 @@ import '../../data/models/customer_model.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/invoice_repository.dart';
+import '../../data/repositories/payment_repository.dart';
 import 'add_item_dialog.dart';
 import '../invoices/invoice_detail_screen.dart';
 
@@ -83,6 +84,21 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
         _isCustomCity = true;
         _customCityController.text = cCity;
       }
+      PaymentRepository().getPaymentsByInvoice(inv.uuid).then((payments) {
+        if (mounted && payments.isNotEmpty) {
+          final method = payments.first.paymentMethod;
+          final normalized = method.toLowerCase() == 'upi'
+              ? 'UPI'
+              : (method.toLowerCase() == 'bank_transfer'
+                  ? 'Bank Transfer'
+                  : (method.toLowerCase() == 'cheque'
+                      ? 'Cheque'
+                      : (method.toLowerCase() == 'other' ? 'Other' : 'Cash')));
+          setState(() {
+            _selectedPaymentMethod = normalized;
+          });
+        }
+      }).catchError((_) {});
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.read(billingProvider.notifier).initForEdit(inv);
         ref.read(billingProvider.notifier).setInvoiceType(_currentBillType);
@@ -181,14 +197,22 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
     ref.listen<BillingState>(billingProvider, (prev, next) {
       if (widget.invoiceToEdit == null) {
         if (next.invoiceNumber.isNotEmpty &&
+            _invoiceNumberController.text != next.invoiceNumber &&
             (_invoiceNumberController.text.isEmpty || prev?.invoiceNumber != next.invoiceNumber)) {
           _invoiceNumberController.text = next.invoiceNumber;
+          _invoiceNumberController.selection = TextSelection.collapsed(
+            offset: next.invoiceNumber.length,
+          );
         }
       }
     });
 
     if (widget.invoiceToEdit == null && _invoiceNumberController.text.isEmpty && billState.invoiceNumber.isNotEmpty) {
-      _invoiceNumberController.text = billState.invoiceNumber;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _invoiceNumberController.text.isEmpty && billState.invoiceNumber.isNotEmpty) {
+          _invoiceNumberController.text = billState.invoiceNumber;
+        }
+      });
     }
 
     return Scaffold(
@@ -259,6 +283,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                         ref.read(billingProvider.notifier).setInvoiceType('gst');
                         if (widget.invoiceToEdit == null) {
                           final preview = await InvoiceRepository().getNextInvoiceNumberPreview(ref.read(billingProvider).invoiceDate);
+                          if (!mounted) return;
                           _invoiceNumberController.text = preview;
                           ref.read(billingProvider.notifier).setCustomInvoiceNumber(preview);
                         }
@@ -300,6 +325,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                         ref.read(billingProvider.notifier).setInvoiceType('temporary');
                         if (widget.invoiceToEdit == null) {
                           final preview = await InvoiceRepository().getNextTemporaryInvoiceNumberPreview(ref.read(billingProvider).invoiceDate);
+                          if (!mounted) return;
                           _invoiceNumberController.text = preview;
                           ref.read(billingProvider.notifier).setCustomInvoiceNumber(preview);
                         }
@@ -377,7 +403,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                             elevation: 4.0,
                             borderRadius: BorderRadius.circular(8),
                             child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxHeight: 200, maxWidth: 320),
+                              constraints: BoxConstraints(maxHeight: 200, maxWidth: (MediaQuery.of(context).size.width - 48).clamp(200.0, 320.0)),
                               child: ListView.builder(
                                 padding: EdgeInsets.zero,
                                 shrinkWrap: true,
@@ -487,7 +513,8 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
                     // Dedicated City Dropdown Menu (Includes all cities)
                     DropdownButtonFormField<String>(
-                      value: _isCustomCity ? 'Other' : (CityHelper.commercialCities.contains(_selectedCity) ? _selectedCity : 'Bilaspur'),
+                      key: ValueKey('city_$_selectedCity'),
+                      initialValue: _isCustomCity ? 'Other' : (CityHelper.commercialCities.contains(_selectedCity) ? _selectedCity : 'Bilaspur'),
                       isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'City (Select from dropdown) *',
@@ -534,9 +561,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                     Row(
                       children: [
                         Expanded(
-                          flex: 3,
+                          flex: _currentBillType == 'temporary' ? 1 : 3,
                           child: DropdownButtonFormField<String>(
-                            value: AppConstants.indianStates.containsKey(_selectedState) ? _selectedState : 'Chhattisgarh',
+                            key: ValueKey('state_$_selectedState'),
+                            initialValue: AppConstants.indianStates.containsKey(_selectedState) ? _selectedState : 'Chhattisgarh',
                             isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'State (Place of Supply) *',
@@ -564,35 +592,37 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                             },
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                            decoration: BoxDecoration(
-                              color: billState.isInterState ? Colors.amber.shade50 : AppColors.surfaceLight,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Tax Type', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    billState.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST (Local)',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: billState.isInterState ? Colors.deepOrange : AppColors.primary,
+                        if (_currentBillType != 'temporary') ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: billState.isInterState ? Colors.amber.shade50 : AppColors.surfaceLight,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Tax Type', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      billState.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST (Local)',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: billState.isInterState ? Colors.deepOrange : AppColors.primary,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ],
@@ -637,10 +667,13 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 10),
                             ),
                             icon: const Icon(Icons.calendar_today, size: 16),
-                            label: Text(
-                              _currentBillType == 'temporary'
-                                  ? 'Date: ${DateFormatter.format(billState.invoiceDate)}'
-                                  : DateFormatter.format(billState.invoiceDate),
+                            label: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _currentBillType == 'temporary'
+                                    ? 'Date: ${DateFormatter.format(billState.invoiceDate)}'
+                                    : DateFormatter.format(billState.invoiceDate),
+                              ),
                             ),
                             onPressed: () async {
                               final picked = await showDatePicker(
@@ -783,6 +816,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                               ),
                             );
 
+                            if (!context.mounted) return;
                             _customerFocusNode?.unfocus();
                             FocusScope.of(context).unfocus();
                             FocusManager.instance.primaryFocus?.unfocus();
@@ -890,6 +924,10 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                   children: [
                     if (_currentBillType == 'temporary') ...[
                       _buildCalcRow('Total Items', '${billState.items.length} items'),
+                      if (billState.roundOff != 0.0) ...[
+                        _buildCalcRow('Subtotal', CurrencyFormatter.format(billState.netAmount)),
+                        _buildCalcRow('Round Off', (billState.roundOff >= 0 ? '+' : '') + CurrencyFormatter.format(billState.roundOff)),
+                      ],
                       const Divider(thickness: 1.5),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1032,7 +1070,7 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
                     if (_selectedPaymentStatus != 'unpaid') ...[
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
-                        value: _selectedPaymentMethod,
+                        initialValue: _selectedPaymentMethod,
                         decoration: const InputDecoration(
                           labelText: 'Payment Mode',
                           prefixIcon: Icon(Icons.payment),
@@ -1211,10 +1249,41 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
       }
     }
 
+    if (_selectedPaymentStatus == 'partial') {
+      final partAmt = double.tryParse(_receivedAmountController.text) ?? 0.0;
+      if (partAmt <= 0.0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please enter an amount received greater than 0 for partial payment, or select Unpaid.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      if (partAmt >= billState.grandTotal) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Amount received equals or exceeds total amount. Please select "Paid in Full".'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
     // Synchronize customer details before opening confirmation dialog
+    if (_isCustomCity && _customCityController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter the custom city name.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     final selectedCode = AppConstants.indianStates[_selectedState] ?? '22';
     final effectiveCity = _isCustomCity
-        ? (_customCityController.text.trim().isNotEmpty ? _customCityController.text.trim() : 'Bilaspur')
+        ? _customCityController.text.trim()
         : _selectedCity;
     billingNotifier.updateCustomerDetails(
       name: custName,
@@ -1352,7 +1421,18 @@ class _CreateBillScreenState extends ConsumerState<CreateBillScreen> {
 
     // 5. Proceed to save
     if (isEdit) {
-      final updated = await billingNotifier.updateExistingInvoice(invoiceType: _currentBillType);
+      final editPaidAmount = _selectedPaymentStatus == 'paid'
+          ? billState.grandTotal
+          : (_selectedPaymentStatus == 'partial'
+              ? (double.tryParse(_receivedAmountController.text) ?? 0.0).clamp(0.0, billState.grandTotal)
+              : 0.0);
+
+      final updated = await billingNotifier.updateExistingInvoice(
+        invoiceType: _currentBillType,
+        paymentStatus: _selectedPaymentStatus,
+        paidAmount: editPaidAmount,
+        paymentMethod: _selectedPaymentMethod,
+      );
       if (!mounted) return;
       if (updated != null) {
         ScaffoldMessenger.of(context).showSnackBar(

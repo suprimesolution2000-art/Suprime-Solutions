@@ -86,7 +86,9 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
       ),
     );
 
-    if (confirmed == true && mounted) {
+    if (!mounted) return;
+
+    if (confirmed == true) {
       try {
         await InvoiceRepository().deleteInvoice(_currentInvoice.uuid);
         try {
@@ -95,7 +97,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
           // If offline, local deletion already completed
         }
 
-        if (!mounted) return;
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Bill ${_currentInvoice.invoiceNumber} deleted successfully.'),
@@ -104,7 +106,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
         );
         Navigator.pop(context, true);
       } catch (e) {
-        if (!mounted) return;
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to delete bill: $e'),
@@ -121,48 +123,27 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Flexible(
-              child: Text(
-                _currentInvoice.invoiceType == 'temporary' ? 'Temporary Bill' : _currentInvoice.invoiceNumber,
-                overflow: TextOverflow.ellipsis,
-              ),
+            Text(
+              _currentInvoice.invoiceNumber,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 16),
             ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: _previewType == 'temporary' ? const Color(0xFF8B5A2B) : AppColors.primary,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                _previewType == 'temporary' ? 'TEMP' : 'GST',
-                style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
-              ),
+            Row(
+              children: [
+                Text(
+                  _previewType == 'temporary' ? 'Temporary Bill' : 'GST Tax Invoice',
+                  style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.85)),
+                ),
+                if (_currentInvoice.syncStatus != 'synced') ...[
+                  const SizedBox(width: 6),
+                  const Text('• Offline', style: TextStyle(fontSize: 11, color: Colors.amberAccent)),
+                ],
+              ],
             ),
-            if (_currentInvoice.syncStatus != 'synced') ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade700,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.cloud_off, size: 10, color: Colors.white),
-                    SizedBox(width: 3),
-                    Text(
-                      'OFFLINE',
-                      style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ],
         ),
         actions: [
@@ -186,14 +167,32 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
           IconButton(
             icon: const Icon(Icons.share),
             tooltip: 'Share on WhatsApp',
-            onPressed: () => PdfInvoiceService.shareInvoicePdf(_currentInvoice.copyWith(invoiceType: _previewType)),
+            onPressed: () async {
+              try {
+                await PdfInvoiceService.shareInvoicePdf(_currentInvoice.copyWith(invoiceType: _previewType));
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to share PDF: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Colors.white),
             tooltip: 'More Actions',
             onSelected: (val) async {
               if (val == 'print') {
-                PdfInvoiceService.printInvoice(_currentInvoice.copyWith(invoiceType: _previewType));
+                try {
+                  await PdfInvoiceService.printInvoice(_currentInvoice.copyWith(invoiceType: _previewType));
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to print PDF: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
               } else if (val == 'edit') {
                 final result = await Navigator.push<bool>(
                   context,
@@ -347,7 +346,17 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ),
-                      onPressed: () => PdfInvoiceService.shareInvoicePdf(_currentInvoice.copyWith(invoiceType: _previewType)),
+                      onPressed: () async {
+                        try {
+                          await PdfInvoiceService.shareInvoicePdf(_currentInvoice.copyWith(invoiceType: _previewType));
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed to share PDF: $e'), backgroundColor: Colors.red),
+                            );
+                          }
+                        }
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -367,7 +376,17 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ),
-                      onPressed: () => PdfInvoiceService.printInvoice(_currentInvoice.copyWith(invoiceType: _previewType)),
+                      onPressed: () async {
+                        try {
+                          await PdfInvoiceService.printInvoice(_currentInvoice.copyWith(invoiceType: _previewType));
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed to print PDF: $e'), backgroundColor: Colors.red),
+                            );
+                          }
+                        }
+                      },
                     ),
                   ),
                 ],

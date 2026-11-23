@@ -53,8 +53,8 @@ exports.updateProduct = async (req, res, next) => {
     const { description, hsnCode, unit, defaultRate, gstRate, active } = req.body;
     const updateFields = { updatedAt: new Date() };
 
-    if (description !== undefined) updateFields.description = description.trim();
-    if (hsnCode !== undefined) updateFields.hsnCode = hsnCode.trim();
+    if (description !== undefined) updateFields.description = description ? String(description).trim() : '';
+    if (hsnCode !== undefined) updateFields.hsnCode = hsnCode ? String(hsnCode).trim() : '';
     if (unit !== undefined) updateFields.unit = unit;
     if (defaultRate !== undefined) updateFields.defaultRate = Number(defaultRate) || 0;
     if (gstRate !== undefined) updateFields.gstRate = Number(gstRate) || 0;
@@ -63,7 +63,7 @@ exports.updateProduct = async (req, res, next) => {
     const product = await Product.findOneAndUpdate(
       findByIdOrUuid(req.params.id),
       { $set: updateFields },
-      { new: true }
+      { new: true, runValidators: true }
     );
 
     if (!product) {

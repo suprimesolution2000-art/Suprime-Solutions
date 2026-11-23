@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/models/product_model.dart';
 import '../../data/repositories/product_repository.dart';
@@ -59,7 +60,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
   }
 
-  void _showAddOrEditDialog({ProductModel? product}) {
+  Future<void> _showAddOrEditDialog({ProductModel? product}) async {
     final isEditing = product != null;
     final descCtrl = TextEditingController(text: product?.description ?? '');
     final hsnCtrl = TextEditingController(text: product?.hsnCode ?? '');
@@ -67,10 +68,17 @@ class _ProductsScreenState extends State<ProductsScreen> {
     String selectedUnit = product?.unit ?? 'PCS';
     double selectedGst = product?.gstRate ?? 18.0;
 
-    final units = ['PCS', 'NOS', 'SET', 'MTR', 'BOX', 'KGS', 'ROLL', 'PKT'];
-    final gstRates = [0.0, 5.0, 12.0, 18.0, 28.0];
+    final units = List<String>.from(AppConstants.commonUnits);
+    if (!units.contains(selectedUnit)) {
+      units.add(selectedUnit);
+    }
+    final gstRates = List<double>.from(AppConstants.gstRates);
+    if (!gstRates.contains(selectedGst)) {
+      gstRates.add(selectedGst);
+      gstRates.sort();
+    }
 
-    showDialog(
+    await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
@@ -118,7 +126,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: selectedUnit,
+                          initialValue: selectedUnit,
                           decoration: const InputDecoration(
                             labelText: 'Unit',
                             border: OutlineInputBorder(),
@@ -149,7 +157,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<double>(
-                          value: selectedGst,
+                          initialValue: selectedGst,
                           decoration: const InputDecoration(
                             labelText: 'GST %',
                             border: OutlineInputBorder(),
@@ -196,11 +204,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     active: true,
                   );
 
-                  Navigator.pop(ctx);
+                  if (ctx.mounted) Navigator.pop(ctx);
                   await _loadProducts();
                   SyncService.instance.synchronize();
 
-                  if (mounted) {
+                  if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(isEditing ? 'Product updated.' : 'Product added to catalogue.')),
                     );
@@ -213,6 +221,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
         },
       ),
     );
+    descCtrl.dispose();
+    hsnCtrl.dispose();
+    rateCtrl.dispose();
   }
 
   Future<void> _confirmDeleteProduct(ProductModel product) async {
@@ -432,29 +443,48 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     ConstrainedBox(
-                                      constraints: const BoxConstraints(maxWidth: 85),
+                                      constraints: const BoxConstraints(maxWidth: 80),
                                       child: FittedBox(
                                         fit: BoxFit.scaleDown,
                                         child: Text(
                                           CurrencyFormatter.format(p.defaultRate),
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary),
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
                                         ),
                                       ),
                                     ),
-                                    const SizedBox(width: 2),
-                                    IconButton(
-                                      padding: const EdgeInsets.all(6),
-                                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                                      icon: const Icon(Icons.edit_outlined, size: 20, color: AppColors.primary),
-                                      tooltip: 'Edit Product',
-                                      onPressed: () => _showAddOrEditDialog(product: p),
-                                    ),
-                                    IconButton(
-                                      padding: const EdgeInsets.all(6),
-                                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                                      icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                                      tooltip: 'Delete Product',
-                                      onPressed: () => _confirmDeleteProduct(p),
+                                    PopupMenuButton<String>(
+                                      padding: EdgeInsets.zero,
+                                      iconSize: 20,
+                                      icon: const Icon(Icons.more_vert, color: AppColors.textMuted),
+                                      onSelected: (val) {
+                                        if (val == 'edit') {
+                                          _showAddOrEditDialog(product: p);
+                                        } else if (val == 'delete') {
+                                          _confirmDeleteProduct(p);
+                                        }
+                                      },
+                                      itemBuilder: (ctx) => [
+                                        const PopupMenuItem(
+                                          value: 'edit',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),
+                                              SizedBox(width: 8),
+                                              Text('Edit'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: 'delete',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                              SizedBox(width: 8),
+                                              Text('Delete', style: TextStyle(color: Colors.red)),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),

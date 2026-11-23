@@ -21,17 +21,30 @@ const appRoutes = require('./routes/appRoutes');
 
 const app = express();
 
+// Process-level uncaught exception handlers (B23)
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Unhandled Rejection at Promise]:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[Uncaught Exception]:', err);
+});
+
 // Security and middleware
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
-const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : '*';
+const defaultOrigins = env.NODE_ENV === 'production'
+  ? ['https://suprimesolutions.com', 'https://api.suprimesolutions.com']
+  : '*';
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : defaultOrigins;
 app.use(cors({
   origin: allowedOrigins === '*' ? '*' : (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || (Array.isArray(allowedOrigins) && allowedOrigins.includes(origin))) {
       callback(null, true);
     } else {
-      callback(new Error('CORS policy: Not allowed by Access-Control-Allow-Origin'));
+      callback(null, false);
     }
   }
 }));

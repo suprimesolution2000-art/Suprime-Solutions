@@ -25,11 +25,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
+    if (ref.read(authProvider).isLoading) return;
     if (!_formKey.currentState!.validate()) return;
     final username = _loginUsernameController.text.trim();
     final password = _loginPasswordController.text;
 
     final success = await ref.read(authProvider.notifier).login(username, password);
+    if (success && mounted && Navigator.canPop(context)) {
+      Navigator.pop(context);
+      return;
+    }
     if (!success && mounted) {
       final err = ref.read(authProvider).errorMessage;
       if (err != null) {
@@ -166,7 +171,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             controller: _loginPasswordController,
                             obscureText: _obscurePassword,
                             textInputAction: TextInputAction.done,
-                            onFieldSubmitted: (_) => _handleLogin(),
+                            onFieldSubmitted: (_) {
+                              if (!ref.read(authProvider).isLoading) {
+                                _handleLogin();
+                              }
+                            },
                             decoration: InputDecoration(
                               labelText: 'Password *',
                               hintText: 'Enter your password',

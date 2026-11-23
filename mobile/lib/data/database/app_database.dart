@@ -19,7 +19,7 @@ class AppDatabase {
 
     final db = await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -66,13 +66,34 @@ class AppDatabase {
                 invoice_type TEXT DEFAULT 'gst'
               )
             ''');
-            await db.execute('INSERT OR IGNORE INTO invoices SELECT * FROM invoices_old_v2;');
+            // Explicit column list to avoid schema ordering mismatch (D10)
+            await db.execute('''
+              INSERT OR IGNORE INTO invoices (
+                uuid, invoice_number, sequence_number, financial_year, invoice_date, due_date,
+                po_number, po_date, challan_number, challan_date, customer_json, is_inter_state,
+                items_json, net_amount, cgst_total, sgst_total, igst_total, round_off, grand_total,
+                amount_in_words, status, payment_status, total_paid, balance_due, device_id,
+                created_by, sync_status, invoice_type
+              )
+              SELECT 
+                uuid, invoice_number, sequence_number, financial_year, invoice_date, due_date,
+                po_number, po_date, challan_number, challan_date, customer_json, is_inter_state,
+                items_json, net_amount, cgst_total, sgst_total, igst_total, round_off, grand_total,
+                amount_in_words, status, payment_status, total_paid, balance_due, device_id,
+                created_by, sync_status, COALESCE(invoice_type, 'gst')
+              FROM invoices_old_v2;
+            ''');
             await db.execute('DROP TABLE invoices_old_v2;');
             await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_number ON invoices(invoice_number);');
             await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_date ON invoices(invoice_date);');
             await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);');
             await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_payment ON invoices(payment_status);');
             await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_type ON invoices(invoice_type);');
+          } catch (_) {}
+        }
+        if (oldVersion < 4) {
+          try {
+            await db.execute("ALTER TABLE payments ADD COLUMN sync_status TEXT DEFAULT 'synced'");
           } catch (_) {}
         }
       },
@@ -83,6 +104,25 @@ class AppDatabase {
     } catch (_) {}
     try {
       await db.execute("ALTER TABLE payments ADD COLUMN sync_status TEXT DEFAULT 'synced'");
+    } catch (_) {}
+    try {
+      await db.execute("ALTER TABLE invoices ADD COLUMN customer_id TEXT");
+    } catch (_) {}
+    try {
+      await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_unique_num_type_fy ON invoices(invoice_number, invoice_type, financial_year);');
+      await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_unique_seq_type_fy ON invoices(sequence_number, invoice_type, financial_year);');
+    } catch (_) {}
+    try {
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_payments_invoice_id ON payments(invoice_id);');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_payments_customer_id ON payments(customer_id);');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_customer_id ON invoices(customer_id);');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_seq_fy ON invoices(sequence_number, financial_year);');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_products_desc ON products(description);');
+    } catch (_) {}
+    try {
+      await db.execute('DROP TABLE IF EXISTS sync_queue;');
     } catch (_) {}
     return db;
   }
@@ -135,6 +175,7 @@ class AppDatabase {
         po_date TEXT,
         challan_number TEXT,
         challan_date TEXT,
+        customer_id TEXT,
         customer_json TEXT NOT NULL,
         is_inter_state INTEGER DEFAULT 0,
         items_json TEXT NOT NULL,
@@ -162,6 +203,10 @@ class AppDatabase {
     await db.execute('CREATE INDEX idx_invoices_status ON invoices(status);');
     await db.execute('CREATE INDEX idx_invoices_payment ON invoices(payment_status);');
     await db.execute('CREATE INDEX idx_invoices_type ON invoices(invoice_type);');
+    await db.execute('CREATE INDEX idx_invoices_customer ON invoices(customer_id);');
+    await db.execute('CREATE INDEX idx_invoices_seq_fy ON invoices(sequence_number, financial_year);');
+    await db.execute('CREATE UNIQUE INDEX idx_invoices_unique_num_type_fy ON invoices(invoice_number, invoice_type, financial_year);');
+    await db.execute('CREATE UNIQUE INDEX idx_invoices_unique_seq_type_fy ON invoices(sequence_number, invoice_type, financial_year);');
 
     // 4. Payments table
     await db.execute('''
@@ -178,25 +223,19 @@ class AppDatabase {
         notes TEXT,
         received_by TEXT,
         device_id TEXT,
-        sync_status TEXT DEFAULT 'pending'
+        sync_status TEXT DEFAULT 'pending',
+        FOREIGN KEY (invoice_id) REFERENCES invoices(uuid) ON DELETE CASCADE,
+        FOREIGN KEY (customer_id) REFERENCES customers(uuid) ON DELETE CASCADE
       )
     ''');
 
-    // 5. Sync queue table
-    await db.execute('''
-      CREATE TABLE sync_queue (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        entity_type TEXT NOT NULL,
-        entity_id TEXT NOT NULL,
-        action TEXT NOT NULL,
-        payload TEXT NOT NULL,
-        status TEXT DEFAULT 'pending',
-        retry_count INTEGER DEFAULT 0,
-        created_at TEXT NOT NULL
-      )
-    ''');
+    await db.execute('CREATE INDEX idx_payments_invoice ON payments(invoice_id);');
+    await db.execute('CREATE INDEX idx_payments_customer ON payments(customer_id);');
+    await db.execute('CREATE INDEX idx_customers_name ON customers(name);');
+    await db.execute('CREATE INDEX idx_customers_phone ON customers(phone);');
+    await db.execute('CREATE INDEX idx_products_desc ON products(description);');
 
-    // 6. App settings table
+    // 5. App settings table
     await db.execute('''
       CREATE TABLE app_settings (
         key TEXT PRIMARY KEY,

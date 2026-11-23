@@ -45,7 +45,13 @@ class AppUpdateService {
   AppUpdateService._init();
 
   static const MethodChannel _channel = MethodChannel('com.suprimesolutions.app/updater');
-  final Dio _dio = Dio();
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 15),
+      sendTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
+    ),
+  );
 
   bool _isChecking = false;
   bool get isChecking => _isChecking;
@@ -55,18 +61,30 @@ class AppUpdateService {
 
   /// Check whether a remote version is strictly newer than the current version
   static bool isNewerVersion(String current, String remote) {
+    final curBuild = current.contains('+') ? int.tryParse(current.split('+').last.trim()) : null;
+    final remBuild = remote.contains('+') ? int.tryParse(remote.split('+').last.trim()) : null;
+
     final cleanCurrent = current.replaceAll('v', '').split('+').first.trim();
     final cleanRemote = remote.replaceAll('v', '').split('+').first.trim();
 
     final curParts = cleanCurrent.split('.').map((e) => int.tryParse(e) ?? 0).toList();
     final remParts = cleanRemote.split('.').map((e) => int.tryParse(e) ?? 0).toList();
 
-    while (curParts.length < 3) curParts.add(0);
-    while (remParts.length < 3) remParts.add(0);
+    final maxLen = curParts.length > remParts.length ? curParts.length : remParts.length;
+    while (curParts.length < maxLen) {
+      curParts.add(0);
+    }
+    while (remParts.length < maxLen) {
+      remParts.add(0);
+    }
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < maxLen; i++) {
       if (remParts[i] > curParts[i]) return true;
       if (remParts[i] < curParts[i]) return false;
+    }
+
+    if (remBuild != null && curBuild != null) {
+      return remBuild > curBuild;
     }
     return false;
   }
@@ -105,6 +123,7 @@ class AppUpdateService {
             'https://api.github.com/repos/suprimesolution2000-art/Suprime-Solutions/releases/latest',
             options: Options(
               headers: {'Accept': 'application/vnd.github.v3+json'},
+              connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 10),
               sendTimeout: const Duration(seconds: 10),
             ),
@@ -226,7 +245,7 @@ class AppUpdateService {
 
     // Build prioritized list of download URLs (backend high-speed redirect first to prevent 504 timeouts)
     final List<String> candidateUrls = [];
-    final backendDownloadUrl = '${ApiClient.defaultBaseUrl}/app/download';
+    final backendDownloadUrl = '${ApiClient.instance.baseUrl}/app/download';
     
     if (info.downloadUrl.isNotEmpty && info.downloadUrl.contains('/api/app/download')) {
       candidateUrls.add(info.downloadUrl);

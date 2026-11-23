@@ -50,22 +50,41 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
       _nameError = null;
     });
 
+    if (_isCustomCity && _customCityController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter city name or select from the list'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final newCust = CustomerModel(
       uuid: const Uuid().v4(),
       name: name,
       phone: phone,
       gstin: _gstinController.text.trim().toUpperCase(),
       address: _addressController.text.trim(),
-      city: _isCustomCity
-          ? (_customCityController.text.trim().isNotEmpty ? _customCityController.text.trim() : 'Bilaspur')
-          : _selectedCity,
+      city: _isCustomCity ? _customCityController.text.trim() : _selectedCity,
       state: _selectedState,
       stateCode: _selectedStateCode,
     );
 
-    await CustomerRepository().saveCustomer(newCust);
-    widget.onCustomerAdded(newCust);
-    if (mounted) Navigator.pop(context);
+    try {
+      await CustomerRepository().saveCustomer(newCust);
+      widget.onCustomerAdded(newCust);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save customer: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -129,20 +148,13 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
                 controller: _addressController,
                 decoration: const InputDecoration(labelText: 'Address', prefixIcon: Icon(Icons.location_on_outlined)),
               ),
-              if (_isCustomCity) ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _customCityController,
-                  decoration: const InputDecoration(labelText: 'Enter Custom City Name *', prefixIcon: Icon(Icons.edit_location_alt)),
-                ),
-              ],
               const SizedBox(height: 12),
 
               Row(
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _isCustomCity ? 'Other' : (CityHelper.commercialCities.contains(_selectedCity) ? _selectedCity : 'Bilaspur'),
+                      initialValue: _isCustomCity ? 'Other' : (CityHelper.commercialCities.contains(_selectedCity) ? _selectedCity : 'Bilaspur'),
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'City *'),
                       items: [
@@ -165,7 +177,7 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _selectedState,
+                      initialValue: _selectedState,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'State'),
                       items: AppConstants.indianStates.entries.map((e) {
@@ -190,6 +202,13 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
                   ),
                 ],
               ),
+              if (_isCustomCity) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _customCityController,
+                  decoration: const InputDecoration(labelText: 'Enter Custom City Name *', prefixIcon: Icon(Icons.edit_location_alt)),
+                ),
+              ],
               const SizedBox(height: 20),
 
               ElevatedButton(

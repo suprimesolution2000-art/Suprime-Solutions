@@ -1,4 +1,5 @@
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 import '../database/app_database.dart';
 import '../models/product_model.dart';
 
@@ -55,7 +56,8 @@ class ProductRepository {
     double defaultRate = 0.0,
     double gstRate = 18.0,
     bool active = true,
-    bool preserveInactive = true,
+    bool preserveInactive = false,
+    bool preserveExistingHsnIfBlank = false,
   }) async {
     final cleanDesc = description.trim();
     if (cleanDesc.isEmpty) return;
@@ -73,16 +75,22 @@ class ProductRepository {
       if (existingByUuid.isNotEmpty) {
         final existingActive = existingByUuid.first['active'];
         final finalActive = (preserveInactive && (existingActive == 0 || existingActive == 'false')) ? 0 : (active ? 1 : 0);
+        if (finalActive == 1) {
+          await db.delete('app_settings', where: 'key = ?', whereArgs: ['deleted_product_$uuid']);
+        }
+        final Map<String, dynamic> updateFields = {
+          'description': cleanDesc,
+          'unit': unit,
+          'default_rate': defaultRate,
+          'gst_rate': gstRate,
+          'active': finalActive,
+        };
+        if (!preserveExistingHsnIfBlank || hsnCode.trim().isNotEmpty) {
+          updateFields['hsn_code'] = hsnCode.trim();
+        }
         await db.update(
           'products',
-          {
-            'description': cleanDesc,
-            if (hsnCode.trim().isNotEmpty) 'hsn_code': hsnCode.trim(),
-            'unit': unit,
-            'default_rate': defaultRate,
-            'gst_rate': gstRate,
-            'active': finalActive,
-          },
+          updateFields,
           where: 'uuid = ?',
           whereArgs: [uuid],
         );
@@ -101,23 +109,32 @@ class ProductRepository {
       final existingUuid = existing.first['uuid'] as String;
       final existingActive = existing.first['active'];
       final finalActive = (preserveInactive && (existingActive == 0 || existingActive == 'false')) ? 0 : (active ? 1 : 0);
+      if (finalActive == 1) {
+        await db.delete('app_settings', where: 'key = ?', whereArgs: ['deleted_product_$existingUuid']);
+      }
+      final Map<String, dynamic> updateFields = {
+        'description': cleanDesc,
+        'unit': unit,
+        'default_rate': defaultRate,
+        'gst_rate': gstRate,
+        'active': finalActive,
+      };
+      if (!preserveExistingHsnIfBlank || hsnCode.trim().isNotEmpty) {
+        updateFields['hsn_code'] = hsnCode.trim();
+      }
       await db.update(
         'products',
-        {
-          'description': cleanDesc,
-          if (hsnCode.trim().isNotEmpty) 'hsn_code': hsnCode.trim(),
-          'unit': unit,
-          'default_rate': defaultRate,
-          'gst_rate': gstRate,
-          'active': finalActive,
-        },
+        updateFields,
         where: 'uuid = ?',
         whereArgs: [existingUuid],
       );
     } else {
-      final newUuid = uuid ?? 'prod-${DateTime.now().millisecondsSinceEpoch}';
+      final newUuid = uuid ?? const Uuid().v4();
       final tombstones = await db.query('app_settings', where: 'key = ?', whereArgs: ['deleted_product_$newUuid']);
       final finalActive = (preserveInactive && tombstones.isNotEmpty) ? 0 : (active ? 1 : 0);
+      if (finalActive == 1) {
+        await db.delete('app_settings', where: 'key = ?', whereArgs: ['deleted_product_$newUuid']);
+      }
       await db.insert(
         'products',
         {

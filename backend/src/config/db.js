@@ -33,6 +33,7 @@ const connectDB = async () => {
     console.error(`[MongoDB Atlas] Initial connection error: ${error.message}`);
     if (env.NODE_ENV === 'production') {
       console.error(`[CRITICAL] Could not connect to MongoDB Atlas in production. Please verify MONGODB_URI and Network IP Access (0.0.0.0/0).`);
+      throw error;
     } else {
       console.log(`[MongoDB] Running in standalone development mode.`);
     }

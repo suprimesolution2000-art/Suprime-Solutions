@@ -28,7 +28,11 @@ class DateFormatter {
       try {
         return _dateFormat.parse(str);
       } catch (_) {
-        return null;
+        try {
+          return _dateDisplayFormat.parse(str);
+        } catch (_) {
+          return null;
+        }
       }
     }
   }

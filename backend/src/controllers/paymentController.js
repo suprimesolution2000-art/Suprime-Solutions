@@ -72,13 +72,16 @@ exports.recordPayment = async (req, res, next) => {
 
     const uuid = req.body.uuid || uuidv4();
 
+    const customerId = (invoice.customer && invoice.customer.uuid) ? invoice.customer.uuid : invoice.uuid;
+    const customerName = (invoice.customer && invoice.customer.name) ? invoice.customer.name : 'Customer';
+
     // 1. Create Payment record
     const payment = await Payment.create({
       uuid,
       invoiceId: invoice.uuid,
       invoiceNumber: invoice.invoiceNumber,
-      customerId: invoice.customer.uuid,
-      customerName: invoice.customer.name,
+      customerId,
+      customerName,
       amount: paymentAmount,
       paymentMethod,
       referenceNumber: referenceNumber || '',
@@ -100,8 +103,8 @@ exports.recordPayment = async (req, res, next) => {
 
     await invoice.save();
 
-    // 3. Update Customer ledger
-    if (invoice.customer && invoice.customer.uuid) {
+    // 3. Update Customer ledger (only for non-temporary bills - B6)
+    if (invoice.invoiceType !== 'temporary' && invoice.customer && invoice.customer.uuid) {
       await Customer.updateOne(
         { uuid: invoice.customer.uuid },
         {

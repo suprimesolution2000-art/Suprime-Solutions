@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
@@ -45,9 +46,15 @@ class _AddItemDialogState extends State<AddItemDialog> {
   void initState() {
     super.initState();
     _loadProducts();
-    _qtyController.addListener(() => setState(() {}));
-    _rateController.addListener(() => setState(() {}));
-    _discountController.addListener(() => setState(() {}));
+    _qtyController.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _rateController.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _discountController.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _loadProducts() async {
@@ -87,7 +94,8 @@ class _AddItemDialogState extends State<AddItemDialog> {
       child: Container(
         constraints: BoxConstraints(
           maxWidth: 500,
-          maxHeight: MediaQuery.of(context).size.height * 0.85,
+          maxHeight: (MediaQuery.of(context).size.height - MediaQuery.of(context).viewInsets.bottom - 64)
+              .clamp(200.0, MediaQuery.of(context).size.height * 0.85),
         ),
         padding: const EdgeInsets.all(20),
         child: SingleChildScrollView(
@@ -157,7 +165,10 @@ class _AddItemDialogState extends State<AddItemDialog> {
                       elevation: 4.0,
                       borderRadius: BorderRadius.circular(8),
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 200, maxWidth: 300),
+                        constraints: BoxConstraints(
+                          maxHeight: 200,
+                          maxWidth: (MediaQuery.of(context).size.width - 64).clamp(240.0, 360.0),
+                        ),
                         child: ListView.builder(
                           padding: EdgeInsets.zero,
                           shrinkWrap: true,
@@ -190,9 +201,15 @@ class _AddItemDialogState extends State<AddItemDialog> {
                   if (selection.defaultRate > 0) {
                     _rateController.text = selection.defaultRate.toString();
                   }
+                  final effUnit = AppConstants.commonUnits.contains(selection.unit)
+                      ? selection.unit
+                      : (selection.unit == 'KGS' ? 'KG' : AppConstants.commonUnits.first);
+                  final effGst = AppConstants.gstRates.contains(selection.gstRate)
+                      ? selection.gstRate
+                      : 18.0;
                   setState(() {
-                    _selectedUnit = selection.unit;
-                    _selectedGstRate = selection.gstRate;
+                    _selectedUnit = effUnit;
+                    _selectedGstRate = effGst;
                     _validationError = null;
                   });
                 },
@@ -249,11 +266,14 @@ class _AddItemDialogState extends State<AddItemDialog> {
                     Expanded(
                       flex: widget.isTemporary ? 1 : 2,
                       child: DropdownButtonFormField<String>(
-                        value: _selectedUnit,
+                        key: ValueKey('unit_$_selectedUnit'),
+                        initialValue: AppConstants.commonUnits.contains(_selectedUnit) ? _selectedUnit : AppConstants.commonUnits.first,
                         decoration: const InputDecoration(
                           labelText: 'Unit *',
                         ),
-                        items: AppConstants.commonUnits.map((u) {
+                        items: (AppConstants.commonUnits.contains(_selectedUnit)
+                            ? AppConstants.commonUnits
+                            : [_selectedUnit, ...AppConstants.commonUnits]).map((u) {
                           return DropdownMenuItem(value: u, child: Text(u));
                         }).toList(),
                         onChanged: (val) {
@@ -311,11 +331,14 @@ class _AddItemDialogState extends State<AddItemDialog> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<double>(
-                          value: _selectedGstRate,
+                          key: ValueKey('gst_$_selectedGstRate'),
+                          initialValue: AppConstants.gstRates.contains(_selectedGstRate) ? _selectedGstRate : 18.0,
                           decoration: const InputDecoration(
                             labelText: 'GST Rate *',
                           ),
-                          items: AppConstants.gstRates.map((r) {
+                          items: (AppConstants.gstRates.contains(_selectedGstRate)
+                              ? AppConstants.gstRates
+                              : (List<double>.from(AppConstants.gstRates)..add(_selectedGstRate)..sort())).map((r) {
                             return DropdownMenuItem(value: r, child: Text('${r.toInt()}%'));
                           }).toList(),
                           onChanged: (val) {
@@ -339,13 +362,20 @@ class _AddItemDialogState extends State<AddItemDialog> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      widget.isTemporary ? 'Item Total:' : 'Item Total (Incl. GST):',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    Flexible(
+                      child: Text(
+                        widget.isTemporary ? 'Item Total:' : 'Item Total (Incl. GST):',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    Text(
-                      CurrencyFormatter.format(_itemTotal),
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        CurrencyFormatter.format(_itemTotal),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary),
+                      ),
                     ),
                   ],
                 ),
@@ -388,13 +418,14 @@ class _AddItemDialogState extends State<AddItemDialog> {
 
                   // Save product & HSN code in catalogue for all future bills
                   if (!widget.isTemporary) {
-                    ProductRepository().saveOrUpdateProduct(
+                    unawaited(ProductRepository().saveOrUpdateProduct(
                       description: desc,
                       hsnCode: hsn,
                       unit: _selectedUnit,
                       defaultRate: rate,
                       gstRate: effectiveGst,
-                    );
+                      preserveExistingHsnIfBlank: true,
+                    ).catchError((_) {}));
                   }
 
                   FocusScope.of(context).unfocus();

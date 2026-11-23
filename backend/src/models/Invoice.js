@@ -168,7 +168,9 @@ invoiceSchema.pre('save', function (next) {
     } else if ((this.totalPaid || 0) > 0) {
       this.paymentStatus = 'partially_paid';
     } else {
-      this.paymentStatus = 'unpaid';
+      if (this.paymentStatus !== 'overdue') {
+        this.paymentStatus = 'unpaid';
+      }
     }
   }
   next();

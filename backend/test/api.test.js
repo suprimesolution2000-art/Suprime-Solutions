@@ -138,4 +138,17 @@ describe('Backend Services & PDF Overlay Tests', () => {
     const header = pdfBuffer.slice(0, 5).toString('utf8');
     assert.strictEqual(header, '%PDF-');
   });
+
+  it('should successfully require all backend controllers and routes without syntax errors', () => {
+    assert.doesNotThrow(() => {
+      require('../src/controllers/invoiceController');
+      require('../src/controllers/syncController');
+      require('../src/controllers/customerController');
+      require('../src/controllers/paymentController');
+      require('../src/controllers/productController');
+      require('../src/controllers/reportController');
+      require('../src/controllers/appController');
+      require('../src/server');
+    });
+  });
 });

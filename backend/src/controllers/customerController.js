@@ -113,7 +113,11 @@ exports.getCustomerLedger = async (req, res, next) => {
 
     const customerMatch = [{ 'customer.uuid': customer.uuid }];
     if (customer.phone && customer.phone.trim()) {
-      customerMatch.push({ 'customer.phone': customer.phone.trim() });
+      customerMatch.push({
+        'customer.uuid': { $in: [null, ''] },
+        'customer.phone': customer.phone.trim(),
+        'customer.name': customer.name.trim()
+      });
     }
 
     const [invoices, payments] = await Promise.all([
@@ -122,15 +126,25 @@ exports.getCustomerLedger = async (req, res, next) => {
         status: { $ne: 'cancelled' }
       }).sort({ invoiceDate: -1 }),
       Payment.find({
-        $or: [{ customerId: customer.uuid }, { customerId: customer._id }]
+        $or: [
+          ...(customer.uuid ? [{ customerId: customer.uuid }] : []),
+          { customerId: String(customer._id) }
+        ]
       }).sort({ paymentDate: -1 })
     ]);
+
+    // Exclude payments belonging to cancelled invoices from the customer ledger (B17)
+    // and exclude payments for non-tax temporary bills from GST liability balance (B8)
+    const activeInvoiceUuids = new Set(invoices.map(i => i.uuid));
+    const gstInvoiceUuids = new Set(invoices.filter(i => i.invoiceType !== 'temporary').map(i => i.uuid));
+    const activePayments = payments.filter(p => !p.invoiceId || activeInvoiceUuids.has(p.invoiceId));
+    const gstPayments = activePayments.filter(p => !p.invoiceId || gstInvoiceUuids.has(p.invoiceId));
 
     const totalBilled = invoices
       .filter(inv => inv.invoiceType !== 'temporary')
       .reduce((acc, inv) => acc + (inv.grandTotal || 0), 0);
-    const totalPaid = payments.reduce((acc, p) => acc + (p.amount || 0), 0);
-    const outstandingBalance = Math.round((totalBilled - totalPaid) * 100) / 100;
+    const totalPaid = gstPayments.reduce((acc, p) => acc + (p.amount || 0), 0);
+    const outstandingBalance = Math.max(0, Math.round((totalBilled - totalPaid) * 100) / 100);
 
     res.json({
       success: true,
@@ -197,17 +211,17 @@ exports.updateCustomer = async (req, res, next) => {
     if (phone !== undefined) updateFields.phone = phone ? phone.trim() : '';
     if (email !== undefined) updateFields.email = email ? email.trim() : '';
     if (gstin !== undefined) updateFields.gstin = gstin ? gstin.trim().toUpperCase() : '';
-    if (address !== undefined) updateFields.address = address ? address.trim() : '';
-    if (city !== undefined) updateFields.city = city.trim();
-    if (state !== undefined) updateFields.state = state.trim();
-    if (stateCode !== undefined) updateFields.stateCode = stateCode.trim();
-    if (pincode !== undefined) updateFields.pincode = pincode.trim();
+    if (address !== undefined) updateFields.address = address ? String(address).trim() : '';
+    if (city !== undefined) updateFields.city = city ? String(city).trim() : '';
+    if (state !== undefined) updateFields.state = state ? String(state).trim() : '';
+    if (stateCode !== undefined) updateFields.stateCode = stateCode ? String(stateCode).trim() : '22';
+    if (pincode !== undefined) updateFields.pincode = pincode ? String(pincode).trim() : '';
     if (active !== undefined) updateFields.active = Boolean(active);
 
     const customer = await Customer.findOneAndUpdate(
       findByIdOrUuid(req.params.id),
       { $set: updateFields },
-      { new: true }
+      { new: true, runValidators: true }
     );
 
     if (!customer) {

@@ -33,6 +33,10 @@ const deviceSchema = new mongoose.Schema({
   nextUsableNumber: {
     type: Number,
     default: 0
+  },
+  financialYear: {
+    type: String,
+    default: ''
   }
 }, {
   timestamps: true

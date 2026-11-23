@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../providers/customer_provider.dart';
 import '../../providers/dashboard_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/repositories/customer_repository.dart';
 import '../../services/api/api_client.dart';
@@ -188,19 +189,25 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                             }).toList();
 
                             if (filteredList.isEmpty) {
-                              return Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(24),
-                                  child: Text(
-                                    'No customers found in this payment filter',
-                                    style: const TextStyle(fontSize: 15, color: AppColors.textSecondary),
+                              return ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                children: const [
+                                  SizedBox(height: 100),
+                                  Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(24),
+                                      child: Text(
+                                        'No customers found in this payment filter',
+                                        style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                ],
                               );
                             }
 
                             return ListView.builder(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
                               itemCount: filteredList.length,
                               itemBuilder: (context, index) {
                                 final c = filteredList[index];
@@ -373,16 +380,17 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                         ],
                       ),
                     ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                          SizedBox(width: 8),
-                          Text('Delete Customer', style: TextStyle(color: Colors.red)),
-                        ],
+                    if (ref.read(authProvider).isOwner)
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Delete Customer', style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -394,6 +402,16 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   }
 
   Future<void> _confirmDeleteCustomer(BuildContext context, CustomerModel customer) async {
+    if (!ref.read(authProvider).isOwner) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Only business owners can delete customer accounts.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -465,6 +483,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
       try {
         await ApiClient.instance.deleteCustomer(customer.uuid);
       } catch (_) {}
+      if (!mounted) return;
       ref.read(customerListProvider.notifier).fetchCustomers();
       ref.read(dashboardProvider.notifier).refreshSummary();
       SyncService.instance.synchronize();

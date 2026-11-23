@@ -7,6 +7,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/sync/sync_service.dart';
 import '../../services/updater/app_update_service.dart';
 import '../../data/database/app_database.dart';
+import '../../data/repositories/invoice_repository.dart';
 import '../admin/staff_management_screen.dart';
 import '../products/products_screen.dart';
 import 'package:sqflite/sqflite.dart';
@@ -32,11 +33,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _loadInvoiceSettings() async {
     try {
       final db = await AppDatabase.instance.database;
-      final numRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number']);
+      final fy = InvoiceRepository.getFinancialYear(DateTime.now());
+      final numRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number_$fy']);
       final pfxRes = await db.query('app_settings', where: 'key = ?', whereArgs: ['invoice_prefix']);
       if (mounted) {
         setState(() {
-          if (numRes.isNotEmpty) _nextNumberController.text = numRes.first['value'] as String;
+          if (numRes.isNotEmpty) {
+            _nextNumberController.text = numRes.first['value'] as String;
+          } else {
+            db.query('app_settings', where: 'key = ?', whereArgs: ['next_usable_number']).then((legacy) {
+              if (legacy.isNotEmpty && mounted) {
+                _nextNumberController.text = legacy.first['value'] as String;
+              }
+            });
+          }
           if (pfxRes.isNotEmpty) _prefixController.text = pfxRes.first['value'] as String;
         });
       }
@@ -45,6 +55,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _saveInvoiceSettings() async {
     final db = await AppDatabase.instance.database;
+    final fy = InvoiceRepository.getFinancialYear(DateTime.now());
+    await db.insert(
+      'app_settings',
+      {'key': 'next_usable_number_$fy', 'value': _nextNumberController.text.trim()},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
     await db.insert(
       'app_settings',
       {'key': 'next_usable_number', 'value': _nextNumberController.text.trim()},
@@ -155,6 +171,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         );
                         if (confirm == true) {
                           await authNotifier.logout();
+                          if (context.mounted) {
+                            Navigator.of(context).popUntil((route) => route.isFirst);
+                          }
                         }
                       },
                     ),
@@ -305,8 +324,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           onPressed: sync.status == SyncStatus.syncing
                               ? null
                               : () async {
-                                  final ok = await SyncService.instance.synchronize(forceFullSync: true);
-                                  if (!mounted) return;
+                                  await SyncService.instance.synchronize(forceFullSync: true);
+                                  if (!context.mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(

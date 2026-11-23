@@ -34,8 +34,8 @@ function loadTempTemplateData() {
 async function generateTemporaryBillPdf(invoice) {
   const templateBytes = loadTempTemplateData();
   const pdfDoc = await PDFDocument.load(templateBytes);
-  const page = pdfDoc.getPages()[0];
-  const { height } = page.getSize();
+  const initialPage = pdfDoc.getPages()[0];
+  const { height } = initialPage.getSize();
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -50,100 +50,128 @@ async function generateTemporaryBillPdf(invoice) {
 
   const cust = invoice.customer || {};
   const custName = (cust.name || cust.businessName || 'Customer').toUpperCase();
-
-  // Bill Number (Drawn directly inside the top-right "NO." box above the underline)
+  const formattedDate = invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString('en-GB') : '';
   const billNoStr = invoice.sequenceNumber ? String(invoice.sequenceNumber) : (invoice.invoiceNumber || '').replace(/^TEMP-/, '');
-  if (billNoStr) {
-    page.drawText(billNoStr, {
-      x: 468.0,
-      y: toPdfY(88.0),
-      size: 14.0,
-      font: fontBold,
-      color: espressoColor,
-    });
+
+  const allItems = Array.isArray(invoice.items) ? invoice.items : [];
+  const maxRowsPerPage = 16;
+  const chunkCount = Math.max(1, Math.ceil(allItems.length / maxRowsPerPage));
+
+  for (let i = 1; i < chunkCount; i++) {
+    const [copiedPage] = await pdfDoc.copyPages(pdfDoc, [0]);
+    pdfDoc.addPage(copiedPage);
   }
 
-  // Billed To (Customer Name only, directly above line)
-  page.drawText(custName, {
-    x: 58.0,
-    y: toPdfY(237.0),
-    size: 12.0,
-    font: fontBold,
-    color: espressoColor,
-  });
+  const allPages = pdfDoc.getPages();
 
-  // Bill Date (ONLY DATE, NO "Date:" prefix, directly above line)
-  const formattedDate = invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString('en-GB') : '';
-  page.drawText(formattedDate, {
-    x: 385.5,
-    y: toPdfY(237.0),
-    size: 12.0,
-    font: fontBold,
-    color: espressoColor,
-  });
+  for (let pageIdx = 0; pageIdx < chunkCount; pageIdx++) {
+    const page = allPages[pageIdx];
 
-  // Table items (5 columns: NO., PRODUCT, QTY., RATE, TOTAL)
-  const items = Array.isArray(invoice.items) ? invoice.items.slice(0, 16) : [];
-  items.forEach((itm, idx) => {
-    const yTop = 338.0 + (idx * 24.62);
-
-    let desc = itm.description || '';
-    if (desc.length > 32) {
-      desc = desc.substring(0, 30) + '...';
+    // Bill Number
+    if (billNoStr) {
+      page.drawText(billNoStr, {
+        x: 468.0,
+        y: toPdfY(88.0),
+        size: 14.0,
+        font: fontBold,
+        color: espressoColor,
+      });
     }
-    // Product
-    page.drawText(desc, {
-      x: 86.0,
-      y: toPdfY(yTop),
-      size: 9.5,
-      font: font,
-      color: espressoColor,
-    });
 
-    // Qty
-    const qtyStr = itm.quantity ? `${itm.quantity} ${itm.unit || 'PCS'}` : '';
-    const qtyWidth = font.widthOfTextAtSize(qtyStr, 9.5);
-    page.drawText(qtyStr, {
-      x: 317.0 - (qtyWidth / 2),
-      y: toPdfY(yTop),
-      size: 9.5,
-      font: font,
-      color: espressoColor,
-    });
-
-    // Rate
-    const rateStr = itm.rate ? Number(itm.rate).toFixed(2) : '';
-    const rateWidth = font.widthOfTextAtSize(rateStr, 9.5);
-    page.drawText(rateStr, {
-      x: 444.0 - rateWidth,
-      y: toPdfY(yTop),
-      size: 9.5,
-      font: font,
-      color: espressoColor,
-    });
-
-    // Total Amount
-    const totStr = Number(itm.totalAmount || (itm.quantity * itm.rate) || 0).toFixed(2);
-    const totWidth = fontBold.widthOfTextAtSize(totStr, 10.0);
-    page.drawText(totStr, {
-      x: 546.0 - totWidth,
-      y: toPdfY(yTop),
-      size: 10.0,
+    // Billed To
+    page.drawText(custName, {
+      x: 58.0,
+      y: toPdfY(237.0),
+      size: 12.0,
       font: fontBold,
       color: espressoColor,
     });
-  });
 
-  // Grand Total
-  const totalStr = Number(invoice.grandTotal || 0).toFixed(2);
-  const totWidth = fontBold.widthOfTextAtSize(totalStr, 14.5);
-  page.drawText(totalStr, {
-    x: 535.0 - totWidth,
-    y: toPdfY(762.0),
-    size: 14.5,
-    font: fontBold,
-    color: goldCreamColor,
-  });
+    // Bill Date
+    page.drawText(formattedDate, {
+      x: 385.5,
+      y: toPdfY(237.0),
+      size: 12.0,
+      font: fontBold,
+      color: espressoColor,
+    });
+
+    // Page indicator if multi-page
+    if (chunkCount > 1) {
+      page.drawText(`Page ${pageIdx + 1} of ${chunkCount}`, {
+        x: 58.0,
+        y: toPdfY(305.0),
+        size: 8.5,
+        font: fontBold,
+        color: espressoColor,
+      });
+    }
+
+    // Chunk items
+    const pageItems = allItems.slice(pageIdx * maxRowsPerPage, (pageIdx + 1) * maxRowsPerPage);
+    pageItems.forEach((itm, idx) => {
+      const yTop = 338.0 + (idx * 24.62);
+
+      let desc = itm.description || '';
+      if (desc.length > 32) {
+        desc = desc.substring(0, 30) + '...';
+      }
+      // Product
+      page.drawText(desc, {
+        x: 86.0,
+        y: toPdfY(yTop),
+        size: 9.5,
+        font: font,
+        color: espressoColor,
+      });
+
+      // Qty
+      const qtyStr = itm.quantity ? `${itm.quantity} ${itm.unit || 'PCS'}` : '';
+      const qtyWidth = font.widthOfTextAtSize(qtyStr, 9.5);
+      page.drawText(qtyStr, {
+        x: 317.0 - (qtyWidth / 2),
+        y: toPdfY(yTop),
+        size: 9.5,
+        font: font,
+        color: espressoColor,
+      });
+
+      // Rate
+      const rateStr = itm.rate ? Number(itm.rate).toFixed(2) : '';
+      const rateWidth = font.widthOfTextAtSize(rateStr, 9.5);
+      page.drawText(rateStr, {
+        x: 444.0 - rateWidth,
+        y: toPdfY(yTop),
+        size: 9.5,
+        font: font,
+        color: espressoColor,
+      });
+
+      // Total Amount
+      const totStr = Number(itm.totalAmount || (itm.quantity * itm.rate) || 0).toFixed(2);
+      const totWidth = fontBold.widthOfTextAtSize(totStr, 10.0);
+      page.drawText(totStr, {
+        x: 546.0 - totWidth,
+        y: toPdfY(yTop),
+        size: 10.0,
+        font: fontBold,
+        color: espressoColor,
+      });
+    });
+
+    // Grand Total on final page (B22)
+    if (pageIdx === chunkCount - 1) {
+      const totalStr = Number(invoice.grandTotal || 0).toFixed(2);
+      const totWidth = fontBold.widthOfTextAtSize(totalStr, 14.5);
+      page.drawText(totalStr, {
+        x: 535.0 - totWidth,
+        y: toPdfY(762.0),
+        size: 14.5,
+        font: fontBold,
+        color: goldCreamColor,
+      });
+    }
+  }
 
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes);
@@ -169,165 +197,204 @@ async function generateGstInvoicePdf(invoice) {
   // Conversion:
   // x_pdf = (px_x / 2296) * width
   // y_pdf = height - ((px_y / 2809) * height)
-  function toPdfX(pxX) {
-    return (pxX / coords.pageSize.sourcePixelWidth) * width;
+  const allItems = invoice.items || [];
+  const maxRows = coords.table.maxRowsPerPage || 11;
+  const chunkCount = Math.max(1, Math.ceil(allItems.length / maxRows));
+
+  for (let i = 1; i < chunkCount; i++) {
+    const [copiedPage] = await pdfDoc.copyPages(pdfDoc, [0]);
+    pdfDoc.addPage(copiedPage);
   }
 
-  function toPdfY(pxY) {
-    return height - ((pxY / coords.pageSize.sourcePixelHeight) * height);
-  }
+  const allPages = pdfDoc.getPages();
 
-  const textColor = rgb(0.05, 0.05, 0.05);
+  for (let pageIdx = 0; pageIdx < chunkCount; pageIdx++) {
+    const page = allPages[pageIdx];
 
-  function drawText(text, pxX, pxY, size = 10, isBold = false) {
-    if (!text) return;
-    const f = isBold ? fontBold : font;
-    page.drawText(String(text), {
-      x: toPdfX(pxX),
-      y: toPdfY(pxY),
-      size: size,
-      font: f,
-      color: textColor
-    });
-  }
-
-  function drawRightText(text, rightPxX, pxY, size = 10, isBold = false) {
-    if (!text) return;
-    const f = isBold ? fontBold : font;
-    const str = String(text);
-    const textWidth = f.widthOfTextAtSize(str, size);
-    page.drawText(str, {
-      x: toPdfX(rightPxX) - textWidth,
-      y: toPdfY(pxY),
-      size: size,
-      font: f,
-      color: textColor
-    });
-  }
-
-  function drawCenteredText(text, centerPxX, pxY, size = 10, isBold = false) {
-    if (!text) return;
-    const f = isBold ? fontBold : font;
-    const str = String(text);
-    const textWidth = f.widthOfTextAtSize(str, size);
-    page.drawText(str, {
-      x: toPdfX(centerPxX) - (textWidth / 2),
-      y: toPdfY(pxY),
-      size: size,
-      font: f,
-      color: textColor
-    });
-  }
-
-  // 1. Header Details (Enlarged & Bold for High Visibility)
-  drawText(invoice.invoiceNumber, coords.fields.invoiceNo.pxX, coords.fields.invoiceNo.pxY, 18, true);
-
-  const formattedDate = invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString('en-GB') : '';
-  drawText(formattedDate, coords.fields.invoiceDate.pxX, coords.fields.invoiceDate.pxY, 14, true);
-
-  // 2. Customer Details (Enlarged & Bold)
-  const cust = invoice.customer || {};
-  drawText(cust.name || cust.businessName || '', coords.fields.customerName.pxX, coords.fields.customerName.pxY, 16, true);
-  drawText(cust.address || '', coords.fields.customerAddress.pxX, coords.fields.customerAddress.pxY, 13.5, false);
-  drawText(cust.state || 'Chhattisgarh', coords.fields.state.pxX, coords.fields.state.pxY, 14, true);
-  drawText(cust.stateCode || '22', coords.fields.stateCode.pxX, coords.fields.stateCode.pxY, 14, true);
-  drawText(cust.gstin || '', coords.fields.gstin.pxX, coords.fields.gstin.pxY, 15.5, true);
-
-  // PO & Challan
-  if (invoice.poNumber) drawText(invoice.poNumber, coords.fields.poNo.pxX, coords.fields.poNo.pxY, 13.5, true);
-  if (invoice.poDate) drawText(new Date(invoice.poDate).toLocaleDateString('en-GB'), coords.fields.poDate.pxX, coords.fields.poDate.pxY, 13.5, true);
-  if (invoice.challanNumber) drawText(invoice.challanNumber, coords.fields.challanNo.pxX, coords.fields.challanNo.pxY, 13.5, true);
-  if (invoice.challanDate) drawText(new Date(invoice.challanDate).toLocaleDateString('en-GB'), coords.fields.challanDate.pxX, coords.fields.challanDate.pxY, 13.5, true);
-
-  // 3. Table Rows (Enlarged & High-Legibility)
-  const items = invoice.items || [];
-  const startY = coords.table.startY;
-  const rowGap = coords.table.rowGap;
-
-  items.slice(0, coords.table.maxRowsPerPage).forEach((item, idx) => {
-    const y = startY + (idx * rowGap);
-    const amountVal = item.taxableValue || item.totalAmount || 0;
-    const rupees = Math.floor(amountVal);
-    const paise = Math.round((amountVal - rupees) * 100);
-
-    drawCenteredText(item.sno || idx + 1, coords.table.columns.sno.centerPx, y, 14, true);
-    const desc = item.description || '';
-    if (desc.length > 25) {
-      const splitIdx = desc.lastIndexOf(' ', 25);
-      const line1 = splitIdx !== -1 ? desc.substring(0, splitIdx) : desc.substring(0, 25);
-      const line2 = splitIdx !== -1 ? desc.substring(splitIdx + 1) : desc.substring(25);
-      drawText(line1, coords.table.columns.description.leftPx, y - 10, 13, true);
-      drawText(line2, coords.table.columns.description.leftPx, y + 12, 13, true);
-    } else {
-      drawText(desc, coords.table.columns.description.leftPx, y, 13, true);
+    function toPdfX(pxX) {
+      return (pxX / coords.pageSize.sourcePixelWidth) * width;
     }
-    drawCenteredText(item.hsnCode || '', coords.table.columns.hsn.centerPx, y, 13, true);
-    drawCenteredText(`${item.quantity} ${item.unit || 'PCS'}`, coords.table.columns.qty.centerPx, y, 13.5, true);
-    drawRightText(Number(item.rate).toFixed(2), coords.table.columns.rate.rightPx, y, 13.5, true);
-    drawRightText(String(rupees), coords.table.columns.amountRs.rightPx, y, 14, true);
-    drawCenteredText(String(paise).padStart(2, '0'), coords.table.columns.amountP.centerPx, y, 13.5, true);
-  });
 
-  // 4. Summary & Tax Rows
-  function splitRupeesPaise(val) {
-    const v = Number(val) || 0;
-    const sign = v < 0 ? '-' : '';
-    const absV = Math.abs(v);
-    const r = Math.floor(absV);
-    const p = Math.round((absV - r) * 100);
-    return { rs: (sign && r === 0 ? '-0' : sign + r), p: String(p).padStart(2, '0') };
+    function toPdfY(pxY) {
+      return height - ((pxY / coords.pageSize.sourcePixelHeight) * height);
+    }
+
+    const textColor = rgb(0.05, 0.05, 0.05);
+
+    function drawText(text, pxX, pxY, size = 10, isBold = false) {
+      if (!text) return;
+      const f = isBold ? fontBold : font;
+      page.drawText(String(text), {
+        x: toPdfX(pxX),
+        y: toPdfY(pxY),
+        size: size,
+        font: f,
+        color: textColor
+      });
+    }
+
+    function drawRightText(text, rightPxX, pxY, size = 10, isBold = false) {
+      if (!text) return;
+      const f = isBold ? fontBold : font;
+      const str = String(text);
+      const textWidth = f.widthOfTextAtSize(str, size);
+      page.drawText(str, {
+        x: toPdfX(rightPxX) - textWidth,
+        y: toPdfY(pxY),
+        size: size,
+        font: f,
+        color: textColor
+      });
+    }
+
+    function drawCenteredText(text, centerPxX, pxY, size = 10, isBold = false) {
+      if (!text) return;
+      const f = isBold ? fontBold : font;
+      const str = String(text);
+      const textWidth = f.widthOfTextAtSize(str, size);
+      page.drawText(str, {
+        x: toPdfX(centerPxX) - (textWidth / 2),
+        y: toPdfY(pxY),
+        size: size,
+        font: f,
+        color: textColor
+      });
+    }
+
+    // 1. Header Details (Enlarged & Bold for High Visibility)
+    drawText(invoice.invoiceNumber, coords.fields.invoiceNo.pxX, coords.fields.invoiceNo.pxY, 18, true);
+
+    const formattedDate = invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString('en-GB') : '';
+    drawText(formattedDate, coords.fields.invoiceDate.pxX, coords.fields.invoiceDate.pxY, 14, true);
+
+    // 2. Customer Details (Enlarged & Bold)
+    const cust = invoice.customer || {};
+    drawText(cust.name || cust.businessName || '', coords.fields.customerName.pxX, coords.fields.customerName.pxY, 16, true);
+    drawText(cust.address || '', coords.fields.customerAddress.pxX, coords.fields.customerAddress.pxY, 13.5, false);
+    drawText(cust.state || 'Chhattisgarh', coords.fields.state.pxX, coords.fields.state.pxY, 14, true);
+    drawText(cust.stateCode || '22', coords.fields.stateCode.pxX, coords.fields.stateCode.pxY, 14, true);
+    drawText(cust.gstin || '', coords.fields.gstin.pxX, coords.fields.gstin.pxY, 15.5, true);
+
+    // PO & Challan
+    if (invoice.poNumber) drawText(invoice.poNumber, coords.fields.poNo.pxX, coords.fields.poNo.pxY, 13.5, true);
+    if (invoice.poDate) drawText(new Date(invoice.poDate).toLocaleDateString('en-GB'), coords.fields.poDate.pxX, coords.fields.poDate.pxY, 13.5, true);
+    if (invoice.challanNumber) drawText(invoice.challanNumber, coords.fields.challanNo.pxX, coords.fields.challanNo.pxY, 13.5, true);
+    if (invoice.challanDate) drawText(new Date(invoice.challanDate).toLocaleDateString('en-GB'), coords.fields.challanDate.pxX, coords.fields.challanDate.pxY, 13.5, true);
+
+    // Page indicator if multi-page (B22)
+    if (chunkCount > 1) {
+      drawText(`Page ${pageIdx + 1} of ${chunkCount}`, coords.fields.invoiceNo.pxX, coords.fields.invoiceNo.pxY + 25, 10, true);
+    }
+
+    // 3. Table Rows for current chunk
+    const startY = coords.table.startY;
+    const rowGap = coords.table.rowGap;
+    const pageItems = allItems.slice(pageIdx * maxRows, (pageIdx + 1) * maxRows);
+
+    pageItems.forEach((item, localIdx) => {
+      const idx = localIdx;
+      const y = startY + (idx * rowGap);
+      const amountVal = item.taxableValue || item.totalAmount || 0;
+      let rupees = Math.floor(amountVal);
+      let paise = Math.round((amountVal - rupees) * 100);
+      if (paise >= 100) {
+        rupees += 1;
+        paise = 0;
+      }
+
+      const globalSno = (pageIdx * maxRows) + localIdx + 1;
+      drawCenteredText(item.sno || globalSno, coords.table.columns.sno.centerPx, y, 14, true);
+      const desc = item.description || '';
+      if (desc.length > 25) {
+        const splitIdx = desc.lastIndexOf(' ', 25);
+        const line1 = splitIdx !== -1 ? desc.substring(0, splitIdx) : desc.substring(0, 25);
+        let line2 = splitIdx !== -1 ? desc.substring(splitIdx + 1) : desc.substring(25);
+        if (line2.length > 25) {
+          line2 = line2.substring(0, 23) + '..';
+        }
+        drawText(line1, coords.table.columns.description.leftPx, y - 10, 13, true);
+        drawText(line2, coords.table.columns.description.leftPx, y + 12, 13, true);
+      } else {
+        drawText(desc, coords.table.columns.description.leftPx, y, 13, true);
+      }
+      drawCenteredText(item.hsnCode || '', coords.table.columns.hsn.centerPx, y, 13, true);
+      drawCenteredText(`${item.quantity} ${item.unit || 'PCS'}`, coords.table.columns.qty.centerPx, y, 13.5, true);
+      drawRightText(Number(item.rate).toFixed(2), coords.table.columns.rate.rightPx, y, 13.5, true);
+      drawRightText(String(rupees), coords.table.columns.amountRs.rightPx, y, 14, true);
+      drawCenteredText(String(paise).padStart(2, '0'), coords.table.columns.amountP.centerPx, y, 13.5, true);
+    });
+
+    // 4. Summary & Tax Rows ONLY on the last page (B22)
+    if (pageIdx === chunkCount - 1) {
+      function splitRupeesPaise(val) {
+        const v = Number(val) || 0;
+        const sign = v < 0 ? '-' : '';
+        const absV = Math.abs(v);
+        let r = Math.floor(absV);
+        let p = Math.round((absV - r) * 100);
+        if (p >= 100) {
+          r += 1;
+          p = 0;
+        }
+        return { rs: (sign && r === 0 ? '-0' : sign + r), p: String(p).padStart(2, '0') };
+      }
+
+      // Net Amount
+      const netParts = splitRupeesPaise(invoice.netAmount);
+      drawRightText(netParts.rs, coords.summary.netAmount.rsRightPx, coords.summary.netAmount.y, 14.5, true);
+      drawCenteredText(netParts.p, coords.summary.netAmount.pCenterPx, coords.summary.netAmount.y, 13.5, true);
+
+      // SGST & CGST or IGST (Handles mixed rates across items cleanly - B18)
+      const uniqueRates = [...new Set((invoice.items || []).map(i => Number(i.gstRate !== undefined ? i.gstRate : 18)))];
+      const isMixedRates = uniqueRates.length > 1;
+      const singleRate = uniqueRates.length === 1 ? uniqueRates[0] : 18;
+
+      if (!invoice.isInterState) {
+        const sgstRateDisplay = isMixedRates ? 'Mix' : (singleRate / 2).toFixed(1);
+        drawCenteredText(sgstRateDisplay, coords.summary.sgst.rateCenterPx, coords.summary.sgst.y, 13.5, true);
+        const sgstParts = splitRupeesPaise(invoice.sgstTotal);
+        drawRightText(sgstParts.rs, coords.summary.sgst.rsRightPx, coords.summary.sgst.y, 14, true);
+        drawCenteredText(sgstParts.p, coords.summary.sgst.pCenterPx, coords.summary.sgst.y, 13.5, true);
+
+        drawCenteredText(sgstRateDisplay, coords.summary.cgst.rateCenterPx, coords.summary.cgst.y, 13.5, true);
+        const cgstParts = splitRupeesPaise(invoice.cgstTotal);
+        drawRightText(cgstParts.rs, coords.summary.cgst.rsRightPx, coords.summary.cgst.y, 14, true);
+        drawCenteredText(cgstParts.p, coords.summary.cgst.pCenterPx, coords.summary.cgst.y, 13.5, true);
+
+        // IGST 0
+        drawCenteredText('0.0', coords.summary.igst.rateCenterPx, coords.summary.igst.y, 13.5, true);
+        drawRightText('0', coords.summary.igst.rsRightPx, coords.summary.igst.y, 14, true);
+        drawCenteredText('00', coords.summary.igst.pCenterPx, coords.summary.igst.y, 13.5, true);
+      } else {
+        const igstRateDisplay = isMixedRates ? 'Mix' : singleRate.toFixed(1);
+        drawCenteredText('0.0', coords.summary.sgst.rateCenterPx, coords.summary.sgst.y, 13.5, true);
+        drawRightText('0', coords.summary.sgst.rsRightPx, coords.summary.sgst.y, 14, true);
+        drawCenteredText('00', coords.summary.sgst.pCenterPx, coords.summary.sgst.y, 13.5, true);
+
+        drawCenteredText('0.0', coords.summary.cgst.rateCenterPx, coords.summary.cgst.y, 13.5, true);
+        drawRightText('0', coords.summary.cgst.rsRightPx, coords.summary.cgst.y, 14, true);
+        drawCenteredText('00', coords.summary.cgst.pCenterPx, coords.summary.cgst.y, 13.5, true);
+
+        drawCenteredText(igstRateDisplay, coords.summary.igst.rateCenterPx, coords.summary.igst.y, 13.5, true);
+        const igstParts = splitRupeesPaise(invoice.igstTotal);
+        drawRightText(igstParts.rs, coords.summary.igst.rsRightPx, coords.summary.igst.y, 14, true);
+        drawCenteredText(igstParts.p, coords.summary.igst.pCenterPx, coords.summary.igst.y, 13.5, true);
+      }
+
+      // Round off
+      const roundParts = splitRupeesPaise(invoice.roundOff);
+      drawRightText(roundParts.rs, coords.summary.roundOff.rsRightPx, coords.summary.roundOff.y, 13.5, true);
+      drawCenteredText(roundParts.p, coords.summary.roundOff.pCenterPx, coords.summary.roundOff.y, 13.5, true);
+
+      // Grand Total (Extra Large & Bold for Maximum Readability)
+      const totalParts = splitRupeesPaise(invoice.grandTotal);
+      drawRightText(totalParts.rs, coords.summary.totalAmount.rsRightPx, coords.summary.totalAmount.y, 18, true);
+      drawCenteredText(totalParts.p, coords.summary.totalAmount.pCenterPx, coords.summary.totalAmount.y, 16, true);
+
+      // Amount in words
+      drawText(invoice.amountInWords || '', coords.fields.amountInWords.pxX, coords.fields.amountInWords.pxY, 13.5, true);
+    }
   }
-
-  // Net Amount
-  const netParts = splitRupeesPaise(invoice.netAmount);
-  drawRightText(netParts.rs, coords.summary.netAmount.rsRightPx, coords.summary.netAmount.y, 14.5, true);
-  drawCenteredText(netParts.p, coords.summary.netAmount.pCenterPx, coords.summary.netAmount.y, 13.5, true);
-
-  // SGST & CGST or IGST
-  if (!invoice.isInterState) {
-    const sgstRate = ((invoice.items && invoice.items[0] && invoice.items[0].gstRate) || 18) / 2;
-    drawCenteredText(sgstRate.toFixed(1), coords.summary.sgst.rateCenterPx, coords.summary.sgst.y, 13.5, true);
-    const sgstParts = splitRupeesPaise(invoice.sgstTotal);
-    drawRightText(sgstParts.rs, coords.summary.sgst.rsRightPx, coords.summary.sgst.y, 14, true);
-    drawCenteredText(sgstParts.p, coords.summary.sgst.pCenterPx, coords.summary.sgst.y, 13.5, true);
-
-    drawCenteredText(sgstRate.toFixed(1), coords.summary.cgst.rateCenterPx, coords.summary.cgst.y, 13.5, true);
-    const cgstParts = splitRupeesPaise(invoice.cgstTotal);
-    drawRightText(cgstParts.rs, coords.summary.cgst.rsRightPx, coords.summary.cgst.y, 14, true);
-    drawCenteredText(cgstParts.p, coords.summary.cgst.pCenterPx, coords.summary.cgst.y, 13.5, true);
-
-    // IGST 0
-    drawCenteredText('0.0', coords.summary.igst.rateCenterPx, coords.summary.igst.y, 13.5, true);
-    drawRightText('0', coords.summary.igst.rsRightPx, coords.summary.igst.y, 14, true);
-    drawCenteredText('00', coords.summary.igst.pCenterPx, coords.summary.igst.y, 13.5, true);
-  } else {
-    const igstRate = (invoice.items && invoice.items[0] && invoice.items[0].gstRate) || 18;
-    drawCenteredText('0.0', coords.summary.sgst.rateCenterPx, coords.summary.sgst.y, 13.5, true);
-    drawRightText('0', coords.summary.sgst.rsRightPx, coords.summary.sgst.y, 14, true);
-    drawCenteredText('00', coords.summary.sgst.pCenterPx, coords.summary.sgst.y, 13.5, true);
-
-    drawCenteredText('0.0', coords.summary.cgst.rateCenterPx, coords.summary.cgst.y, 13.5, true);
-    drawRightText('0', coords.summary.cgst.rsRightPx, coords.summary.cgst.y, 14, true);
-    drawCenteredText('00', coords.summary.cgst.pCenterPx, coords.summary.cgst.y, 13.5, true);
-
-    drawCenteredText(igstRate.toFixed(1), coords.summary.igst.rateCenterPx, coords.summary.igst.y, 13.5, true);
-    const igstParts = splitRupeesPaise(invoice.igstTotal);
-    drawRightText(igstParts.rs, coords.summary.igst.rsRightPx, coords.summary.igst.y, 14, true);
-    drawCenteredText(igstParts.p, coords.summary.igst.pCenterPx, coords.summary.igst.y, 13.5, true);
-  }
-
-  // Round off
-  const roundParts = splitRupeesPaise(invoice.roundOff);
-  drawRightText(roundParts.rs, coords.summary.roundOff.rsRightPx, coords.summary.roundOff.y, 13.5, true);
-  drawCenteredText(roundParts.p, coords.summary.roundOff.pCenterPx, coords.summary.roundOff.y, 13.5, true);
-
-  // Grand Total (Extra Large & Bold for Maximum Readability)
-  const totalParts = splitRupeesPaise(invoice.grandTotal);
-  drawRightText(totalParts.rs, coords.summary.totalAmount.rsRightPx, coords.summary.totalAmount.y, 18, true);
-  drawCenteredText(totalParts.p, coords.summary.totalAmount.pCenterPx, coords.summary.totalAmount.y, 16, true);
-
-  // Amount in words
-  drawText(invoice.amountInWords || '', coords.fields.amountInWords.pxX, coords.fields.amountInWords.pxY, 13.5, true);
 
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes);
@@ -488,45 +555,78 @@ async function generateGstSalesRegisterPdf(invoices = [], fromDate = new Date(),
   const tblY = startY + 92.0;
   const hdrH = 24.0;
 
-  // Draw Table Header (Medium Wood with Gold accent border)
-  page.drawRectangle({
-    x: marginX,
-    y: height - (tblY + hdrH),
-    width: width - (marginX * 2),
-    height: hdrH,
-    color: mediumWood,
-    borderColor: antiqueGold,
-    borderWidth: 1.0
-  });
+  let currentPage = page;
 
-  let currX = marginX;
-  for (const c of cols) {
-    const textW = fontBold.widthOfTextAtSize(c.name, 8.0);
-    let xPos = currX + 6;
-    if (c.align === 'center') xPos = currX + (c.w - textW) / 2;
-    if (c.align === 'right') xPos = currX + c.w - textW - 6;
-
-    page.drawText(c.name, {
-      x: xPos,
-      y: height - (tblY + 16),
-      size: 8.0,
-      font: fontBold,
-      color: lightGold
+  const drawRegisterFrame = (p) => {
+    p.drawRectangle({
+      x: 0,
+      y: 0,
+      width: width,
+      height: height,
+      color: parchmentBg
     });
-    currX += c.w;
-  }
+    p.drawRectangle({
+      x: 10,
+      y: 10,
+      width: width - 20,
+      height: height - 20,
+      borderColor: gridBorder,
+      borderWidth: 1.0
+    });
+  };
+
+  const drawTableHeaderRow = (p, curY) => {
+    p.drawRectangle({
+      x: marginX,
+      y: height - (curY + hdrH),
+      width: width - (marginX * 2),
+      height: hdrH,
+      color: mediumWood,
+      borderColor: antiqueGold,
+      borderWidth: 1.0
+    });
+
+    let currX = marginX;
+    for (const c of cols) {
+      const textW = fontBold.widthOfTextAtSize(c.name, 8.0);
+      let xPos = currX + 6;
+      if (c.align === 'center') xPos = currX + (c.w - textW) / 2;
+      if (c.align === 'right') xPos = currX + c.w - textW - 6;
+
+      p.drawText(c.name, {
+        x: xPos,
+        y: height - (curY + 16),
+        size: 8.0,
+        font: fontBold,
+        color: lightGold
+      });
+      currX += c.w;
+    }
+  };
+
+  drawTableHeaderRow(currentPage, tblY);
 
   // Draw Table Rows
   let rowY = tblY + hdrH;
   const rowH = 22.0;
+  const totH = 26.0;
 
   let sumTaxable = 0, sumCgst = 0, sumSgst = 0, sumIgst = 0, sumTotal = 0;
 
   invoices.forEach((inv, idx) => {
+    // Paginate before drawing if row and grand total exceed page bounds (B12)
+    if (rowY + rowH + totH > height - 25) {
+      currentPage = pdfDoc.addPage([841.89, 595.28]);
+      drawRegisterFrame(currentPage);
+      rowY = startY + 10;
+      drawTableHeaderRow(currentPage, rowY);
+      rowY += hdrH;
+    }
+
     const isOdd = idx % 2 === 1;
     const rowColor = isOdd ? zebraBg : rgb(1, 1, 1);
 
-    page.drawRectangle({
+    currentPage.drawRectangle({
       x: marginX,
       y: height - (rowY + rowH),
       width: width - (marginX * 2),
@@ -578,7 +678,7 @@ async function generateGstSalesRegisterPdf(invoices = [], fromDate = new Date(),
       if (colIdx === 1) textColor = darkWood;
       if (colIdx === 9) textColor = darkWood;
 
-      page.drawText(val, {
+      currentPage.drawText(val, {
         x: xPos,
         y: height - (rowY + 15),
         size: 8.0,
@@ -592,8 +692,7 @@ async function generateGstSalesRegisterPdf(invoices = [], fromDate = new Date(),
   });
 
   // Grand Total Summary Row (Deep Walnut with Gold Numbers)
-  const totH = 26.0;
-  page.drawRectangle({
+  currentPage.drawRectangle({
     x: marginX,
     y: height - (rowY + totH),
     width: width - (marginX * 2),
@@ -603,7 +702,7 @@ async function generateGstSalesRegisterPdf(invoices = [], fromDate = new Date(),
     borderWidth: 1.2
   });
 
-  page.drawText(`GRAND TOTAL (${invoices.length} TAX INVOICES)`, {
+  currentPage.drawText(`GRAND TOTAL (${invoices.length} TAX INVOICES)`, {
     x: marginX + 14,
     y: height - (rowY + 17),
     size: 9.0,
@@ -626,7 +725,7 @@ async function generateGstSalesRegisterPdf(invoices = [], fromDate = new Date(),
     const textW = fontBold.widthOfTextAtSize(val, 9.0);
     const xPos = totX + c.w - textW - 6;
 
-    page.drawText(val, {
+    currentPage.drawText(val, {
       x: xPos,
       y: height - (rowY + 17),
       size: 9.0,
@@ -792,45 +891,78 @@ async function generateTemporaryBillsRegisterPdf(invoices = [], fromDate = new D
   const tblY = startY + 92.0;
   const hdrH = 24.0;
 
-  // Draw Table Header
-  page.drawRectangle({
-    x: marginX,
-    y: height - (tblY + hdrH),
-    width: width - (marginX * 2),
-    height: hdrH,
-    color: mediumWood,
-    borderColor: antiqueGold,
-    borderWidth: 1.0
-  });
+  let currentPage = page;
 
-  let currX = marginX;
-  for (const c of cols) {
-    const textW = fontBold.widthOfTextAtSize(c.name, 8.0);
-    let xPos = currX + 6;
-    if (c.align === 'center') xPos = currX + (c.w - textW) / 2;
-    if (c.align === 'right') xPos = currX + c.w - textW - 6;
-
-    page.drawText(c.name, {
-      x: xPos,
-      y: height - (tblY + 16),
-      size: 8.0,
-      font: fontBold,
-      color: lightGold
+  const drawRegisterFrame = (p) => {
+    p.drawRectangle({
+      x: 0,
+      y: 0,
+      width: width,
+      height: height,
+      color: parchmentBg
     });
-    currX += c.w;
-  }
+    p.drawRectangle({
+      x: 10,
+      y: 10,
+      width: width - 20,
+      height: height - 20,
+      borderColor: gridBorder,
+      borderWidth: 1.0
+    });
+  };
+
+  const drawTableHeaderRow = (p, curY) => {
+    p.drawRectangle({
+      x: marginX,
+      y: height - (curY + hdrH),
+      width: width - (marginX * 2),
+      height: hdrH,
+      color: mediumWood,
+      borderColor: antiqueGold,
+      borderWidth: 1.0
+    });
+
+    let currX = marginX;
+    for (const c of cols) {
+      const textW = fontBold.widthOfTextAtSize(c.name, 8.0);
+      let xPos = currX + 6;
+      if (c.align === 'center') xPos = currX + (c.w - textW) / 2;
+      if (c.align === 'right') xPos = currX + c.w - textW - 6;
+
+      p.drawText(c.name, {
+        x: xPos,
+        y: height - (curY + 16),
+        size: 8.0,
+        font: fontBold,
+        color: lightGold
+      });
+      currX += c.w;
+    }
+  };
+
+  drawTableHeaderRow(currentPage, tblY);
 
   // Draw Table Rows
   let rowY = tblY + hdrH;
   const rowH = 22.0;
+  const totH = 26.0;
 
   let sumTotal = 0;
 
   invoices.forEach((inv, idx) => {
+    // Paginate before drawing if row and grand total exceed page bounds (B12)
+    if (rowY + rowH + totH > height - 25) {
+      currentPage = pdfDoc.addPage([841.89, 595.28]);
+      drawRegisterFrame(currentPage);
+      rowY = startY + 10;
+      drawTableHeaderRow(currentPage, rowY);
+      rowY += hdrH;
+    }
+
     const isOdd = idx % 2 === 1;
     const rowColor = isOdd ? zebraBg : rgb(1, 1, 1);
 
-    page.drawRectangle({
+    currentPage.drawRectangle({
       x: marginX,
       y: height - (rowY + rowH),
       width: width - (marginX * 2),
@@ -871,7 +1003,7 @@ async function generateTemporaryBillsRegisterPdf(invoices = [], fromDate = new D
       if (colIdx === 1) textColor = darkWood;
       if (colIdx === 6) textColor = darkWood;
 
-      page.drawText(val, {
+      currentPage.drawText(val, {
         x: xPos,
         y: height - (rowY + 15),
         size: 8.0,
@@ -885,8 +1017,7 @@ async function generateTemporaryBillsRegisterPdf(invoices = [], fromDate = new D
   });
 
   // Grand Total Summary Row (Deep Walnut with Gold Numbers)
-  const totH = 26.0;
-  page.drawRectangle({
+  currentPage.drawRectangle({
     x: marginX,
     y: height - (rowY + totH),
     width: width - (marginX * 2),
@@ -896,7 +1027,7 @@ async function generateTemporaryBillsRegisterPdf(invoices = [], fromDate = new D
     borderWidth: 1.2
   });
 
-  page.drawText(`GRAND TOTAL (${invoices.length} TEMPORARY BILLS)`, {
+  currentPage.drawText(`GRAND TOTAL (${invoices.length} TEMPORARY BILLS)`, {
     x: marginX + 14,
     y: height - (rowY + 17),
     size: 9.0,
@@ -915,7 +1046,7 @@ async function generateTemporaryBillsRegisterPdf(invoices = [], fromDate = new D
     const textW = fontBold.widthOfTextAtSize(val, 9.0);
     const xPos = totX + c.w - textW - 6;
 
-    page.drawText(val, {
+    currentPage.drawText(val, {
       x: xPos,
       y: height - (rowY + 17),
       size: 9.0,

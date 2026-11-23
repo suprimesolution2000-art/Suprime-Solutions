@@ -70,9 +70,11 @@ class DashboardNotifier extends StateNotifier<DashboardSummary> {
   }
 
   Future<void> refreshSummary() async {
+    if (!mounted) return;
     state = state.copyWith(isLoading: true);
     try {
       final res = await _repo.getDashboardSummary();
+      if (!mounted) return;
       state = DashboardSummary(
         todaySales: (res['todaySales'] as num?)?.toDouble() ?? 0.0,
         todayCount: (res['todayCount'] as num?)?.toInt() ?? 0,
@@ -84,6 +86,7 @@ class DashboardNotifier extends StateNotifier<DashboardSummary> {
         isLoading: false,
       );
     } catch (_) {
+      if (!mounted) return;
       state = state.copyWith(isLoading: false);
     }
   }

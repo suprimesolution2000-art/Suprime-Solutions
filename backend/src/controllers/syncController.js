@@ -3,7 +3,8 @@ const Invoice = require('../models/Invoice');
 const Payment = require('../models/Payment');
 const Customer = require('../models/Customer');
 const Product = require('../models/Product');
-const { reserveNumberBlockForDevice } = require('../services/invoiceService');
+const { v4: uuidv4 } = require('uuid');
+const { reserveNumberBlockForDevice, allocateInvoiceNumber, allocateTemporaryInvoiceNumber, adjustSequenceNumber } = require('../services/invoiceService');
 const { calculateInvoiceFinancials } = require('../services/gstCalculationService');
 const env = require('../config/env');
 
@@ -16,6 +17,7 @@ exports.registerDevice = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'DeviceId is required.' });
     }
 
+    const currentFy = require('../services/invoiceService').getFinancialYear(new Date());
     let device = await Device.findOne({ deviceId });
     if (!device) {
       const block = await reserveNumberBlockForDevice(deviceId, deviceName || 'Android Device', 50);
@@ -23,6 +25,7 @@ exports.registerDevice = async (req, res, next) => {
         deviceId,
         deviceName: deviceName || 'Android Device',
         registeredUser: req.user ? req.user.name : 'Owner',
+        financialYear: currentFy,
         currentRangeFrom: block.fromNumber,
         currentRangeTo: block.toNumber,
         nextUsableNumber: block.fromNumber,
@@ -34,7 +37,7 @@ exports.registerDevice = async (req, res, next) => {
         message: 'Device registered successfully with initial reserved sequence block',
         data: {
           deviceId: device.deviceId,
-          financialYear: block.financialYear,
+          financialYear: currentFy,
           fromNumber: block.fromNumber,
           toNumber: block.toNumber,
           nextUsableNumber: block.fromNumber
@@ -42,12 +45,22 @@ exports.registerDevice = async (req, res, next) => {
       });
     }
 
-    // If device exists and range exhausted, reserve new block
-    if (device.nextUsableNumber > device.currentRangeTo) {
+    // If client reported its current counter, advance device.nextUsableNumber
+    const clientReportedNext = Number(req.body.nextUsableNumber);
+    if (!isNaN(clientReportedNext) && clientReportedNext > device.nextUsableNumber) {
+      device.nextUsableNumber = clientReportedNext;
+    }
+
+    // BUG-09: Partition block allocations by FY so devices restart at 1 every April 1st
+    const isNewFy = !device.financialYear || device.financialYear !== currentFy;
+    if (isNewFy || device.nextUsableNumber >= device.currentRangeTo) {
       const block = await reserveNumberBlockForDevice(deviceId, device.deviceName, 50);
+      device.financialYear = currentFy;
       device.currentRangeFrom = block.fromNumber;
       device.currentRangeTo = block.toNumber;
       device.nextUsableNumber = block.fromNumber;
+      await device.save();
+    } else if (!isNaN(clientReportedNext)) {
       await device.save();
     }
 
@@ -55,6 +68,7 @@ exports.registerDevice = async (req, res, next) => {
       success: true,
       data: {
         deviceId: device.deviceId,
+        financialYear: device.financialYear || currentFy,
         fromNumber: device.currentRangeFrom,
         toNumber: device.currentRangeTo,
         nextUsableNumber: device.nextUsableNumber
@@ -76,6 +90,7 @@ exports.pushSync = async (req, res, next) => {
       paymentsSynced: 0,
       productsSynced: 0,
       syncedInvoiceUuids: [],
+      syncedPaymentUuids: [],
       errors: []
     };
 
@@ -96,14 +111,17 @@ exports.pushSync = async (req, res, next) => {
           if (existingCust.active === false && cust.active !== false) {
             updateData.active = false;
           }
-          if (cust.outstandingBalance !== undefined) {
-            updateData.outstandingBalance = Number(cust.outstandingBalance) || 0;
-          }
-          if (cust.totalBilled !== undefined) {
-            updateData.totalBilled = Number(cust.totalBilled) || 0;
-          }
-          if (cust.totalPaid !== undefined) {
-            updateData.totalPaid = Number(cust.totalPaid) || 0;
+          // Only initialize balances if the cloud record has never been billed (B7)
+          if ((existingCust.totalBilled || 0) === 0 && (existingCust.totalPaid || 0) === 0) {
+            if (cust.outstandingBalance !== undefined) {
+              updateData.outstandingBalance = Number(cust.outstandingBalance) || 0;
+            }
+            if (cust.totalBilled !== undefined) {
+              updateData.totalBilled = Number(cust.totalBilled) || 0;
+            }
+            if (cust.totalPaid !== undefined) {
+              updateData.totalPaid = Number(cust.totalPaid) || 0;
+            }
           }
           await Customer.updateOne(
             { uuid: cust.uuid },
@@ -121,13 +139,8 @@ exports.pushSync = async (req, res, next) => {
       try {
         const isTemporary = (inv.invoiceType || inv.invoice_type) === 'temporary';
 
-        let existing = await Invoice.findOne({ uuid: inv.uuid });
-        if (!existing && inv.invoiceNumber) {
-          existing = await Invoice.findOne({
-            invoiceNumber: inv.invoiceNumber,
-            invoiceType: isTemporary ? 'temporary' : { $ne: 'temporary' }
-          });
-        }
+        // BUG-01: Match strictly by invoice UUID to prevent blind overwriting of existing invoices
+        const existing = await Invoice.findOne({ uuid: inv.uuid });
 
         // Prevent older stale clients from re-cancelling restored server temporary bills
         if (isTemporary && existing && existing.status === 'finalized' && existing.active === true && (inv.status === 'cancelled' || inv.active === false)) {
@@ -194,12 +207,14 @@ exports.pushSync = async (req, res, next) => {
           totalAmount: Number(itm.totalAmount !== undefined ? itm.totalAmount : itm.total_amount) || 0,
         }));
 
-        const isTemporary = (inv.invoiceType || inv.invoice_type) === 'temporary';
-
-        // Validate calculations
+        // Validate calculations (BUG-07: Safe fallback for state code)
+        const rawStateCode = inv.customer ? (inv.customer.stateCode || inv.customer.state_code) : '22';
+        const customerStateCode = (rawStateCode && String(rawStateCode).trim() && String(rawStateCode).trim() !== 'null')
+          ? String(rawStateCode).trim()
+          : '22';
         const financials = calculateInvoiceFinancials(
           normalizedItems,
-          inv.customer ? inv.customer.stateCode : '22',
+          customerStateCode,
           env.COMPANY.stateCode || '22',
           isTemporary
         );
@@ -214,7 +229,7 @@ exports.pushSync = async (req, res, next) => {
           address: inv.customer?.address || '',
           city: inv.customer?.city || '',
           state: (inv.customer?.state && String(inv.customer.state).trim()) ? String(inv.customer.state).trim() : (env.COMPANY.state || 'Chhattisgarh'),
-          stateCode: (inv.customer?.stateCode && String(inv.customer.stateCode).trim()) ? String(inv.customer.stateCode).trim() : (env.COMPANY.stateCode || '22')
+          stateCode: customerStateCode
         };
 
         const safeSeq = inv.sequenceNumber !== undefined ? Number(inv.sequenceNumber) : (isTemporary ? 0 : 1);
@@ -247,14 +262,21 @@ exports.pushSync = async (req, res, next) => {
               status: inv.status || 'finalized',
               syncStatus: 'synced'
             });
+            await adjustSequenceNumber(safeFy, safeSeq, isTemporary);
             results.invoicesSynced++;
             results.syncedInvoiceUuids.push(inv.uuid);
           } catch (createErr) {
             const collision = await Invoice.findOne({
-              $or: [{ uuid: inv.uuid }, { invoiceNumber: safeInvNumber }]
+              $or: [
+                { uuid: inv.uuid },
+                {
+                  invoiceNumber: safeInvNumber,
+                  invoiceType: isTemporary ? 'temporary' : { $ne: 'temporary' }
+                }
+              ]
             });
-            if (collision) {
-              collision.uuid = inv.uuid;
+            if (collision && collision.uuid === inv.uuid) {
+              // Same invoice being updated — preserve UUID and foreign keys
               collision.customer = safeCustomer;
               collision.items = financials.items;
               collision.netAmount = financials.netAmount;
@@ -272,41 +294,90 @@ exports.pushSync = async (req, res, next) => {
               await collision.save();
               results.invoicesSynced++;
               results.syncedInvoiceUuids.push(inv.uuid);
+            } else if (collision && collision.uuid !== inv.uuid) {
+              // Sequence number collision with a DIFFERENT server invoice:
+              // Allocate next available sequence number to protect existing server invoice & payments (B11)
+              const allocated = isTemporary
+                ? await allocateTemporaryInvoiceNumber(inv.invoiceDate || new Date())
+                : await allocateInvoiceNumber(inv.invoiceDate || new Date());
+
+              await Invoice.create({
+                uuid: inv.uuid,
+                invoiceNumber: allocated.invoiceNumber,
+                sequenceNumber: allocated.sequenceNumber,
+                financialYear: safeFy,
+                invoiceDate: new Date(inv.invoiceDate || Date.now()),
+                dueDate: inv.dueDate ? new Date(inv.dueDate) : null,
+                poNumber: inv.poNumber ? String(inv.poNumber).trim() : '',
+                poDate: inv.poDate ? new Date(inv.poDate) : null,
+                challanNumber: inv.challanNumber ? String(inv.challanNumber).trim() : '',
+                challanDate: inv.challanDate ? new Date(inv.challanDate) : null,
+                customer: safeCustomer,
+                isInterState: financials.isInterState,
+                items: financials.items,
+                netAmount: financials.netAmount,
+                cgstTotal: financials.cgstTotal,
+                sgstTotal: financials.sgstTotal,
+                igstTotal: financials.igstTotal,
+                roundOff: financials.roundOff,
+                grandTotal: financials.grandTotal,
+                amountInWords: financials.amountInWords,
+                status: inv.status || 'finalized',
+                paymentStatus: inv.paymentStatus || 'unpaid',
+                balanceDue: inv.balanceDue !== undefined ? Number(inv.balanceDue) : financials.grandTotal,
+                invoiceType: isTemporary ? 'temporary' : 'gst',
+                deviceId: inv.deviceId || 'mobile-sync',
+                syncStatus: 'synced'
+              });
+              results.invoicesSynced++;
+              results.syncedInvoiceUuids.push(inv.uuid);
             } else {
               console.error(`[PushSync] Failed to create invoice ${inv.uuid}:`, createErr.message);
               throw createErr;
             }
           }
 
-          // Auto-save/update customer in cloud database (preserve deactivated state if existing)
+          // Auto-save/update customer in cloud database (preserve deactivated state if existing, and credit ledger for each new invoice - B9)
           if (inv.customer && inv.customer.name) {
             const custName = inv.customer.name.trim();
             const custUuid = inv.customer.uuid || inv.customerId || ('cust-' + inv.uuid);
             try {
-              await Customer.findOneAndUpdate(
-                { $or: [{ uuid: custUuid }, { name: custName }] },
-                {
-                  $set: {
-                    uuid: custUuid,
-                    name: custName,
-                    businessName: inv.customer.businessName || '',
-                    phone: inv.customer.phone || '',
-                    email: inv.customer.email || '',
-                    gstin: inv.customer.gstin || '',
-                    address: inv.customer.address || '',
-                    city: inv.customer.city || '',
-                    state: inv.customer.state || 'Chhattisgarh',
-                    stateCode: inv.customer.stateCode || '22',
-                    updatedAt: new Date()
-                  },
-                  $setOnInsert: {
-                    active: true,
-                    totalBilled: isTemporary ? 0 : financials.grandTotal,
-                    outstandingBalance: isTemporary ? 0 : financials.grandTotal
-                  }
-                },
-                { upsert: true, new: true }
-              );
+              // BUG-02: Prevent double-credit if upfront payment is present in payments batch
+              const hasMatchingPayment = Array.isArray(payments) && payments.some(p => p.invoiceId === inv.uuid);
+              const invPaid = hasMatchingPayment ? 0 : (Number(inv.totalPaid) || 0);
+              const invDue = Math.max(0, financials.grandTotal - invPaid);
+              const existingCustRecord = await Customer.findOne({ $or: [{ uuid: custUuid }, { name: custName }] });
+
+              if (existingCustRecord) {
+                if (!isTemporary) {
+                  existingCustRecord.totalBilled = Math.round(((existingCustRecord.totalBilled || 0) + financials.grandTotal) * 100) / 100;
+                  existingCustRecord.totalPaid = Math.round(((existingCustRecord.totalPaid || 0) + invPaid) * 100) / 100;
+                  existingCustRecord.outstandingBalance = Math.max(0, Math.round(((existingCustRecord.outstandingBalance || 0) + invDue) * 100) / 100);
+                }
+                existingCustRecord.businessName = inv.customer.businessName || existingCustRecord.businessName;
+                existingCustRecord.phone = inv.customer.phone || existingCustRecord.phone;
+                existingCustRecord.gstin = inv.customer.gstin || existingCustRecord.gstin;
+                existingCustRecord.updatedAt = new Date();
+                await existingCustRecord.save();
+              } else {
+                await Customer.create({
+                  uuid: custUuid,
+                  name: custName,
+                  businessName: inv.customer.businessName || '',
+                  phone: inv.customer.phone || '',
+                  email: inv.customer.email || '',
+                  gstin: inv.customer.gstin || '',
+                  address: inv.customer.address || '',
+                  city: inv.customer.city || '',
+                  state: inv.customer.state || 'Chhattisgarh',
+                  stateCode: inv.customer.stateCode || '22',
+                  active: true,
+                  totalBilled: isTemporary ? 0 : financials.grandTotal,
+                  totalPaid: isTemporary ? 0 : invPaid,
+                  outstandingBalance: isTemporary ? 0 : invDue,
+                  updatedAt: new Date()
+                });
+              }
             } catch (custErr) {
               console.error('Customer upsert error during sync:', custErr.message);
             }
@@ -357,28 +428,36 @@ exports.pushSync = async (req, res, next) => {
           results.syncedInvoiceUuids.push(inv.uuid);
         }
 
-        // Auto-catalogue any products in invoice items without resurrecting deactivated ones
-        if (Array.isArray(inv.items)) {
-          for (const itm of inv.items) {
-            if (itm.description && itm.description.trim()) {
-              await Product.findOneAndUpdate(
-                { description: itm.description.trim() },
-                {
-                  $set: {
-                    description: itm.description.trim(),
-                    hsnCode: itm.hsnCode || '',
-                    unit: itm.unit || 'PCS',
-                    defaultRate: itm.rate || 0,
-                    gstRate: itm.gstRate || 18,
-                    updatedAt: new Date()
+        // Auto-catalogue any products in invoice items without resurrecting deactivated ones (B10, B25 bulkWrite)
+        if (Array.isArray(inv.items) && inv.items.length > 0) {
+          const validItems = inv.items.filter(itm => itm.description && itm.description.trim());
+          if (validItems.length > 0) {
+            const bulkOps = validItems.map(itm => {
+              const prodSet = {
+                description: itm.description.trim(),
+                unit: itm.unit || 'PCS',
+                defaultRate: itm.rate || 0,
+                gstRate: itm.gstRate || 18,
+                updatedAt: new Date()
+              };
+              if (itm.hsnCode && itm.hsnCode.trim()) {
+                prodSet.hsnCode = itm.hsnCode.trim();
+              }
+              return {
+                updateOne: {
+                  filter: { description: itm.description.trim() },
+                  update: {
+                    $set: prodSet,
+                    $setOnInsert: {
+                      uuid: itm.uuid || uuidv4(),
+                      active: true
+                    }
                   },
-                  $setOnInsert: {
-                    active: true
-                  }
-                },
-                { upsert: true }
-              );
-            }
+                  upsert: true
+                }
+              };
+            });
+            await Product.bulkWrite(bulkOps);
           }
         }
       } catch (err) {
@@ -386,23 +465,42 @@ exports.pushSync = async (req, res, next) => {
       }
     }
 
-    // 3. Sync Payments
+    // 3. Sync Payments (S2: Calculate authoritative totalPaid from recorded payments)
     for (const p of payments) {
       try {
         const existing = await Payment.findOne({ uuid: p.uuid });
         if (!existing) {
           await Payment.create(p);
 
-          // Update invoice balance
+          // Update invoice balance from actual payments sum to prevent double-counting
           const targetInvoice = await Invoice.findOne({ uuid: p.invoiceId });
           if (targetInvoice && targetInvoice.status !== 'cancelled') {
-            targetInvoice.totalPaid = Math.round(((targetInvoice.totalPaid || 0) + p.amount) * 100) / 100;
+            const allPayments = await Payment.find({ invoiceId: targetInvoice.uuid });
+            const totalPaidSum = allPayments.reduce((acc, pay) => acc + (pay.amount || 0), 0);
+            targetInvoice.totalPaid = Math.round(totalPaidSum * 100) / 100;
             targetInvoice.balanceDue = Math.max(0, Math.round((targetInvoice.grandTotal - targetInvoice.totalPaid) * 100) / 100);
-            targetInvoice.paymentStatus = targetInvoice.balanceDue === 0 ? 'paid' : 'partially_paid';
+            targetInvoice.paymentStatus = targetInvoice.balanceDue <= 0.01 ? 'paid' : (targetInvoice.totalPaid > 0 ? 'partially_paid' : 'unpaid');
             await targetInvoice.save();
+
+            // Update Customer ledger balance in cloud MongoDB (B12)
+            if (targetInvoice.invoiceType !== 'temporary' && targetInvoice.customer && targetInvoice.customer.uuid) {
+              await Customer.updateOne(
+                { uuid: targetInvoice.customer.uuid },
+                {
+                  $inc: {
+                    totalPaid: Number(p.amount) || 0,
+                    outstandingBalance: -(Number(p.amount) || 0)
+                  }
+                }
+              );
+            }
           }
 
           results.paymentsSynced++;
+          results.syncedPaymentUuids.push(p.uuid);
+        } else {
+          results.paymentsSynced++;
+          results.syncedPaymentUuids.push(p.uuid);
         }
       } catch (err) {
         results.errors.push({ type: 'Payment', id: p.uuid, error: err.message });
@@ -416,24 +514,27 @@ exports.pushSync = async (req, res, next) => {
         const prodUuid = prod.uuid || require('uuid').v4();
         const productFilter = { $or: [{ uuid: prodUuid }, { description: prod.description.trim() }] };
         const existingProduct = await Product.findOne(productFilter);
+        const finalUuid = existingProduct ? existingProduct.uuid : prodUuid; // Preserve existing UUID (B11)
         const requestedActive = prod.active !== undefined
           ? (prod.active === true || prod.active === 1 || prod.active === 'true' || prod.active === '1')
           : true;
+        const prodUpdateSet = {
+          uuid: finalUuid,
+          description: prod.description.trim(),
+          unit: prod.unit || 'PCS',
+          defaultRate: Number(prod.defaultRate !== undefined ? prod.defaultRate : prod.default_rate) || 0,
+          gstRate: Number(prod.gstRate !== undefined ? prod.gstRate : prod.gst_rate) || 18,
+          // Keep a deletion made on another device when this device sends a stale active copy.
+          active: existingProduct?.active === false ? false : requestedActive,
+          updatedAt: new Date()
+        };
+        const rawHsn = prod.hsnCode || prod.hsn_code;
+        if (rawHsn && String(rawHsn).trim()) {
+          prodUpdateSet.hsnCode = String(rawHsn).trim();
+        }
         await Product.findOneAndUpdate(
           productFilter,
-          {
-            $set: {
-              uuid: prodUuid,
-              description: prod.description.trim(),
-              hsnCode: prod.hsnCode || prod.hsn_code || '',
-              unit: prod.unit || 'PCS',
-              defaultRate: Number(prod.defaultRate !== undefined ? prod.defaultRate : prod.default_rate) || 0,
-              gstRate: Number(prod.gstRate !== undefined ? prod.gstRate : prod.gst_rate) || 18,
-              // Keep a deletion made on another device when this device sends a stale active copy.
-              active: existingProduct?.active === false ? false : requestedActive,
-              updatedAt: new Date()
-            }
-          },
+          { $set: prodUpdateSet },
           { upsert: true, new: true }
         );
         results.productsSynced++;
@@ -478,7 +579,7 @@ exports.pullSync = async (req, res, next) => {
       : {
           $or: [
             { updatedAt: { $gt: sinceDate } },
-            { updatedAt: { $exists: false } }
+            { createdAt: { $gt: sinceDate }, updatedAt: { $exists: false } }
           ]
         };
 
@@ -488,10 +589,17 @@ exports.pullSync = async (req, res, next) => {
       : {
           $or: [
             { updatedAt: { $gt: sinceDate } },
-            { updatedAt: { $exists: false } }
+            { createdAt: { $gt: sinceDate }, updatedAt: { $exists: false } }
           ]
         };
-    const payQuery = isFullSync ? {} : { updatedAt: { $gt: sinceDate } };
+    const payQuery = isFullSync
+      ? {}
+      : {
+          $or: [
+            { updatedAt: { $gt: sinceDate } },
+            { createdAt: { $gt: sinceDate }, updatedAt: { $exists: false } }
+          ]
+        };
 
     // Full sync includes inactive products so clients can apply deletion tombstones.
     const prodQuery = isFullSync
@@ -499,15 +607,16 @@ exports.pullSync = async (req, res, next) => {
       : {
           $or: [
             { updatedAt: { $gt: sinceDate } },
-            { updatedAt: { $exists: false } }
+            { createdAt: { $gt: sinceDate }, updatedAt: { $exists: false } }
           ]
         };
 
+    const maxSyncLimit = isFullSync ? 5000 : 1000;
     const [customers, invoices, payments, products] = await Promise.all([
-      Customer.find(custQuery).lean(),
-      Invoice.find(invQuery).lean(),
-      Payment.find(payQuery).lean(),
-      Product.find(prodQuery).lean()
+      Customer.find(custQuery).limit(maxSyncLimit).lean(),
+      Invoice.find(invQuery).limit(maxSyncLimit).lean(),
+      Payment.find(payQuery).limit(maxSyncLimit).lean(),
+      Product.find(prodQuery).limit(maxSyncLimit).lean()
     ]);
 
     // Calculate live dynamic balances for pulled customers

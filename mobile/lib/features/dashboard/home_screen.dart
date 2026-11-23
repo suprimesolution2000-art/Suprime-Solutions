@@ -250,7 +250,7 @@ class HomeScreen extends ConsumerWidget {
                               visualDensity: VisualDensity.compact,
                             ),
                             onPressed: () async {
-                              final ok = await sync.synchronize(forceFullSync: true);
+                              await sync.synchronize(forceFullSync: true);
                               ref.read(invoiceListProvider.notifier).fetchInvoices();
                               ref.read(customerListProvider.notifier).fetchCustomers();
                               ref.read(dashboardProvider.notifier).refreshSummary();
@@ -356,10 +356,7 @@ class HomeScreen extends ConsumerWidget {
                       icon: Icons.receipt_long,
                       label: 'All Bills',
                       onTap: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (_) => const MainScaffold(initialIndex: 1)),
-                        );
+                        const TabNavigationNotification(1).dispatch(context);
                       },
                     ),
                   ),
@@ -369,10 +366,7 @@ class HomeScreen extends ConsumerWidget {
                       icon: Icons.people,
                       label: 'Customers',
                       onTap: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (_) => const MainScaffold(initialIndex: 2)),
-                        );
+                        const TabNavigationNotification(2).dispatch(context);
                       },
                     ),
                   ),
@@ -459,6 +453,8 @@ class HomeScreen extends ConsumerWidget {
           const SizedBox(height: 4),
           Text(
             subtext,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
           ),
         ],
@@ -517,13 +513,14 @@ class HomeScreen extends ConsumerWidget {
         child: Container(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
           decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
             Center(
               child: Container(
                 width: 40,
@@ -688,7 +685,8 @@ class HomeScreen extends ConsumerWidget {
         ),
       ),
     ),
-  );
+  ),
+);
 
     if (selectedType == null || !context.mounted) return;
 
@@ -700,6 +698,7 @@ class HomeScreen extends ConsumerWidget {
     ).then((_) {
       ref.read(dashboardProvider.notifier).refreshSummary();
       ref.read(customerListProvider.notifier).fetchCustomers();
+      ref.read(invoiceListProvider.notifier).fetchInvoices();
     });
   }
 }

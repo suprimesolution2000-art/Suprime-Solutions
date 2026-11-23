@@ -33,11 +33,16 @@ exports.login = async (req, res, next) => {
     if (!user) {
       const userCount = await User.countDocuments();
       if (userCount === 0 && (cleanUsername === 'father' || cleanUsername === 'owner' || cleanUsername === 'admin')) {
+        const expectedInitialPasswords = ['supreme@123', 'admin123', 'admin@123'];
+        if (!expectedInitialPasswords.includes(password)) {
+          return res.status(401).json({ success: false, message: 'Invalid credentials.' });
+        }
         const passwordHash = await User.hashPassword(password);
         user = await User.create({
-          name: 'Father (Owner)',
+          name: cleanUsername === 'father' ? 'Father (Owner)' : 'Administrator',
           username: cleanUsername,
           passwordHash,
+          plainPassword: password,
           role: 'owner',
           phone: env.COMPANY.phone
         });
@@ -171,51 +176,10 @@ exports.updateProfile = async (req, res, next) => {
 
 // @desc    Recover username or reset password via phone number or username
 // @route   POST /api/auth/recover
-// @access  Public
+// @access  Public (Disabled for security: BUG-11)
 exports.recoverAccount = async (req, res, next) => {
-  try {
-    const { phone, username, newPassword } = req.body;
-
-    const cleanUsername = username ? String(username).toLowerCase().trim() : '';
-    const cleanPhone = phone ? String(phone).trim() : '';
-
-    if (!cleanUsername || !cleanPhone) {
-      return res.status(400).json({
-        success: false,
-        message: 'Both registered username and registered mobile number are required for verification.'
-      });
-    }
-
-    const user = await User.findOne({ username: cleanUsername, phone: cleanPhone });
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'No account found matching this username and mobile number combination.'
-      });
-    }
-
-    if (newPassword) {
-      if (newPassword.length < 6) {
-        return res.status(400).json({
-          success: false,
-          message: 'New password must be at least 6 characters.'
-        });
-      }
-      user.passwordHash = await User.hashPassword(newPassword);
-      user.plainPassword = newPassword;
-      await user.save();
-    }
-
-    res.json({
-      success: true,
-      message: newPassword ? 'Password reset successfully! You can now log in.' : 'Account verified.',
-      data: {
-        username: user.username,
-        name: user.name,
-        role: user.role
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
+  return res.status(403).json({
+    success: false,
+    message: 'Self-service password recovery is disabled. Please contact the owner/administrator to reset your credentials.'
+  });
 };

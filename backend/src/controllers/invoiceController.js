@@ -4,7 +4,7 @@ const Payment = require('../models/Payment');
 const Product = require('../models/Product');
 const AuditLog = require('../models/AuditLog');
 const { calculateInvoiceFinancials } = require('../services/gstCalculationService');
-const { allocateInvoiceNumber, allocateTemporaryInvoiceNumber, getFinancialYear } = require('../services/invoiceService');
+const { allocateInvoiceNumber, allocateTemporaryInvoiceNumber, adjustSequenceNumber, getFinancialYear } = require('../services/invoiceService');
 const { generateInvoicePdf } = require('../services/pdfService');
 const env = require('../config/env');
 const { v4: uuidv4 } = require('uuid');
@@ -177,18 +177,28 @@ exports.createInvoice = async (req, res, next) => {
         const allocated = await allocateTemporaryInvoiceNumber(invoiceDate);
         invoiceNumber = allocated.invoiceNumber;
         sequenceNumber = allocated.sequenceNumber;
-      } else if (!sequenceNumber) {
-        const parsedSeq = parseInt((invoiceNumber.match(/\d+/) || [])[0], 10);
-        sequenceNumber = isNaN(parsedSeq) ? 1 : parsedSeq;
+      } else {
+        if (!sequenceNumber) {
+          const allNumbers = invoiceNumber.match(/\d+/g) || [];
+          const lastNumber = allNumbers.length > 0 ? allNumbers[allNumbers.length - 1] : null;
+          const parsedSeq = parseInt(lastNumber, 10);
+          sequenceNumber = isNaN(parsedSeq) ? 1 : parsedSeq;
+        }
+        await adjustSequenceNumber(fy, sequenceNumber, true);
       }
     } else {
       if (!invoiceNumber) {
         const allocated = await allocateInvoiceNumber(invoiceDate);
         invoiceNumber = allocated.invoiceNumber;
         sequenceNumber = allocated.sequenceNumber;
-      } else if (!sequenceNumber) {
-        const parsedSeq = parseInt((invoiceNumber.match(/\d+/) || [])[0], 10);
-        sequenceNumber = isNaN(parsedSeq) ? 1 : parsedSeq;
+      } else {
+        if (!sequenceNumber) {
+          const allNumbers = invoiceNumber.match(/\d+/g) || [];
+          const lastNumber = allNumbers.length > 0 ? allNumbers[allNumbers.length - 1] : null;
+          const parsedSeq = parseInt(lastNumber, 10);
+          sequenceNumber = isNaN(parsedSeq) ? 1 : parsedSeq;
+        }
+        await adjustSequenceNumber(fy, sequenceNumber, false);
       }
     }
 
@@ -200,11 +210,16 @@ exports.createInvoice = async (req, res, next) => {
 
     if (!customerUuid) {
       let existingCustomer = null;
-      if (customerPhone) {
-        existingCustomer = await Customer.findOne({ phone: customerPhone });
+      if (customerPhone && customer.name && customer.name.trim()) {
+        existingCustomer = await Customer.findOne({
+          phone: customerPhone,
+          name: new RegExp(`^${escapeRegex(customer.name.trim())}$`, 'i')
+        });
       }
       if (!existingCustomer && customer.name && customer.name.trim()) {
-        existingCustomer = await Customer.findOne({ name: customer.name.trim() });
+        existingCustomer = await Customer.findOne({
+          name: new RegExp(`^${escapeRegex(customer.name.trim())}$`, 'i')
+        });
       }
 
       if (existingCustomer) {
@@ -226,24 +241,13 @@ exports.createInvoice = async (req, res, next) => {
           outstandingBalance: 0
         });
       }
+    }
+
     const clientTotalPaid = Number(req.body.totalPaid) || 0;
     const clientBalanceDue = Math.max(0, Math.round((financials.grandTotal - clientTotalPaid) * 100) / 100);
     const clientPaymentStatus = clientBalanceDue <= 0.01
         ? 'paid'
         : (clientTotalPaid > 0 ? 'partially_paid' : (req.body.paymentStatus || 'unpaid'));
-
-    if (!isTemporary && customerUuid) {
-      await Customer.updateOne(
-        { uuid: customerUuid },
-        {
-          $inc: {
-            totalBilled: financials.grandTotal,
-            totalPaid: clientTotalPaid,
-            outstandingBalance: clientBalanceDue
-          }
-        }
-      );
-    }
 
     const customerSnapshot = {
       uuid: customerUuid,
@@ -258,7 +262,7 @@ exports.createInvoice = async (req, res, next) => {
       stateCode: customer.stateCode || '22'
     };
 
-    // 4. Save Invoice
+    // 4. Save Invoice (BUG-03: Create invoice before debiting customer to eliminate phantom debt)
     const invoice = await Invoice.create({
       uuid,
       invoiceNumber,
@@ -289,6 +293,40 @@ exports.createInvoice = async (req, res, next) => {
       createdBy: req.user ? req.user.name : 'System',
       syncStatus: 'synced'
     });
+
+    if (!isTemporary && customerUuid) {
+      await Customer.updateOne(
+        { uuid: customerUuid },
+        {
+          $inc: {
+            totalBilled: financials.grandTotal,
+            totalPaid: clientTotalPaid,
+            outstandingBalance: clientBalanceDue
+          }
+        }
+      );
+    }
+
+    if (clientTotalPaid > 0) {
+      const rawMethod = (req.body.paymentMethod || 'cash').toLowerCase().replace(/\s+/g, '_');
+      const validMethods = ['cash', 'upi', 'bank_transfer', 'cheque', 'other'];
+      const effMethod = validMethods.includes(rawMethod) ? rawMethod : 'cash';
+
+      await Payment.create({
+        uuid: uuidv4(),
+        invoiceId: invoice.uuid,
+        invoiceNumber: invoice.invoiceNumber,
+        customerId: customerUuid || invoice.uuid,
+        customerName: customer.name.trim(),
+        amount: clientTotalPaid,
+        paymentMethod: effMethod,
+        referenceNumber: req.body.paymentReference || '',
+        paymentDate: new Date(invoiceDate),
+        notes: `Upfront payment for bill ${invoice.invoiceNumber}`,
+        receivedBy: req.user ? req.user.name : 'System',
+        deviceId: deviceId || 'web-or-mobile'
+      });
+    }
 
     // Audit log
     await AuditLog.create({
@@ -348,6 +386,9 @@ exports.cancelInvoice = async (req, res, next) => {
 
     invoice.status = 'cancelled';
     await invoice.save();
+
+    // Clean up associated payment records to keep customer ledger in sync (B17)
+    await Payment.deleteMany({ invoiceId: invoice.uuid });
 
     // Adjust customer ledger balance for non-temporary bills
     if (invoice.customer && invoice.customer.uuid && invoice.invoiceType !== 'temporary') {
@@ -424,17 +465,75 @@ exports.updateInvoice = async (req, res, next) => {
     const newBalanceDue = Math.max(0, Math.round((financials.grandTotal - (invoice.totalPaid || 0)) * 100) / 100);
     const deltaBalanceDue = Math.round((newBalanceDue - invoice.balanceDue) * 100) / 100;
 
-    // Adjust customer ledger for financial differences
-    if (invoice.customer && invoice.customer.uuid && invoice.invoiceType !== 'temporary') {
-      await Customer.updateOne(
-        { uuid: invoice.customer.uuid },
-        {
-          $inc: {
-            totalBilled: deltaGrandTotal,
-            outstandingBalance: deltaBalanceDue
+    // BUG-04 & B30: Adjust customer ledgers accurately, handling party reassignments cleanly
+    const isPartyReassigned = customer && customer.uuid && invoice.customer && invoice.customer.uuid && (customer.uuid !== invoice.customer.uuid);
+    const wasGst = invoice.invoiceType !== 'temporary';
+    const isNowGst = effectiveInvoiceType !== 'temporary';
+
+    if (isPartyReassigned) {
+      // Revert previous party
+      if (wasGst) {
+        await Customer.updateOne(
+          { uuid: invoice.customer.uuid },
+          {
+            $inc: {
+              totalBilled: -invoice.grandTotal,
+              outstandingBalance: -invoice.balanceDue,
+              totalPaid: -(invoice.totalPaid || 0)
+            }
           }
-        }
+        );
+      }
+      // Debit new party
+      if (isNowGst) {
+        await Customer.updateOne(
+          { uuid: customer.uuid },
+          {
+            $inc: {
+              totalBilled: financials.grandTotal,
+              outstandingBalance: newBalanceDue,
+              totalPaid: (invoice.totalPaid || 0)
+            }
+          }
+        );
+      }
+      // Re-link payments to new customer
+      await Payment.updateMany(
+        { invoiceId: invoice.uuid },
+        { $set: { customerId: customer.uuid, customerName: customer.name || '' } }
       );
+    } else if (invoice.customer && invoice.customer.uuid) {
+      if (wasGst && isNowGst) {
+        await Customer.updateOne(
+          { uuid: invoice.customer.uuid },
+          {
+            $inc: {
+              totalBilled: deltaGrandTotal,
+              outstandingBalance: deltaBalanceDue
+            }
+          }
+        );
+      } else if (wasGst && !isNowGst) {
+        await Customer.updateOne(
+          { uuid: invoice.customer.uuid },
+          {
+            $inc: {
+              totalBilled: -invoice.grandTotal,
+              outstandingBalance: -invoice.balanceDue
+            }
+          }
+        );
+      } else if (!wasGst && isNowGst) {
+        await Customer.updateOne(
+          { uuid: invoice.customer.uuid },
+          {
+            $inc: {
+              totalBilled: financials.grandTotal,
+              outstandingBalance: newBalanceDue
+            }
+          }
+        );
+      }
     }
 
     // Update customer snapshot if provided
@@ -471,6 +570,7 @@ exports.updateInvoice = async (req, res, next) => {
     invoice.amountInWords = financials.amountInWords;
     invoice.balanceDue = newBalanceDue;
     invoice.paymentStatus = newBalanceDue === 0 ? 'paid' : ((invoice.totalPaid || 0) > 0 ? 'partially_paid' : 'unpaid');
+    invoice.invoiceType = effectiveInvoiceType;
     invoice.updatedAt = new Date();
     await invoice.save();
 
@@ -478,25 +578,31 @@ exports.updateInvoice = async (req, res, next) => {
     if (Array.isArray(financials.items) && financials.items.length > 0) {
       const validItems = financials.items.filter(itm => itm.description && itm.description.trim());
       if (validItems.length > 0) {
-        const ops = validItems.map(itm => ({
-          updateOne: {
-            filter: { description: itm.description.trim() },
-            update: {
-              $set: {
-                description: itm.description.trim(),
-                hsnCode: itm.hsnCode || '',
-                unit: itm.unit || 'PCS',
-                defaultRate: itm.rate || 0,
-                gstRate: itm.gstRate || 18,
-                updatedAt: new Date()
-              },
-              $setOnInsert: {
-                active: true
-              }
-            },
-            upsert: true
+        const ops = validItems.map(itm => {
+          const updateFields = {
+            description: itm.description.trim(),
+            unit: itm.unit || 'PCS',
+            defaultRate: itm.rate || 0,
+            gstRate: itm.gstRate || 18,
+            updatedAt: new Date()
+          };
+          if (itm.hsnCode && itm.hsnCode.trim()) {
+            updateFields.hsnCode = itm.hsnCode.trim();
           }
-        }));
+          return {
+            updateOne: {
+              filter: { description: itm.description.trim() },
+              update: {
+                $set: updateFields,
+                $setOnInsert: {
+                  uuid: itm.uuid || uuidv4(),
+                  active: true
+                }
+              },
+              upsert: true
+            }
+          };
+        });
         await Product.bulkWrite(ops);
       }
     }

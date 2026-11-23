@@ -12,14 +12,18 @@ import 'providers/auth_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize API client
-  await ApiClient.instance.init();
+  try {
+    // Initialize API client
+    await ApiClient.instance.init();
 
-  // Initialize local SQLite database
-  await AppDatabase.instance.database;
+    // Initialize local SQLite database
+    await AppDatabase.instance.database;
 
-  // Initialize Sync service
-  await SyncService.instance.initialize();
+    // Initialize Sync service
+    await SyncService.instance.initialize();
+  } catch (e) {
+    debugPrint('Initialization error in main(): $e');
+  }
 
   runApp(
     const ProviderScope(
@@ -39,7 +43,13 @@ class SSSupremeSolutionsApp extends ConsumerWidget {
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: auth.isAuthenticated ? const MainScaffold() : const LoginScreen(),
+      home: auth.isLoading
+          ? const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(),
+              ),
+            )
+          : (auth.isAuthenticated ? const MainScaffold() : const LoginScreen()),
     );
   }
 }

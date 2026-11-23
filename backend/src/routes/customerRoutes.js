@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const customerController = require('../controllers/customerController');
 const authMiddleware = require('../middleware/auth');
+const { isOwner } = require('../middleware/role');
 
 router.use(authMiddleware);
 
@@ -10,6 +11,6 @@ router.post('/', customerController.createCustomer);
 router.get('/:id', customerController.getCustomerById);
 router.get('/:id/ledger', customerController.getCustomerLedger);
 router.put('/:id', customerController.updateCustomer);
-router.delete('/:id', customerController.deleteCustomer);
+router.delete('/:id', isOwner, customerController.deleteCustomer);
 
 module.exports = router;

@@ -41,7 +41,7 @@ class CustomerListNotifier extends StateNotifier<CustomerListState> {
   CustomerListNotifier() : super(CustomerListState()) {
     fetchCustomers();
     _syncListener = () {
-      if (SyncService.instance.status == SyncStatus.synced) {
+      if (SyncService.instance.status != SyncStatus.syncing) {
         fetchCustomers();
       }
     };
@@ -58,6 +58,7 @@ class CustomerListNotifier extends StateNotifier<CustomerListState> {
   }
 
   Future<void> fetchCustomers() async {
+    if (!mounted) return;
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
       var list = await _repo.getAllCustomers(searchQuery: state.searchQuery);
@@ -67,9 +68,13 @@ class CustomerListNotifier extends StateNotifier<CustomerListState> {
           list = await _repo.getAllCustomers(searchQuery: state.searchQuery);
         }
       }
-      state = state.copyWith(customers: list, isLoading: false);
+      if (mounted) {
+        state = state.copyWith(customers: list, isLoading: false);
+      }
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      if (mounted) {
+        state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      }
     }
   }
 
@@ -83,7 +88,11 @@ class CustomerListNotifier extends StateNotifier<CustomerListState> {
 
   Future<void> addCustomer(CustomerModel customer) async {
     await _repo.saveCustomer(customer);
-    fetchCustomers();
+    await fetchCustomers();
+    try {
+      await SyncService.instance.checkPendingQueue();
+      unawaited(SyncService.instance.synchronize(forceFullSync: false));
+    } catch (_) {}
   }
 }
 

@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const User = require('../models/User');
 
 // GET /api/admin/users - List all users (Admin only)
@@ -88,7 +89,8 @@ exports.resetUserPassword = async (req, res, next) => {
       });
     }
 
-    const user = await User.findById(id);
+    const filter = mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { username: id };
+    const user = await User.findOne(filter);
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -121,20 +123,31 @@ exports.deleteUser = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    if (req.user && String(req.user.id || req.user._id) === String(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot delete your own active administrator account.'
-      });
-    }
-
-    const user = await User.findByIdAndDelete(id);
+    const filter = mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { username: id };
+    const user = await User.findOne(filter);
     if (!user) {
       return res.status(404).json({
         success: false,
         message: 'User account not found.'
       });
     }
+
+    // BUG-05: Prevent deleting own active administrator account via either ObjectId or username
+    if (req.user && (String(req.user.id || req.user._id) === String(user._id) || String(req.user.username).toLowerCase() === String(user.username).toLowerCase())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete your own active administrator account.'
+      });
+    }
+
+    if (user.role === 'owner') {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot delete master owner accounts.'
+      });
+    }
+
+    await User.deleteOne({ _id: user._id });
 
     res.json({
       success: true,

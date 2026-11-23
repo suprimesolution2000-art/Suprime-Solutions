@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,10 +8,16 @@ class ApiClient {
 
   // Production Render live cloud backend URL
   static const String defaultBaseUrl = 'https://ss-supreme-solutions-backend.onrender.com/api';
+  static void Function()? onAuthSessionExpired;
   String _baseUrl = defaultBaseUrl;
   String? _cachedToken;
+  Completer<bool>? _refreshCompleter;
 
   void updateCachedToken(String? token) {
+    _cachedToken = token;
+  }
+
+  void updateToken(String? token) {
     _cachedToken = token;
   }
 
@@ -32,6 +39,12 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
+          // AUTH-01: Wait if token refresh is already in-flight to prevent sending expired tokens
+          if (_refreshCompleter != null) {
+            try {
+              await _refreshCompleter!.future;
+            } catch (_) {}
+          }
           if (_cachedToken == null) {
             final prefs = await SharedPreferences.getInstance();
             _cachedToken = prefs.getString('access_token');
@@ -91,12 +104,28 @@ class ApiClient {
   String get baseUrl => _baseUrl;
 
   Future<bool> _refreshToken() async {
+    if (_refreshCompleter != null) {
+      return _refreshCompleter!.future;
+    }
+    _refreshCompleter = Completer<bool>();
     try {
       final prefs = await SharedPreferences.getInstance();
       final refreshToken = prefs.getString('refresh_token');
-      if (refreshToken == null) return false;
+      if (refreshToken == null) {
+        _refreshCompleter!.complete(false);
+        _refreshCompleter = null;
+        return false;
+      }
 
-      final res = await Dio().post(
+      final refreshDio = Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 15),
+          sendTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 15),
+        ),
+      );
+
+      final res = await refreshDio.post(
         '$_baseUrl/auth/refresh',
         data: {'refreshToken': refreshToken},
       );
@@ -107,9 +136,22 @@ class ApiClient {
         if (res.data['refreshToken'] != null) {
           await prefs.setString('refresh_token', res.data['refreshToken']);
         }
+        _refreshCompleter!.complete(true);
+        _refreshCompleter = null;
         return true;
       }
+    } on DioException catch (dioErr) {
+      final status = dioErr.response?.statusCode;
+      if (status == 400 || status == 401 || status == 403) {
+        _cachedToken = null;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('access_token');
+        await prefs.remove('refresh_token');
+        onAuthSessionExpired?.call();
+      }
     } catch (_) {}
+    _refreshCompleter?.complete(false);
+    _refreshCompleter = null;
     return false;
   }
 

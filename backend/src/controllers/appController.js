@@ -76,12 +76,12 @@ const getLatestRelease = async (req, res) => {
 
     // Fallback if GitHub rate-limited and no cache yet
     const fallback = {
-      latestVersion: '1.0.29',
-      tagName: 'v1.0.29',
-      releaseName: 'Suprime Solutions v1.0.29',
-      releaseNotes: 'Fixed item selection keyboard auto-dismiss, prevented Customer Name viewport jump, and added high-speed resilient APK downloads.',
+      latestVersion: '1.0.36',
+      tagName: 'v1.0.36',
+      releaseName: 'Suprime Solutions v1.0.36',
+      releaseNotes: 'Fixed all critical sync desynchronizations, payment ledger double counting, and offline data preservation.',
       downloadUrl: directBackendDownloadUrl,
-      browserDownloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.29/Suprime_Solutions_v1.0.29.apk',
+      browserDownloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.36/Suprime_Solutions_v1.0.36.apk',
       apkSize: 40562004,
       publishedAt: new Date().toISOString()
     };
@@ -103,12 +103,12 @@ const getLatestRelease = async (req, res) => {
     }
     return res.json({
       success: true,
-      latestVersion: '1.0.29',
-      tagName: 'v1.0.29',
-      releaseName: 'Suprime Solutions v1.0.29',
-      releaseNotes: 'Fixed item selection keyboard auto-dismiss, prevented Customer Name viewport jump, and added high-speed resilient APK downloads.',
+      latestVersion: '1.0.36',
+      tagName: 'v1.0.36',
+      releaseName: 'Suprime Solutions v1.0.36',
+      releaseNotes: 'Fixed all critical sync desynchronizations, payment ledger double counting, and offline data preservation.',
       downloadUrl: directBackendDownloadUrl,
-      browserDownloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.29/Suprime_Solutions_v1.0.29.apk',
+      browserDownloadUrl: 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.36/Suprime_Solutions_v1.0.36.apk',
       apkSize: 40562004,
       publishedAt: new Date().toISOString()
     });
@@ -159,10 +159,10 @@ const downloadLatestApk = async (req, res) => {
       }
     }
 
-    return res.redirect(302, 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.28/Suprime_Solutions_v1.0.28.apk');
+    return res.redirect(302, 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.36/Suprime_Solutions_v1.0.36.apk');
   } catch (err) {
     console.error('Error redirecting APK download:', err.message);
-    return res.redirect(302, 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.28/Suprime_Solutions_v1.0.28.apk');
+    return res.redirect(302, 'https://github.com/suprimesolution2000-art/Suprime-Solutions/releases/download/v1.0.36/Suprime_Solutions_v1.0.36.apk');
   }
 };
 

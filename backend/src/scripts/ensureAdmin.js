@@ -18,6 +18,7 @@ async function ensureAdmin() {
       $set: {
         name: 'Administrator',
         username: 'admin',
+        phone: '9981365878',
         passwordHash: passwordHash,
         plainPassword: 'supreme@2026',
         role: 'owner',
@@ -34,6 +35,7 @@ async function ensureAdmin() {
       $set: {
         name: 'Father (SS Supreme Solutions)',
         username: 'father',
+        phone: '9981365878',
         passwordHash: passwordHash,
         plainPassword: 'supreme@2026',
         role: 'owner',

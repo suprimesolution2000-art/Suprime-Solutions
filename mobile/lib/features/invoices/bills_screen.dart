@@ -611,7 +611,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
           await ApiClient.instance.deleteInvoice(inv.uuid);
         } catch (_) {}
 
-        if (!mounted) return;
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Bill ${inv.invoiceNumber} deleted successfully.'),
@@ -622,7 +622,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
         ref.read(customerListProvider.notifier).fetchCustomers();
         ref.read(dashboardProvider.notifier).refreshSummary();
       } catch (e) {
-        if (!mounted) return;
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to delete bill: $e'),
@@ -798,17 +798,30 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                       ],
                     ),
                   ),
-                  SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: PopupMenuButton<String>(
+                  if (!_isSelectionMode)
+                    SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: PopupMenuButton<String>(
                       icon: const Icon(Icons.more_vert, size: 20, color: AppColors.textSecondary),
                       padding: EdgeInsets.zero,
                     onSelected: (val) {
                       if (val == 'share') {
-                        PdfInvoiceService.shareInvoicePdf(inv);
+                        PdfInvoiceService.shareInvoicePdf(inv).catchError((err) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed to share bill PDF: $err'), backgroundColor: Colors.red),
+                            );
+                          }
+                        });
                       } else if (val == 'print') {
-                        PdfInvoiceService.printInvoice(inv);
+                        PdfInvoiceService.printInvoice(inv).catchError((err) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed to print bill: $err'), backgroundColor: Colors.red),
+                            );
+                          }
+                        });
                       } else if (val == 'edit') {
                         Navigator.push(
                           context,
@@ -902,9 +915,14 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                             children: [
                               const Icon(Icons.location_on_outlined, size: 10, color: AppColors.textMuted),
                               const SizedBox(width: 2),
-                              Text(
-                                inv.customer.city.trim().isNotEmpty ? inv.customer.city.trim() : 'Bilaspur',
-                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 90),
+                                child: Text(
+                                  inv.customer.city.trim().isNotEmpty ? inv.customer.city.trim() : 'Bilaspur',
+                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ],
                           ),
@@ -1002,7 +1020,9 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
             return Padding(
               padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
               child: Container(
-                height: MediaQuery.of(ctx).size.height * 0.72,
+                constraints: BoxConstraints(
+                  maxHeight: (MediaQuery.of(ctx).size.height - MediaQuery.of(ctx).viewInsets.bottom) * 0.85,
+                ),
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -1228,57 +1248,61 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
         );
       },
     );
+    searchController.dispose();
   }
 
   void _showDateRangePicker(BuildContext context, InvoiceListNotifier notifier) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Filter by Date Range', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              ListTile(
-                leading: const Icon(Icons.today),
-                title: const Text('Today'),
-                onTap: () {
-                  final now = DateTime.now();
-                  notifier.setDateRange(DateTime(now.year, now.month, now.day), now);
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.view_week),
-                title: const Text('Last 7 Days'),
-                onTap: () {
-                  final now = DateTime.now();
-                  notifier.setDateRange(now.subtract(const Duration(days: 7)), now);
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.calendar_month),
-                title: const Text('This Month'),
-                onTap: () {
-                  final now = DateTime.now();
-                  notifier.setDateRange(DateTime(now.year, now.month, 1), now);
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.clear_all),
-                title: const Text('Clear Date Filters'),
-                onTap: () {
-                  notifier.setDateRange(null, null);
-                  Navigator.pop(context);
-                },
-              ),
-            ],
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Filter by Date Range', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                ListTile(
+                  leading: const Icon(Icons.today),
+                  title: const Text('Today'),
+                  onTap: () {
+                    final now = DateTime.now();
+                    notifier.setDateRange(DateTime(now.year, now.month, now.day), now);
+                    Navigator.pop(context);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.view_week),
+                  title: const Text('Last 7 Days'),
+                  onTap: () {
+                    final now = DateTime.now();
+                    notifier.setDateRange(now.subtract(const Duration(days: 7)), now);
+                    Navigator.pop(context);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.calendar_month),
+                  title: const Text('This Month'),
+                  onTap: () {
+                    final now = DateTime.now();
+                    notifier.setDateRange(DateTime(now.year, now.month, 1), now);
+                    Navigator.pop(context);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.clear_all),
+                  title: const Text('Clear Date Filters'),
+                  onTap: () {
+                    notifier.setDateRange(null, null);
+                    Navigator.pop(context);
+                  },
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -1474,7 +1498,11 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                               lastDate: DateTime(2035),
                             );
                             if (picked != null) {
-                              setModalState(() => fromDate = picked);
+                              setModalState(() {
+                                fromDate = picked;
+                                if (toDate.isBefore(fromDate)) toDate = fromDate;
+                                statusText = '';
+                              });
                             }
                           },
                           child: Container(
@@ -1493,9 +1521,15 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                                   children: [
                                     Icon(Icons.calendar_today, size: 14, color: isTemp ? const Color(0xFF8B5A2B) : AppColors.primary),
                                     const SizedBox(width: 6),
-                                    Text(
-                                      DateFormatter.format(fromDate),
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    Flexible(
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          DateFormatter.format(fromDate),
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -1514,12 +1548,15 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                           onTap: () async {
                             final picked = await showDatePicker(
                               context: context,
-                              initialDate: toDate,
-                              firstDate: DateTime(2020),
+                              initialDate: toDate.isBefore(fromDate) ? fromDate : toDate,
+                              firstDate: fromDate,
                               lastDate: DateTime(2035),
                             );
                             if (picked != null) {
-                              setModalState(() => toDate = picked);
+                              setModalState(() {
+                                toDate = picked;
+                                statusText = '';
+                              });
                             }
                           },
                           child: Container(
@@ -1538,9 +1575,15 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                                   children: [
                                     Icon(Icons.calendar_today, size: 14, color: isTemp ? const Color(0xFF8B5A2B) : AppColors.primary),
                                     const SizedBox(width: 6),
-                                    Text(
-                                      DateFormatter.format(toDate),
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    Flexible(
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          DateFormatter.format(toDate),
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -1592,6 +1635,12 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                       child: InkWell(
                         borderRadius: BorderRadius.circular(12),
                         onTap: () async {
+                          if (fromDate.isAfter(toDate)) {
+                            setModalState(() {
+                              statusText = 'From Date cannot be after To Date.';
+                            });
+                            return;
+                          }
                           setModalState(() {
                             isGenerating = true;
                             statusText = '';
@@ -1671,6 +1720,12 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                       child: InkWell(
                         borderRadius: BorderRadius.circular(12),
                         onTap: () async {
+                          if (fromDate.isAfter(toDate)) {
+                            setModalState(() {
+                              statusText = 'From Date cannot be after To Date.';
+                            });
+                            return;
+                          }
                           setModalState(() {
                             isGenerating = true;
                             statusText = '';

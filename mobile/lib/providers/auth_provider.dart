@@ -13,7 +13,7 @@ class AuthState {
 
   AuthState({
     this.user,
-    this.isLoading = false,
+    this.isLoading = true,
     this.errorMessage,
     this.isAuthenticated = false,
   });
@@ -39,6 +39,9 @@ class AuthState {
 
 class AuthNotifier extends StateNotifier<AuthState> {
   AuthNotifier() : super(AuthState()) {
+    ApiClient.onAuthSessionExpired = () {
+      logout();
+    };
     checkSavedSession();
   }
 
@@ -51,12 +54,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final userId = prefs.getString('user_id') ?? 'user_1';
 
     if (token != null && token.isNotEmpty && name != null && name.isNotEmpty) {
+      ApiClient.instance.updateCachedToken(token);
       state = state.copyWith(
+        isLoading: false,
         isAuthenticated: true,
         user: UserModel(id: userId, name: name, username: username ?? '', role: role),
       );
     } else {
+      ApiClient.instance.updateCachedToken(null);
       state = state.copyWith(
+        isLoading: false,
         isAuthenticated: false,
         user: null,
       );
@@ -71,7 +78,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final userData = res.data['user'];
         final user = UserModel.fromMap(userData);
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('access_token', res.data['accessToken']);
+        final token = res.data['accessToken'];
+        ApiClient.instance.updateCachedToken(token);
+        await prefs.setString('access_token', token);
         if (res.data['refreshToken'] != null) {
           await prefs.setString('refresh_token', res.data['refreshToken']);
         }
@@ -143,7 +152,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final userData = res.data['user'];
         final user = UserModel.fromMap(userData);
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('access_token', res.data['accessToken']);
+        final token = res.data['accessToken'];
+        ApiClient.instance.updateCachedToken(token);
+        await prefs.setString('access_token', token);
         if (res.data['refreshToken'] != null) {
           await prefs.setString('refresh_token', res.data['refreshToken']);
         }
@@ -197,6 +208,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    SyncService.instance.stopSync();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('access_token');
     await prefs.remove('refresh_token');
@@ -205,7 +217,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await prefs.remove('user_role');
     await prefs.remove('user_username');
     ApiClient.instance.updateCachedToken(null);
-    state = AuthState(isAuthenticated: false, user: null);
+    state = AuthState(isAuthenticated: false, user: null, isLoading: false);
   }
 }
 

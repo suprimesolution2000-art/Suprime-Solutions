@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -7,8 +8,6 @@ import '../../core/utils/currency_formatter.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/models/payment_model.dart';
 import '../../data/repositories/payment_repository.dart';
-import '../../data/repositories/invoice_repository.dart';
-import '../../data/repositories/customer_repository.dart';
 import '../../services/sync/sync_service.dart';
 
 class RecordPaymentDialog extends StatefulWidget {
@@ -77,36 +76,23 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
         paymentDate: DateTime.now(),
         notes: _notesController.text.trim(),
         receivedBy: loggedInName,
+        syncStatus: 'waiting_for_internet',
       );
 
-      // 1. Save payment
+      // 1. Save payment (atomically adjusts invoice and customer ledger)
       await PaymentRepository().savePayment(payment);
 
-      // 2. Update Invoice
-      final newTotalPaid = widget.invoice.totalPaid + amount;
-      final newBalanceDue = (widget.invoice.grandTotal - newTotalPaid).clamp(0.0, double.infinity);
-      final newStatus = newBalanceDue == 0.0 ? 'paid' : 'partially_paid';
-      await InvoiceRepository().updatePaymentStatus(
-        widget.invoice.uuid,
-        newTotalPaid,
-        newBalanceDue,
-        newStatus,
-      );
-
-      // 3. Update Customer Balance
-      await CustomerRepository().updateCustomerBalance(
-        widget.invoice.customer.uuid,
-        0.0,
-        amount,
-      );
-
-      // 4. Trigger sync
-      SyncService.instance.synchronize();
+      // 2. Trigger sync in background
+      try {
+        await SyncService.instance.checkPendingQueue();
+        unawaited(SyncService.instance.synchronize(forceFullSync: false).catchError((_) => false));
+      } catch (_) {}
 
       if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
         widget.onPaymentSaved();
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Payment of ${CurrencyFormatter.format(amount)} recorded successfully'),
             backgroundColor: AppColors.paid,
@@ -228,7 +214,7 @@ class _RecordPaymentDialogState extends State<RecordPaymentDialog> {
 
               // Payment Method
               DropdownButtonFormField<String>(
-                value: _selectedMethod,
+                initialValue: _selectedMethod,
                 decoration: const InputDecoration(
                   labelText: 'Payment Mode *',
                   prefixIcon: Icon(Icons.account_balance_wallet_outlined),

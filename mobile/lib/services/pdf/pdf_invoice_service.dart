@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../data/models/invoice_model.dart';
+import '../../data/models/invoice_item_model.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../core/utils/currency_formatter.dart';
 
@@ -23,6 +24,56 @@ class PdfInvoiceService {
     return generateGstInvoicePdfBytes(invoice);
   }
 
+  static bool _usingFallbackFont = false;
+
+  static Future<pw.Font> _safeFontBold() async {
+    try {
+      final f = await PdfGoogleFonts.robotoBold();
+      _usingFallbackFont = false;
+      return f;
+    } catch (_) {
+      _usingFallbackFont = true;
+      return pw.Font.helveticaBold();
+    }
+  }
+
+  static Future<pw.Font> _safeFontRegular() async {
+    try {
+      final f = await PdfGoogleFonts.robotoRegular();
+      _usingFallbackFont = false;
+      return f;
+    } catch (_) {
+      _usingFallbackFont = true;
+      return pw.Font.helvetica();
+    }
+  }
+
+  static Future<pw.Font> _safeFontMedium() async {
+    try {
+      final f = await PdfGoogleFonts.robotoMedium();
+      _usingFallbackFont = false;
+      return f;
+    } catch (_) {
+      _usingFallbackFont = true;
+      return pw.Font.helveticaBold();
+    }
+  }
+
+  /// PDF-01: Sanitize Unicode characters when falling back to Helvetica to prevent unhandled font crashes
+  static String sanitizeText(String text) {
+    if (!_usingFallbackFont) return text;
+    return text
+        .replaceAll('₹', 'Rs. ')
+        .replaceAll('•', '-')
+        .replaceAll('—', '-')
+        .replaceAll('–', '-')
+        .replaceAll('“', '"')
+        .replaceAll('”', '"')
+        .replaceAll('‘', "'")
+        .replaceAll('’', "'")
+        .replaceAll(RegExp(r'[^\x00-\x7F]'), ' ');
+  }
+
   /// Generate Temporary Bill PDF bytes matching the wooden plank template
   static Future<Uint8List> generateTemporaryBillPdfBytes(InvoiceModel invoice) async {
     final pdf = pw.Document();
@@ -30,11 +81,30 @@ class PdfInvoiceService {
     final templateImageBytes = await rootBundle.load('assets/invoice-template/temporary_bill_template_300dpi.jpg');
     final templateImage = pw.MemoryImage(templateImageBytes.buffer.asUint8List());
 
-    final fontBold = await PdfGoogleFonts.robotoBold();
-    final fontRegular = await PdfGoogleFonts.robotoRegular();
-    final fontMedium = await PdfGoogleFonts.robotoMedium();
+    final fontBold = await _safeFontBold();
+    final fontRegular = await _safeFontRegular();
+    final fontMedium = await _safeFontMedium();
 
-    pdf.addPage(buildTemporaryBillPage(invoice, templateImage, fontBold, fontRegular, fontMedium));
+    if (invoice.items.length <= 16) {
+      pdf.addPage(buildTemporaryBillPage(invoice, templateImage, fontBold, fontRegular, fontMedium));
+    } else {
+      const chunkSize = 16;
+      for (int i = 0; i < invoice.items.length; i += chunkSize) {
+        final end = (i + chunkSize < invoice.items.length) ? i + chunkSize : invoice.items.length;
+        final chunk = invoice.items.sublist(i, end);
+        final isLast = end == invoice.items.length;
+        pdf.addPage(buildTemporaryBillPage(
+          invoice,
+          templateImage,
+          fontBold,
+          fontRegular,
+          fontMedium,
+          itemsOverride: chunk,
+          startIndex: i,
+          isLastPage: isLast,
+        ));
+      }
+    }
     return pdf.save();
   }
 
@@ -45,9 +115,9 @@ class PdfInvoiceService {
     final templateImageBytes = await rootBundle.load('assets/invoice-template/temporary_bill_template_300dpi.jpg');
     final templateImage = pw.MemoryImage(templateImageBytes.buffer.asUint8List());
 
-    final fontBold = await PdfGoogleFonts.robotoBold();
-    final fontRegular = await PdfGoogleFonts.robotoRegular();
-    final fontMedium = await PdfGoogleFonts.robotoMedium();
+    final fontBold = await _safeFontBold();
+    final fontRegular = await _safeFontRegular();
+    final fontMedium = await _safeFontMedium();
 
     // Sort chronologically ascending
     final sorted = List<InvoiceModel>.from(invoices)
@@ -58,7 +128,26 @@ class PdfInvoiceService {
       });
 
     for (final inv in sorted) {
-      pdf.addPage(buildTemporaryBillPage(inv, templateImage, fontBold, fontRegular, fontMedium));
+      if (inv.items.length <= 16) {
+        pdf.addPage(buildTemporaryBillPage(inv, templateImage, fontBold, fontRegular, fontMedium));
+      } else {
+        const chunkSize = 16;
+        for (int i = 0; i < inv.items.length; i += chunkSize) {
+          final end = (i + chunkSize < inv.items.length) ? i + chunkSize : inv.items.length;
+          final chunk = inv.items.sublist(i, end);
+          final isLast = end == inv.items.length;
+          pdf.addPage(buildTemporaryBillPage(
+            inv,
+            templateImage,
+            fontBold,
+            fontRegular,
+            fontMedium,
+            itemsOverride: chunk,
+            startIndex: i,
+            isLastPage: isLast,
+          ));
+        }
+      }
     }
 
     return pdf.save();
@@ -70,14 +159,19 @@ class PdfInvoiceService {
     pw.MemoryImage templateImage,
     pw.Font fontBold,
     pw.Font fontRegular,
-    pw.Font fontMedium,
-  ) {
+    pw.Font fontMedium, {
+    List<InvoiceItemModel>? itemsOverride,
+    int startIndex = 0,
+    bool isLastPage = true,
+  }) {
     // Theme Colors
     const espressoColor = PdfColor.fromInt(0xFF2A160A);
     const goldCreamColor = PdfColor.fromInt(0xFFFAF0D1);
 
     String custName = invoice.customer.name.trim().toUpperCase();
     if (custName.isEmpty) custName = 'CUSTOMER';
+
+    final displayItems = itemsOverride ?? invoice.items;
 
     return pw.Page(
         pageFormat: const PdfPageFormat(595.28, 841.89, marginAll: 0),
@@ -135,9 +229,9 @@ class PdfInvoiceService {
 
               // 4. Items Table (5 columns: NO., PRODUCT, QTY., RATE, TOTAL)
               ...List.generate(
-                invoice.items.length > 16 ? 16 : invoice.items.length,
+                displayItems.length > 16 ? 16 : displayItems.length,
                 (idx) {
-                  final itm = invoice.items[idx];
+                  final itm = displayItems[idx];
                   final rowTop = 328.0 + (idx * 24.62);
 
                   final qtyStr = itm.quantity > 0
@@ -148,6 +242,20 @@ class PdfInvoiceService {
 
                   return pw.Stack(
                     children: [
+                      // S.No
+                      pw.Positioned(
+                        left: 48.0,
+                        top: rowTop,
+                        child: pw.SizedBox(
+                          width: 30.0,
+                          child: pw.Center(
+                            child: pw.Text(
+                              (startIndex + idx + 1).toString(),
+                              style: pw.TextStyle(font: fontMedium, fontSize: 9.5, color: espressoColor),
+                            ),
+                          ),
+                        ),
+                      ),
                       // Product Description
                       pw.Positioned(
                         left: 86.0,
@@ -155,11 +263,16 @@ class PdfInvoiceService {
                         child: pw.SizedBox(
                           width: 190.0,
                           child: pw.Text(
-                            itm.description,
+                            sanitizeText(itm.description),
                             maxLines: 2,
                             softWrap: true,
                             overflow: pw.TextOverflow.clip,
-                            style: pw.TextStyle(font: fontMedium, fontSize: 9.5, color: espressoColor),
+                            style: pw.TextStyle(
+                              font: fontMedium,
+                              fontSize: itm.description.length > 55 ? 7.5 : (itm.description.length > 38 ? 8.2 : (itm.description.length > 22 ? 8.8 : 9.5)),
+                              lineSpacing: 0.9,
+                              color: espressoColor,
+                            ),
                           ),
                         ),
                       ),
@@ -213,20 +326,30 @@ class PdfInvoiceService {
               ),
 
               // 5. TOTAL AMOUNT Box
-              pw.Positioned(
-                left: 442.0,
-                top: 746.0,
-                child: pw.SizedBox(
-                  width: 93.0,
-                  child: pw.Align(
-                    alignment: pw.Alignment.centerRight,
-                    child: pw.Text(
-                      CurrencyFormatter.formatWithoutSymbol(invoice.grandTotal),
-                      style: pw.TextStyle(font: fontBold, fontSize: 14.5, color: goldCreamColor),
+              if (isLastPage)
+                pw.Positioned(
+                  left: 442.0,
+                  top: 746.0,
+                  child: pw.SizedBox(
+                    width: 93.0,
+                    child: pw.Align(
+                      alignment: pw.Alignment.centerRight,
+                      child: pw.Text(
+                        CurrencyFormatter.formatWithoutSymbol(invoice.grandTotal),
+                        style: pw.TextStyle(font: fontBold, fontSize: 14.5, color: goldCreamColor),
+                      ),
                     ),
                   ),
+                )
+              else
+                pw.Positioned(
+                  left: 420.0,
+                  top: 746.0,
+                  child: pw.Text(
+                    '(Continued...)',
+                    style: pw.TextStyle(font: fontMedium, fontSize: 10.0, color: goldCreamColor),
+                  ),
                 ),
-              ),
             ],
           );
         },
@@ -237,9 +360,26 @@ class PdfInvoiceService {
     final pdf = pw.Document();
     final templateImageBytes = await rootBundle.load('assets/invoice-template/template_hq_300dpi.jpg');
     final templateImage = pw.MemoryImage(templateImageBytes.buffer.asUint8List());
-    final fontBold = await PdfGoogleFonts.robotoBold();
+    final fontBold = await _safeFontBold();
 
-    pdf.addPage(buildGstInvoicePage(invoice, templateImage, fontBold));
+    if (invoice.items.length <= 11) {
+      pdf.addPage(buildGstInvoicePage(invoice, templateImage, fontBold));
+    } else {
+      const chunkSize = 11;
+      for (int i = 0; i < invoice.items.length; i += chunkSize) {
+        final end = (i + chunkSize < invoice.items.length) ? i + chunkSize : invoice.items.length;
+        final chunk = invoice.items.sublist(i, end);
+        final isLast = end == invoice.items.length;
+        pdf.addPage(buildGstInvoicePage(
+          invoice,
+          templateImage,
+          fontBold,
+          itemsOverride: chunk,
+          startIndex: i,
+          isLastPage: isLast,
+        ));
+      }
+    }
     return pdf.save();
   }
 
@@ -248,7 +388,7 @@ class PdfInvoiceService {
     final pdf = pw.Document();
     final templateImageBytes = await rootBundle.load('assets/invoice-template/template_hq_300dpi.jpg');
     final templateImage = pw.MemoryImage(templateImageBytes.buffer.asUint8List());
-    final fontBold = await PdfGoogleFonts.robotoBold();
+    final fontBold = await _safeFontBold();
 
     // Sort chronologically ascending
     final sorted = List<InvoiceModel>.from(invoices)
@@ -259,7 +399,24 @@ class PdfInvoiceService {
       });
 
     for (final inv in sorted) {
-      pdf.addPage(buildGstInvoicePage(inv, templateImage, fontBold));
+      if (inv.items.length <= 11) {
+        pdf.addPage(buildGstInvoicePage(inv, templateImage, fontBold));
+      } else {
+        const chunkSize = 11;
+        for (int i = 0; i < inv.items.length; i += chunkSize) {
+          final end = (i + chunkSize < inv.items.length) ? i + chunkSize : inv.items.length;
+          final chunk = inv.items.sublist(i, end);
+          final isLast = end == inv.items.length;
+          pdf.addPage(buildGstInvoicePage(
+            inv,
+            templateImage,
+            fontBold,
+            itemsOverride: chunk,
+            startIndex: i,
+            isLastPage: isLast,
+          ));
+        }
+      }
     }
 
     return pdf.save();
@@ -272,8 +429,8 @@ class PdfInvoiceService {
     DateTime toDate,
   ) async {
     final pdf = pw.Document();
-    final fontBold = await PdfGoogleFonts.robotoBold();
-    final fontRegular = await PdfGoogleFonts.robotoRegular();
+    final fontBold = await _safeFontBold();
+    final fontRegular = await _safeFontRegular();
 
     // Sort chronologically ascending
     final sorted = List<InvoiceModel>.from(invoices)
@@ -473,7 +630,7 @@ class PdfInvoiceService {
     final fromStr = DateFormatter.format(from).replaceAll('/', '-');
     final toStr = DateFormatter.format(to).replaceAll('/', '-');
     final prefix = isTemporary ? 'Suprime_Solutions_Combined_Temp_Bills' : 'Suprime_Solutions_Combined_Bills';
-    final filename = '${prefix}_${fromStr}_to_${toStr}.pdf';
+    final filename = '${prefix}_${fromStr}_to_$toStr.pdf';
     await Printing.sharePdf(bytes: bytes, filename: filename);
   }
 
@@ -481,7 +638,7 @@ class PdfInvoiceService {
     final bytes = await generateGstSalesRegisterPdf(invoices, from, to);
     final fromStr = DateFormatter.format(from).replaceAll('/', '-');
     final toStr = DateFormatter.format(to).replaceAll('/', '-');
-    final filename = 'Suprime_Solutions_GST_Sales_Register_${fromStr}_to_${toStr}.pdf';
+    final filename = 'Suprime_Solutions_GST_Sales_Register_${fromStr}_to_$toStr.pdf';
     await Printing.sharePdf(bytes: bytes, filename: filename);
   }
 
@@ -492,8 +649,8 @@ class PdfInvoiceService {
     DateTime toDate,
   ) async {
     final pdf = pw.Document();
-    final fontBold = await PdfGoogleFonts.robotoBold();
-    final fontRegular = await PdfGoogleFonts.robotoRegular();
+    final fontBold = await _safeFontBold();
+    final fontRegular = await _safeFontRegular();
 
     // Sort chronologically ascending
     final sorted = List<InvoiceModel>.from(invoices)
@@ -670,12 +827,19 @@ class PdfInvoiceService {
     final bytes = await generateTemporaryBillsRegisterPdf(invoices, from, to);
     final fromStr = DateFormatter.format(from).replaceAll('/', '-');
     final toStr = DateFormatter.format(to).replaceAll('/', '-');
-    final filename = 'Suprime_Solutions_Temporary_Bills_Register_${fromStr}_to_${toStr}.pdf';
+    final filename = 'Suprime_Solutions_Temporary_Bills_Register_${fromStr}_to_$toStr.pdf';
     await Printing.sharePdf(bytes: bytes, filename: filename);
   }
 
   /// Builds a single full-bleed GST Invoice page on the authentic background template
-  static pw.Page buildGstInvoicePage(InvoiceModel invoice, pw.MemoryImage templateImage, pw.Font fontBold) {
+  static pw.Page buildGstInvoicePage(
+    InvoiceModel invoice,
+    pw.MemoryImage templateImage,
+    pw.Font fontBold, {
+    List<InvoiceItemModel>? itemsOverride,
+    int startIndex = 0,
+    bool isLastPage = true,
+  }) {
     // Prepare address lines
     String addr1 = invoice.customer.address.trim();
     String addr2 = '';
@@ -693,7 +857,12 @@ class PdfInvoiceService {
       }
     }
 
+    final rates = invoice.items.map((i) => i.gstRate).toSet();
+    final bool hasMixedRates = rates.length > 1;
     final double effectiveGstRate = invoice.items.isNotEmpty ? invoice.items[0].gstRate : 18.0;
+    final String cgstRateStr = hasMixedRates ? 'Mix' : '${(effectiveGstRate / 2).toStringAsFixed(1)}%';
+    final String sgstRateStr = hasMixedRates ? 'Mix' : '${(effectiveGstRate / 2).toStringAsFixed(1)}%';
+    final String igstRateStr = hasMixedRates ? 'Mix' : '${effectiveGstRate.toStringAsFixed(1)}%';
 
     final wordsLen = invoice.amountInWords.length;
     final double wordsFontSize = wordsLen > 75
@@ -703,6 +872,8 @@ class PdfInvoiceService {
             : (wordsLen > 48
                 ? 8.5
                 : (wordsLen > 36 ? 9.0 : 9.5)));
+
+    final displayItems = itemsOverride ?? invoice.items;
 
     return pw.Page(
         pageFormat: const PdfPageFormat(masterWidth, masterHeight, marginAll: 0),
@@ -864,9 +1035,9 @@ class PdfInvoiceService {
 
               // 10. Table Line Items (Up to 11 rows perfectly spaced across 220 pt table height)
               ...List.generate(
-                invoice.items.length > 11 ? 11 : invoice.items.length,
+                displayItems.length > 11 ? 11 : displayItems.length,
                 (idx) {
-                  final itm = invoice.items[idx];
+                  final itm = displayItems[idx];
                   final y = 227.0 + (idx * 19.5);
 
                   final amount = itm.taxableValue > 0 ? itm.taxableValue : itm.totalAmount;
@@ -883,7 +1054,7 @@ class PdfInvoiceService {
                         child: pw.SizedBox(
                           width: 39.0,
                           child: pw.Center(
-                            child: pw.Text('${itm.sno}', style: pw.TextStyle(font: fontBold, fontSize: 11.0, color: PdfColors.black)),
+                            child: pw.Text('${startIndex + idx + 1}', style: pw.TextStyle(font: fontBold, fontSize: 11.0, color: PdfColors.black)),
                           ),
                         ),
                       ),
@@ -896,13 +1067,14 @@ class PdfInvoiceService {
                           child: pw.Align(
                             alignment: pw.Alignment.centerLeft,
                             child: pw.Text(
-                              itm.description,
+                              sanitizeText(itm.description),
                               maxLines: 2,
                               softWrap: true,
                               overflow: pw.TextOverflow.clip,
                               style: pw.TextStyle(
                                 font: fontBold,
-                                fontSize: 10.5,
+                                fontSize: itm.description.length > 50 ? 7.8 : (itm.description.length > 32 ? 8.8 : (itm.description.length > 20 ? 9.5 : 10.5)),
+                                lineSpacing: 0.9,
                                 color: PdfColors.black,
                               ),
                             ),
@@ -974,108 +1146,119 @@ class PdfInvoiceService {
                 },
               ),
 
-              // 11. Net Amount (Row: 444.0 - 459.0)
-              ..._buildRupeesPaiseRow(invoice.netAmount, 446.0, fontBold, fontSize: 11.0),
+              if (isLastPage) ...[
+                // 11. Net Amount (Row: 444.0 - 459.0)
+                ..._buildRupeesPaiseRow(invoice.netAmount, 446.0, fontBold, fontSize: 11.0),
 
-              // 12. Taxes (SGST & CGST or IGST)
-              if (!invoice.isInterState) ...[
-                // SGST Rate (Row: 459.0 - 471.0)
+                // 12. Taxes (SGST & CGST or IGST)
+                if (!invoice.isInterState) ...[
+                  // SGST Rate (Row: 459.0 - 471.0)
+                  pw.Positioned(
+                    left: 288.5,
+                    top: 459.5,
+                    child: pw.SizedBox(
+                      width: 62.0,
+                      child: pw.Center(
+                        child: pw.Text(sgstRateStr, style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
+                      ),
+                    ),
+                  ),
+                  ..._buildRupeesPaiseRow(invoice.sgstTotal, 459.5, fontBold, fontSize: 10.5),
+
+                  // CGST Rate (Row: 471.0 - 483.0)
+                  pw.Positioned(
+                    left: 288.5,
+                    top: 471.5,
+                    child: pw.SizedBox(
+                      width: 62.0,
+                      child: pw.Center(
+                        child: pw.Text(cgstRateStr, style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
+                      ),
+                    ),
+                  ),
+                  ..._buildRupeesPaiseRow(invoice.cgstTotal, 471.5, fontBold, fontSize: 10.5),
+
+                  // IGST 0.0 (Row: 483.0 - 495.0)
+                  pw.Positioned(
+                    left: 288.5,
+                    top: 483.5,
+                    child: pw.SizedBox(
+                      width: 62.0,
+                      child: pw.Center(
+                        child: pw.Text('0.0%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
+                      ),
+                    ),
+                  ),
+                  ..._buildRupeesPaiseRow(0.0, 483.5, fontBold, fontSize: 10.5),
+                ] else ...[
+                  // Inter-state: SGST 0, CGST 0, IGST Rate
+                  pw.Positioned(
+                    left: 288.5,
+                    top: 459.5,
+                    child: pw.SizedBox(
+                      width: 62.0,
+                      child: pw.Center(
+                        child: pw.Text('0.0%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
+                      ),
+                    ),
+                  ),
+                  ..._buildRupeesPaiseRow(0.0, 459.5, fontBold, fontSize: 10.5),
+
+                  pw.Positioned(
+                    left: 288.5,
+                    top: 471.5,
+                    child: pw.SizedBox(
+                      width: 62.0,
+                      child: pw.Center(
+                        child: pw.Text('0.0%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
+                      ),
+                    ),
+                  ),
+                  ..._buildRupeesPaiseRow(0.0, 471.5, fontBold, fontSize: 10.5),
+
+                  // IGST Rate
+                  pw.Positioned(
+                    left: 288.5,
+                    top: 483.5,
+                    child: pw.SizedBox(
+                      width: 62.0,
+                      child: pw.Center(
+                        child: pw.Text(igstRateStr, style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
+                      ),
+                    ),
+                  ),
+                  ..._buildRupeesPaiseRow(invoice.igstTotal, 483.5, fontBold, fontSize: 10.5),
+                ],
+
+                // 13. Round Off (Row: 495.0 - 508.0)
+                ..._buildRupeesPaiseRow(invoice.roundOff, 496.0, fontBold, fontSize: 10.0),
+
+                // 14. Grand Total (Row: 508.0 - 524.0 - Prominent Pen Ink)
+                ..._buildRupeesPaiseRow(invoice.grandTotal, 509.5, fontBold, fontSize: 14.0),
+
+                // 15. Total Amount in Words (Row: 524.0 - 541.0)
                 pw.Positioned(
-                  left: 288.5,
-                  top: 459.5,
+                  left: 168.0,
+                  top: 526.0,
                   child: pw.SizedBox(
-                    width: 62.0,
-                    child: pw.Center(
-                      child: pw.Text('${(effectiveGstRate / 2).toStringAsFixed(1)}%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
+                    width: 305.0,
+                    child: pw.Text(
+                      invoice.amountInWords,
+                      maxLines: 2,
+                      style: pw.TextStyle(font: fontBold, fontSize: wordsFontSize, color: PdfColors.black),
                     ),
                   ),
                 ),
-                ..._buildRupeesPaiseRow(invoice.sgstTotal, 459.5, fontBold, fontSize: 10.5),
-
-                // CGST Rate (Row: 471.0 - 483.0)
-                pw.Positioned(
-                  left: 288.5,
-                  top: 471.5,
-                  child: pw.SizedBox(
-                    width: 62.0,
-                    child: pw.Center(
-                      child: pw.Text('${(effectiveGstRate / 2).toStringAsFixed(1)}%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
-                    ),
-                  ),
-                ),
-                ..._buildRupeesPaiseRow(invoice.cgstTotal, 471.5, fontBold, fontSize: 10.5),
-
-                // IGST 0.0 (Row: 483.0 - 495.0)
-                pw.Positioned(
-                  left: 288.5,
-                  top: 483.5,
-                  child: pw.SizedBox(
-                    width: 62.0,
-                    child: pw.Center(
-                      child: pw.Text('0.0%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
-                    ),
-                  ),
-                ),
-                ..._buildRupeesPaiseRow(0.0, 483.5, fontBold, fontSize: 10.5),
               ] else ...[
-                // Inter-state: SGST 0, CGST 0, IGST Rate
                 pw.Positioned(
-                  left: 288.5,
-                  top: 459.5,
-                  child: pw.SizedBox(
-                    width: 62.0,
-                    child: pw.Center(
-                      child: pw.Text('0.0%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
-                    ),
-                  ),
-                ),
-                ..._buildRupeesPaiseRow(0.0, 459.5, fontBold, fontSize: 10.5),
-
-                pw.Positioned(
-                  left: 288.5,
-                  top: 471.5,
-                  child: pw.SizedBox(
-                    width: 62.0,
-                    child: pw.Center(
-                      child: pw.Text('0.0%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
-                    ),
-                  ),
-                ),
-                ..._buildRupeesPaiseRow(0.0, 471.5, fontBold, fontSize: 10.5),
-
-                // IGST Rate
-                pw.Positioned(
-                  left: 288.5,
-                  top: 483.5,
-                  child: pw.SizedBox(
-                    width: 62.0,
-                    child: pw.Center(
-                      child: pw.Text('${effectiveGstRate.toStringAsFixed(1)}%', style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColors.black)),
-                    ),
-                  ),
-                ),
-                ..._buildRupeesPaiseRow(invoice.igstTotal, 483.5, fontBold, fontSize: 10.5),
-              ],
-
-              // 13. Round Off (Row: 495.0 - 508.0)
-              ..._buildRupeesPaiseRow(invoice.roundOff, 496.0, fontBold, fontSize: 10.0),
-
-              // 14. Grand Total (Row: 508.0 - 524.0 - Prominent Pen Ink)
-              ..._buildRupeesPaiseRow(invoice.grandTotal, 509.5, fontBold, fontSize: 14.0),
-
-              // 15. Total Amount in Words (Row: 524.0 - 541.0, Shifted right to start after 'Invoice Value (in word)' label, utilizing full row width up to right border)
-              pw.Positioned(
-                left: 168.0,
-                top: 526.0,
-                child: pw.SizedBox(
-                  width: 305.0,
+                  left: 220.0,
+                  top: 470.0,
                   child: pw.Text(
-                    invoice.amountInWords,
-                    maxLines: 2,
-                    style: pw.TextStyle(font: fontBold, fontSize: wordsFontSize, color: PdfColors.black),
+                    '(Continued on next page...)',
+                    style: pw.TextStyle(font: fontBold, fontSize: 11.0, color: PdfColors.black),
                   ),
                 ),
-              ),
+              ],
             ],
           );
         },
@@ -1083,12 +1266,12 @@ class PdfInvoiceService {
   }
 
   static List<pw.Widget> _buildRupeesPaiseRow(double val, double y, pw.Font font, {double fontSize = 11.0}) {
-    final isNegative = val < 0;
+    final isNegative = val < -0.005;
     final absVal = val.abs();
     final totalCents = (absVal * 100).round();
     final r = totalCents ~/ 100;
     final p = totalCents % 100;
-    final rText = isNegative && r == 0 ? '-0' : (isNegative ? '-$r' : '$r');
+    final rText = totalCents == 0 ? '0' : (isNegative ? (r == 0 ? '(-) 0' : '-$r') : '$r');
 
     return [
       pw.Positioned(

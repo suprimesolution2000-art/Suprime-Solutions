@@ -80,7 +80,7 @@ class BillingState {
   // Standard commercial half-up rounding (where .50 rounds up to next whole rupee)
   double get grandTotal => (unroundedTotal + 0.5).floorToDouble();
 
-  double get roundOff => isTemporary ? 0.0 : (((grandTotal - unroundedTotal) * 100).round() / 100);
+  double get roundOff => (((grandTotal - unroundedTotal) * 100).round() / 100);
 
   String get amountInWords => NumberToWords.convert(grandTotal);
 
@@ -547,6 +547,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
           paymentDate: state.invoiceDate,
           notes: 'Received upfront when bill was generated',
           receivedBy: loggedInName,
+          syncStatus: 'waiting_for_internet',
         );
         final payDb = await AppDatabase.instance.database;
         await payDb.insert('payments', paymentRecord.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
@@ -565,6 +566,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
             unit: itm.unit,
             defaultRate: itm.rate,
             gstRate: itm.gstRate,
+            preserveExistingHsnIfBlank: true,
           );
         }
       }
@@ -605,7 +607,12 @@ class BillingNotifier extends StateNotifier<BillingState> {
     );
   }
 
-  Future<InvoiceModel?> updateExistingInvoice({String? invoiceType}) async {
+  Future<InvoiceModel?> updateExistingInvoice({
+    String? invoiceType,
+    String? paymentStatus,
+    double? paidAmount,
+    String? paymentMethod,
+  }) async {
     if (state.originalInvoice == null || state.editingInvoiceUuid == null) {
       return null;
     }
@@ -622,13 +629,37 @@ class BillingNotifier extends StateNotifier<BillingState> {
 
     try {
       final orig = state.originalInvoice!;
+      final double effectivePaid = paidAmount ?? orig.totalPaid;
       final deltaGrandTotal = state.grandTotal - orig.grandTotal;
-      final newBalanceDue = (state.grandTotal - orig.totalPaid).clamp(0.0, double.infinity);
+      final newBalanceDue = (state.grandTotal - effectivePaid).clamp(0.0, double.infinity);
       final deltaBalanceDue = newBalanceDue - orig.balanceDue;
 
-      final newPaymentStatus = newBalanceDue == 0.0
+      final newPaymentStatus = paymentStatus ?? (newBalanceDue == 0.0
           ? 'paid'
-          : (orig.totalPaid > 0.0 ? 'partially_paid' : 'unpaid');
+          : (effectivePaid > 0.0 ? 'partially_paid' : 'unpaid'));
+
+      // If additional payment was provided during edit, record payment entry
+      if (paidAmount != null && paidAmount > orig.totalPaid) {
+        final diff = paidAmount - orig.totalPaid;
+        final prefs = await SharedPreferences.getInstance();
+        final loggedInName = prefs.getString('user_name') ?? 'Admin';
+        final paymentRecord = PaymentModel(
+          uuid: const Uuid().v4(),
+          invoiceId: orig.uuid,
+          invoiceNumber: orig.invoiceNumber,
+          customerId: state.customer.uuid,
+          customerName: state.customer.name,
+          amount: diff,
+          paymentMethod: paymentMethod ?? 'cash',
+          referenceNumber: 'Payment recorded during bill edit',
+          paymentDate: DateTime.now(),
+          notes: 'Received while updating bill',
+          receivedBy: loggedInName,
+          syncStatus: 'waiting_for_internet',
+        );
+        final payDb = await AppDatabase.instance.database;
+        await payDb.insert('payments', paymentRecord.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+      }
 
       final updatedInvoice = orig.copyWith(
         customer: state.customer,
@@ -647,6 +678,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
         roundOff: state.roundOff,
         grandTotal: state.grandTotal,
         amountInWords: state.amountInWords,
+        totalPaid: effectivePaid,
         paymentStatus: newPaymentStatus,
         balanceDue: newBalanceDue,
         syncStatus: 'waiting_for_internet',
@@ -660,8 +692,15 @@ class BillingNotifier extends StateNotifier<BillingState> {
         deltaBalanceDue: deltaBalanceDue,
       );
 
-      // 2. Also save/update customer in SQLite
-      await _customerRepo.saveCustomer(state.customer);
+      // 2. Also save/update customer in SQLite (preserving fresh balance adjusted by updateInvoice - S3)
+      final latestCustomer = (await _customerRepo.getCustomerByUuid(state.customer.uuid));
+      await _customerRepo.saveCustomer(
+        state.customer.copyWith(
+          outstandingBalance: latestCustomer?.outstandingBalance ?? state.customer.outstandingBalance,
+          totalBilled: latestCustomer?.totalBilled ?? state.customer.totalBilled,
+          totalPaid: latestCustomer?.totalPaid ?? state.customer.totalPaid,
+        ),
+      );
 
       // 3. Save products
       final prodRepo = ProductRepository();
@@ -673,6 +712,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
             unit: itm.unit,
             defaultRate: itm.rate,
             gstRate: itm.gstRate,
+            preserveExistingHsnIfBlank: true,
           );
         }
       }
@@ -682,7 +722,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
         final prefs = await SharedPreferences.getInstance();
         final deviceId = prefs.getString('device_id') ?? 'android_mobile_1';
         final body = {
-          'customer': state.customer.toMap(),
+          'customer': state.customer.toApiMap(),
           'items': state.items.map((e) => e.toApiMap()).toList(),
           'invoiceDate': state.invoiceDate.toIso8601String(),
           'dueDate': state.dueDate?.toIso8601String(),
@@ -691,6 +731,9 @@ class BillingNotifier extends StateNotifier<BillingState> {
           'challanNumber': state.challanNumber,
           'challanDate': state.challanDate?.toIso8601String(),
           'invoiceType': updatedInvoice.invoiceType,
+          'paymentStatus': newPaymentStatus,
+          'totalPaid': effectivePaid,
+          'balanceDue': newBalanceDue,
           'deviceId': deviceId,
         };
         final res = await ApiClient.instance.updateInvoice(updatedInvoice.uuid, body);

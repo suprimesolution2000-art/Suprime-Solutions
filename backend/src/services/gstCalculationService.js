@@ -68,7 +68,14 @@ function numberToIndianWords(amount) {
  * @param {string} businessStateCode - defaults to "22"
  */
 function calculateInvoiceFinancials(items, customerStateCode = '22', businessStateCode = '22', isTemporary = false) {
-  const isInterState = String(customerStateCode).trim() !== String(businessStateCode).trim();
+  // BUG-07: Safely default empty/null/missing stateCode to local (22)
+  const safeCustCode = (customerStateCode && String(customerStateCode).trim() && String(customerStateCode).trim() !== 'null' && String(customerStateCode).trim() !== 'undefined')
+    ? String(customerStateCode).trim()
+    : '22';
+  const safeBizCode = (businessStateCode && String(businessStateCode).trim())
+    ? String(businessStateCode).trim()
+    : '22';
+  const isInterState = safeCustCode !== safeBizCode;
 
   let netAmount = 0;
   let cgstTotal = 0;
@@ -78,7 +85,7 @@ function calculateInvoiceFinancials(items, customerStateCode = '22', businessSta
   const calculatedItems = items.map((item, idx) => {
     const qty = Number(item.quantity) || 0;
     const rate = Number(item.rate) || 0;
-    const discount = Number(item.discount) || 0;
+    const discount = Math.max(0, Number(item.discount) || 0); // Clamp non-negative (B26)
     const gstRate = isTemporary ? 0 : Number(item.gstRate !== undefined ? item.gstRate : (item.gst_rate !== undefined ? item.gst_rate : 18.0));
 
     const grossValue = Math.round(qty * rate * 100) / 100;
@@ -137,7 +144,8 @@ function calculateInvoiceFinancials(items, customerStateCode = '22', businessSta
   const roundOff = isTemporary ? 0 : Math.round((roundedGrandTotal - unroundedGrandTotal) * 100) / 100;
   const finalGrandTotal = isTemporary ? netAmount : roundedGrandTotal;
 
-  const amountInWords = numberToIndianWords(Math.round(finalGrandTotal));
+  // Preserve paise for temporary bills which do not round off to whole rupees (B13)
+  const amountInWords = numberToIndianWords(isTemporary ? finalGrandTotal : Math.round(finalGrandTotal));
 
   return {
     isInterState,

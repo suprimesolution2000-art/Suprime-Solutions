@@ -43,14 +43,15 @@ class NumberToWords {
 
   static String _convertThreeDigits(int n) {
     var str = '';
-    final hundred = n ~/ 100;
+    final hundred = (n ~/ 100) % 10;
     final rest = n % 100;
-    if (hundred > 0) str += '${_units[hundred]} Hundred';
+    if (hundred > 0 && hundred < _units.length) str += '${_units[hundred]} Hundred';
     if (rest > 0) str += '${str.isNotEmpty ? ' ' : ''}${_convertTwoDigits(rest)}';
     return str;
   }
 
   static String convert(double amount) {
+    if (amount.isNaN || amount.isInfinite) return 'Rupees Zero Only';
     if (amount == 0) return 'Rupees Zero Only';
     if (amount < 0) return 'Minus ${convert(amount.abs())}';
 
@@ -69,7 +70,16 @@ class NumberToWords {
     final thousands = remainder ~/ 1000;
     remainder %= 1000;
 
-    if (crores > 0) words += '${_convertThreeDigits(crores)} Crore ';
+    if (crores > 0) {
+      if (crores < 1000) {
+        words += '${_convertThreeDigits(crores)} Crore ';
+      } else {
+        final cThousand = crores ~/ 1000;
+        final cRest = crores % 1000;
+        final cRestStr = cRest > 0 ? ' ${_convertThreeDigits(cRest)}' : '';
+        words += '${_convertThreeDigits(cThousand)} Thousand$cRestStr Crore ';
+      }
+    }
     if (lakhs > 0) words += '${_convertThreeDigits(lakhs)} Lakh ';
     if (thousands > 0) words += '${_convertThreeDigits(thousands)} Thousand ';
     if (remainder > 0) words += '${_convertThreeDigits(remainder)} ';
